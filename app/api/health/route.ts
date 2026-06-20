@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { agentHealth } from '@/lib/agent'
 
+// O healthcheck deve confirmar apenas que o app Next subiu.
+// O status do agente externo e informativo e nao bloqueia o deploy.
 export async function GET() {
+  let agent: unknown = 'offline'
   try {
-    const agentStatus = await agentHealth()
-    return NextResponse.json({ status: 'ok', agent: agentStatus })
+    agent = await agentHealth()
   } catch (e) {
-    return NextResponse.json(
-      { status: 'degraded', agent: 'offline', error: String(e) },
-      { status: 503 }
-    )
+    agent = { status: 'offline', error: String(e) }
   }
+  return NextResponse.json({ status: 'ok', agent })
 }
