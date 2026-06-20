@@ -95,12 +95,14 @@ const CSS = `
   position: sticky; top: 0; height: 100vh; overflow: hidden;
 }
 .kor-brand { display: flex; align-items: center; gap: 10px; padding: 0 4px 2px; }
-.kor-brand-icon {
-  width: 38px; height: 38px; background: var(--green); border-radius: 12px;
-  display: grid; place-items: center; flex-shrink: 0; color: #fff;
+.kor-brand-logo {
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: block;
 }
-.kor-brand-text .t1 { font-size: 13.5px; font-weight: 800; color: #fff; letter-spacing: -0.01em; }
-.kor-brand-text .t2 { font-size: 10.5px; color: rgba(255,255,255,0.55); font-weight: 500; }
 .kor-nav-label {
   font-size: 10.5px; letter-spacing: 0.14em; color: rgba(255,255,255,0.45);
   font-weight: 700; padding: 0 10px; text-transform: uppercase; margin-bottom: 6px;
@@ -299,17 +301,9 @@ export default function OrcamentoPage() {
       {/* ── SIDEBAR ── */}
       <aside className="kor-sidebar">
         <div className="kor-brand">
-          <div className="kor-brand-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M3 22V10l9-7 9 7v12H3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
-              <path d="M9 22v-6h6v6" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <div className="kor-brand-text">
-            <div className="t1">Analytics Municipal</div>
-            
-          </div>
+          <img src="/logo-aruja.png" alt="Prefeitura de Arujá" className="kor-brand-logo" />
         </div>
+
 
         <div>
           <div className="kor-nav-label">Menu</div>

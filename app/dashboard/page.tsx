@@ -97,17 +97,14 @@ const CSS = `
   gap: 10px;
   padding: 0 4px 2px;
 }
-.k-brand-icon {
-  width: 38px; height: 38px;
-  background: var(--green);
-  border-radius: 12px;
-  display: grid; place-items: center;
-  flex-shrink: 0;
-  color: #fff;
+.k-brand-logo {
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: block;
 }
-.k-brand-text { line-height: 1.2; }
-.k-brand-text .t1 { font-size: 13.5px; font-weight: 800; color: #fff; letter-spacing: -0.01em; }
-.k-brand-text .t2 { font-size: 10.5px; color: rgba(255,255,255,0.55); font-weight: 500; }
 
 .k-nav-label {
   font-size: 10.5px;
@@ -539,17 +536,9 @@ export default function DashboardPage() {
 
         {/* Brand */}
         <div className="k-brand">
-          <div className="k-brand-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M3 22V10l9-7 9 7v12H3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
-              <path d="M9 22v-6h6v6" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <div className="k-brand-text">
-            <div className="t1">Analytics Municipal</div>
-            
-          </div>
+          <img src="/logo-aruja.png" alt="Prefeitura de Arujá" className="k-brand-logo" />
         </div>
+
 
         {/* Navigation */}
         <div>

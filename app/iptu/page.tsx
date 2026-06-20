@@ -84,11 +84,14 @@ const CSS = `
   position: sticky; top: 0; height: 100vh; overflow: hidden;
 }
 .kipt-brand { display: flex; align-items: center; gap: 10px; padding: 0 4px 2px; }
-.kipt-brand-icon {
-  width: 38px; height: 38px; background: var(--green); border-radius: 12px;
-  display: grid; place-items: center; flex-shrink: 0; color: #fff;
+.kipt-brand-logo {
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: block;
 }
-.kipt-brand-text .t1 { font-size: 13.5px; font-weight: 800; color: #fff; letter-spacing: -0.01em; }
 .kipt-nav-label {
   font-size: 10.5px; letter-spacing: 0.14em; color: rgba(255,255,255,0.45);
   font-weight: 700; padding: 0 10px; text-transform: uppercase; margin-bottom: 6px;
@@ -307,16 +310,9 @@ export default function IPTUPage() {
       {/* ── SIDEBAR ── */}
       <aside className="kipt-sidebar">
         <div className="kipt-brand">
-          <div className="kipt-brand-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M3 22V10l9-7 9 7v12H3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
-              <path d="M9 22v-6h6v6" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <div className="kipt-brand-text">
-            <div className="t1">Analytics Municipal</div>
-          </div>
+          <img src="/logo-aruja.png" alt="Prefeitura de Arujá" className="kipt-brand-logo" />
         </div>
+
 
         <div>
           <div className="kipt-nav-label">Menu</div>

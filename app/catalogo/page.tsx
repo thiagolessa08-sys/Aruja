@@ -58,10 +58,7 @@ export default function CatalogoPage() {
       {/* Header */}
       <header className="bg-blue-900 text-white px-6 py-3 flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-3">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
+          <img src="/logo-aruja.png" alt="Prefeitura de Arujá" className="h-8 w-auto bg-white rounded px-2 py-1" />
           <div>
             <h1 className="text-base font-bold leading-none">Catálogo de Dados</h1>
             <p className="text-blue-300 text-xs">Dicionário semântico — pref_aruja_sp</p>
