@@ -29,48 +29,43 @@ const SUGESTOES = [
 ]
 
 const CHART_COLORS = [
-  'oklch(0.52 0.20 264)',
-  'oklch(0.62 0.18 240)',
-  'oklch(0.78 0.13 75)',
-  'oklch(0.72 0.14 25)',
-  'oklch(0.58 0.10 240)',
-  'oklch(0.60 0.12 300)',
+  '#283e93',
+  '#5870c4',
+  '#7d8fce',
+  '#aab8e3',
+  '#3a55ad',
+  '#c2cdef',
 ]
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 .kc-root, .kc-root * { box-sizing: border-box; }
 .kc-root {
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: var(--font-poppins), 'Poppins', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
   background: var(--bg);
   color: var(--ink);
-}
+  padding: 26px 28px;
 
-.kc-root[data-theme="light"] {
-  --bg: oklch(0.97 0.008 95);
+  --bg: #eef2f9;
   --surface: #ffffff;
-  --surface-2: oklch(0.96 0.01 240);
-  --ink: oklch(0.18 0.02 240);
-  --ink-2: oklch(0.42 0.02 240);
-  --ink-3: oklch(0.62 0.015 240);
-  --line: oklch(0.92 0.012 240);
-  --line-2: oklch(0.88 0.015 240);
-  --green: oklch(0.52 0.20 264);
-  --green-deep: oklch(0.32 0.14 264);
-  --green-ink: oklch(0.20 0.10 264);
-  --green-soft: oklch(0.94 0.04 240);
-  --amber: oklch(0.78 0.13 75);
-  --rose: oklch(0.72 0.14 25);
+  --surface-2: #f4f7fc;
+  --ink: #1f2a44;
+  --ink-2: #3a4256;
+  --ink-3: #9098a8;
+  --line: #eef1f7;
+  --line-2: #e3e9f5;
+  --green: #283e93;
+  --green-deep: #1f2f70;
+  --green-ink: #1f2a44;
+  --green-soft: #e9edf8;
+  --amber: #e0a32e;
+  --rose: #d36b6b;
   --radius: 22px;
   --radius-sm: 14px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
-  --badge-bg: oklch(0.88 0.06 240);
+  --shadow-sm: 0 1px 2px rgba(40,80,180,.06);
   --msg-user-bg: var(--green);
   --msg-user-ink: #fff;
   --msg-ai-bg: var(--surface);
@@ -78,185 +73,88 @@ const CSS = `
   --input-bg: var(--surface);
   --input-border: var(--line-2);
 }
-.kc-root[data-theme="dark"] {
-  --bg: oklch(0.16 0.012 150);
-  --surface: oklch(0.21 0.014 240);
-  --surface-2: oklch(0.26 0.014 240);
-  --ink: oklch(0.96 0.008 95);
-  --ink-2: oklch(0.78 0.01 240);
-  --ink-3: oklch(0.58 0.012 240);
-  --line: oklch(0.28 0.014 240);
-  --line-2: oklch(0.32 0.014 240);
-  --green: oklch(0.64 0.18 264);
-  --green-deep: oklch(0.26 0.10 264);
-  --green-ink: oklch(0.20 0.10 264);
-  --green-soft: oklch(0.28 0.06 240);
-  --amber: oklch(0.78 0.13 75);
-  --rose: oklch(0.72 0.14 25);
-  --radius: 22px;
-  --radius-sm: 14px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
-  --badge-bg: oklch(0.34 0.08 240);
-  --msg-user-bg: var(--green);
-  --msg-user-ink: oklch(0.14 0.02 150);
-  --msg-ai-bg: var(--surface-2);
-  --msg-ai-border: var(--line);
-  --input-bg: var(--surface-2);
-  --input-border: var(--line);
+
+.kc-wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; }
+
+/* TOP NAV */
+.kc-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #fff; border-radius: 20px; padding: 12px 18px;
+  box-shadow: 0 6px 22px rgba(40,80,180,0.05);
+}
+.kc-nav-logo { height: 46px; width: auto; display: block; }
+.kc-tabs {
+  display: flex; align-items: center; gap: 4px;
+  background: #f4f7fc; border-radius: 30px; padding: 5px;
+}
+.kc-tab {
+  padding: 9px 18px; border-radius: 24px; color: #5b6477;
+  font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none;
+  border: 0; background: transparent; font-family: inherit;
+}
+.kc-tab.active {
+  padding: 9px 20px; background: #283e93; color: #fff;
+  box-shadow: 0 6px 14px rgba(40,62,147,0.35);
+}
+.kc-icons { display: flex; align-items: center; gap: 14px; }
+.kc-icon-btn {
+  width: 42px; height: 42px; border-radius: 50%; background: #e9edf8;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; cursor: pointer; position: relative;
+}
+.kc-avatar-btn {
+  width: 42px; height: 42px; border-radius: 50%; overflow: hidden;
+  border: 2px solid #ffffff; box-shadow: 0 0 0 1px #e3e9f5;
+  padding: 0; cursor: pointer; background: transparent;
 }
 
-/* SIDEBAR */
-.kc-sidebar {
-  background: oklch(0.20 0.10 264);
-  border-right: 1px solid oklch(0.26 0.12 264);
-  padding: 24px 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  height: 100vh;
-  overflow: hidden;
-}
-.kc-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 4px 2px;
-}
-.kc-brand-logo {
-  width: 100%;
-  height: auto;
-  background: #fff;
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: block;
-}
-
-.kc-nav-label {
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  color: rgba(255,255,255,0.45);
-  font-weight: 700;
-  padding: 0 10px;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-}
-.kc-nav { display: flex; flex-direction: column; gap: 2px; }
-.kc-nav a, .kc-nav button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 10px;
-  border-radius: 10px;
-  color: rgba(255,255,255,0.70);
-  text-decoration: none;
-  font-size: 13.5px;
-  font-weight: 500;
-  border: 0;
-  background: transparent;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background .12s;
-}
-.kc-nav a:hover, .kc-nav button:hover { background: rgba(255,255,255,0.10); color: #fff; }
-.kc-nav a.active { background: rgba(255,255,255,0.18); color: #fff; }
-.kc-nav a svg, .kc-nav button svg { width: 16px; height: 16px; flex-shrink: 0; }
+/* GREETING */
+.kc-greet { display: flex; align-items: center; justify-content: space-between; margin: 26px 4px 18px; gap: 16px; }
+.kc-greet h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.5px; color: #283e93; }
+.kc-greet h1 span { color: #7d8fce; }
+.kc-greet-right { display: flex; align-items: center; gap: 10px; }
 
 /* Suggestions */
-.kc-sugg-section {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-.kc-sugg-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-}
-.kc-sugg-list::-webkit-scrollbar { width: 4px; }
-.kc-sugg-list::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 999px; }
 .kc-sugg-btn {
   width: 100%;
   text-align: left;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   font-size: 12.5px;
   font-family: inherit;
   color: var(--ink-2);
   cursor: pointer;
   line-height: 1.4;
-  transition: background .12s, border-color .12s;
+  transition: background .12s, border-color .12s, color .12s;
 }
-.kc-sugg-btn { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.70); }
-.kc-sugg-btn:hover { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.25); color: #fff; }
+.kc-sugg-btn:hover { background: var(--green-soft); border-color: var(--green); color: var(--green); }
 
-/* Theme toggle */
-.kc-theme-toggle {
-  display: inline-flex;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px;
-  gap: 2px;
-}
-.kc-theme-toggle button {
-  width: 28px; height: 28px;
-  border: 0; background: transparent;
-  border-radius: 999px;
-  cursor: pointer;
-  display: grid; place-items: center;
-  color: var(--ink-3);
-  font-family: inherit;
-  transition: background .12s;
-}
-.kc-theme-toggle button.on { background: var(--green); color: #fff; }
-.kc-theme-toggle svg { width: 13px; height: 13px; }
-
-/* MAIN */
+/* CHAT CARD */
 .kc-main {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - 220px);
+  min-height: 440px;
   overflow: hidden;
   min-width: 0;
+  background: var(--surface);
+  border-radius: 22px;
+  box-shadow: 0 6px 22px rgba(40,80,180,0.05);
 }
 
-/* Top bar */
-.kc-topbar {
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-  padding: 14px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-shrink: 0;
-}
-.kc-title {
-  font-family: 'Instrument Serif', serif;
-  font-size: 22px;
-  font-weight: 400;
-  letter-spacing: -0.01em;
-  margin: 0;
-  color: var(--ink);
-}
-.kc-title em { font-style: italic; color: var(--green); }
-.kc-topbar-right { display: flex; align-items: center; gap: 10px; }
 .kc-schema-btn {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-3);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 5px 10px;
+  color: var(--ink-2);
+  background: #fff;
+  border: 1px solid var(--line-2);
+  border-radius: 22px;
+  padding: 9px 16px;
   cursor: pointer;
   font-family: inherit;
+  box-shadow: 0 4px 12px rgba(40,80,180,0.04);
   transition: color .12s, border-color .12s;
 }
 .kc-schema-btn:hover { color: var(--green); border-color: var(--green); }
@@ -264,22 +162,15 @@ const CSS = `
 .kc-cache-dot {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 600;
-  color: oklch(0.55 0.20 264);
+  color: var(--green);
+  background: #fff;
+  border-radius: 22px;
+  padding: 9px 14px;
+  box-shadow: 0 4px 12px rgba(40,80,180,0.04);
 }
-.kc-logout {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink-3);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  font-family: inherit;
-  transition: color .12s;
-}
-.kc-logout:hover { color: var(--ink); }
 
 /* Messages */
 .kc-messages {
@@ -313,13 +204,13 @@ const CSS = `
   color: var(--green);
 }
 .kc-empty h2 {
-  font-family: 'Instrument Serif', serif;
-  font-size: 30px;
-  font-weight: 400;
+  font-size: 28px;
+  font-weight: 700;
   letter-spacing: -0.02em;
   margin: 0 0 8px;
+  color: var(--green);
 }
-.kc-empty h2 em { font-style: italic; color: var(--green); }
+.kc-empty h2 em { font-style: normal; color: #7d8fce; }
 .kc-empty p {
   font-size: 13.5px;
   color: var(--ink-3);
@@ -381,34 +272,19 @@ const CSS = `
   gap: 6px;
 }
 .kc-tool.running {
-  background: oklch(0.96 0.02 85);
-  border: 1px solid oklch(0.9 0.04 85);
-  color: oklch(0.48 0.12 75);
-}
-.kc-root[data-theme="dark"] .kc-tool.running {
-  background: oklch(0.26 0.04 75);
-  border-color: oklch(0.32 0.06 75);
-  color: oklch(0.80 0.12 80);
+  background: #fbf4e6;
+  border: 1px solid #f3e3c0;
+  color: #b07d1e;
 }
 .kc-tool.ok {
-  background: oklch(0.96 0.02 240);
-  border: 1px solid oklch(0.9 0.04 240);
-  color: oklch(0.40 0.16 240);
-}
-.kc-root[data-theme="dark"] .kc-tool.ok {
-  background: oklch(0.28 0.06 150);
-  border-color: oklch(0.34 0.07 150);
-  color: oklch(0.80 0.10 150);
+  background: #eef2fb;
+  border: 1px solid #d8e1f5;
+  color: #2f4699;
 }
 .kc-tool.err {
-  background: oklch(0.96 0.02 25);
-  border: 1px solid oklch(0.90 0.04 25);
-  color: oklch(0.42 0.12 25);
-}
-.kc-root[data-theme="dark"] .kc-tool.err {
-  background: oklch(0.26 0.05 25);
-  border-color: oklch(0.32 0.07 25);
-  color: oklch(0.80 0.12 25);
+  background: #fbeeee;
+  border: 1px solid #f3d4d4;
+  color: #b34141;
 }
 .kc-tool-row { display: flex; align-items: center; gap: 8px; }
 .kc-sql-toggle {
@@ -459,7 +335,7 @@ const CSS = `
 .kc-md-table td { padding: 8px 14px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 .kc-md-table tr:last-child td { border-bottom: 0; }
 .kc-md-table tbody tr:hover td { background: var(--green-soft) !important; color: var(--ink); transition: background .1s; }
-.kc-md-table td:first-child { color: var(--ink); font-weight: 600; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12.5px; }
+.kc-md-table td:first-child { color: var(--ink); font-weight: 600; font-family: var(--font-poppins), 'Poppins', sans-serif; font-size: 12.5px; }
 .kc-chart-toggle { display: flex; gap: 4px; margin-bottom: 10px; }
 .kc-chart-tab {
   font-size: 12px; font-weight: 700; padding: 5px 14px;
@@ -491,7 +367,7 @@ const CSS = `
   border: 1px solid var(--input-border);
   border-radius: 16px;
   padding: 12px 16px;
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: var(--font-poppins), 'Poppins', system-ui, sans-serif;
   font-size: 13.5px;
   color: var(--ink);
   resize: none;
@@ -643,11 +519,11 @@ function TableAndChart({ headers, rows }: { headers: string[]; rows: string[][] 
     boxShadow: '0 8px 24px rgba(0,0,0,.12)',
     padding: '10px 14px',
     fontSize: '12.5px',
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    fontFamily: "var(--font-poppins), 'Poppins', sans-serif",
   }
 
   const axisProps = {
-    tick: { fontSize: 11, fill: 'var(--ink-3)', fontFamily: "'Plus Jakarta Sans', sans-serif" },
+    tick: { fontSize: 11, fill: 'var(--ink-3)', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" },
     axisLine: false as const,
     tickLine: false as const,
   }
@@ -893,7 +769,6 @@ function ToolIndicator({ tool }: { tool: ToolEvent }) {
 
 export default function ChatPage() {
   const router = useRouter()
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [messages, setMessages] = useState<Message[]>([])
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([])
   const [input, setInput] = useState('')
@@ -903,17 +778,12 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    const saved = localStorage.getItem('k-theme') as 'light' | 'dark' | null
-    if (saved) setTheme(saved)
-  }, [])
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, toolEvents, loading])
 
-  function toggleTheme(t: 'light' | 'dark') {
-    setTheme(t)
-    localStorage.setItem('k-theme', t)
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    router.push('/login')
   }
 
   async function send(text?: string, forceRefreshSchema = false) {
@@ -1018,102 +888,43 @@ export default function ChatPage() {
     : 'Analisando sua pergunta…'
 
   return (
-    <div className="kc-root" data-theme={theme}>
+    <div className="kc-root">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
 
-      {/* ── SIDEBAR ── */}
-      <aside className="kc-sidebar">
+      <div className="kc-wrap">
 
-        {/* Brand */}
-        <div className="kc-brand">
-          <img src="/logo-aruja.png" alt="Prefeitura de Arujá" className="kc-brand-logo" />
-        </div>
+        {/* ── TOP NAV ── */}
+        <div className="kc-nav">
+          <img src="/logo-aruja.png" alt="Prefeitura Municipal de Arujá" className="kc-nav-logo" />
 
-        {/* Navigation */}
-        <div>
-          <div className="kc-nav-label">Menu</div>
-          <nav className="kc-nav">
-            <a className="active" href="/chat">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M9.663 17h4.673M12 3v1m6.364 1.636-.707.707M21 12h-1M4 12H3m3.343-5.657-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Chat IA
-            </a>
-            <Link href="/catalogo">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Catálogo
-            </Link>
-            <Link href="/dashboard">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M3 13l9-9 9 9M5 11v9h14v-9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Consulta
-            </Link>
-          </nav>
-        </div>
-
-        {/* Suggestions */}
-        <div className="kc-sugg-section">
-          <div className="kc-nav-label">Sugestões</div>
-          <div className="kc-sugg-list">
-            {SUGESTOES.map(s => (
-              <button key={s} className="kc-sugg-btn" onClick={() => send(s)}>
-                {s}
-              </button>
-            ))}
+          <div className="kc-tabs">
+            <Link href="/dashboard" className="kc-tab">Orçamento</Link>
+            <span className="kc-tab">Receita</span>
+            <span className="kc-tab">Despesas</span>
+            <span className="kc-tab">Tributário</span>
+            <span className="kc-tab active">Chat</span>
           </div>
-        </div>
 
-        {/* Bottom promo */}
-        <div style={{
-          background: 'var(--green-ink)',
-          borderRadius: '16px',
-          padding: '16px',
-          color: '#fff',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: 'radial-gradient(70% 60% at 0% 100%, oklch(0.42 0.11 155 / 0.85), transparent 70%)',
-            pointerEvents: 'none',
-          }} />
-          <div style={{ position: 'relative' }}>
-            {schemaLoaded && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '999px', background: 'oklch(0.70 0.18 145)', display: 'inline-block' }} />
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'oklch(0.88 0.08 150)' }}>Schema em cache</span>
-              </div>
-            )}
-            <p style={{ margin: '0 0 12px', fontSize: '12px', color: 'oklch(0.88 0.02 150)', lineHeight: 1.4 }}>
-              Haiku 4.5 · Sybase IQ
-            </p>
-            <button
-              onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }}
-              style={{
-                background: '#fff', color: 'var(--green-ink)',
-                border: 0, borderRadius: '999px', padding: '7px 16px',
-                fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer',
-              }}
-            >
-              Sair
+          <div className="kc-icons">
+            <button className="kc-icon-btn" title="Recarregar schema" onClick={() => send(undefined, true)} disabled={loading}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <Link href="/catalogo" className="kc-icon-btn" title="Catálogo de dados">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </Link>
+            <button className="kc-avatar-btn" title="Sair" onClick={handleLogout}>
+              <svg viewBox="0 0 40 40" width="40" height="40"><rect width="40" height="40" fill="#cdd9ee"/><circle cx="20" cy="15" r="8" fill="#9fb2d4"/><path d="M5 40 a15 13 0 0 1 30 0" fill="#9fb2d4"/></svg>
             </button>
           </div>
         </div>
-      </aside>
 
-      {/* ── MAIN ── */}
-      <div className="kc-main">
-
-        {/* Topbar */}
-        <div className="kc-topbar">
-          <h1 className="kc-title">Chat <em>IA</em></h1>
-          <div className="kc-topbar-right">
+        {/* ── GREETING ── */}
+        <div className="kc-greet">
+          <h1>Assistente <span>IA</span></h1>
+          <div className="kc-greet-right">
             {schemaLoaded && (
               <div className="kc-cache-dot">
-                <span style={{ width: 7, height: 7, borderRadius: '999px', background: 'oklch(0.55 0.20 264)', display: 'inline-block' }} />
+                <span style={{ width: 7, height: 7, borderRadius: '999px', background: 'var(--green)', display: 'inline-block' }} />
                 Schema em cache
               </div>
             )}
@@ -1123,23 +934,13 @@ export default function ChatPage() {
               disabled={loading}
               title="Recarregar schema do banco"
             >
-              ↺ Schema
+              ↺ Recarregar schema
             </button>
-            <div className="kc-theme-toggle" role="group" aria-label="Tema">
-              <button className={theme === 'light' ? 'on' : ''} onClick={() => toggleTheme('light')} aria-label="Claro">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8"/>
-                  <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                </svg>
-              </button>
-              <button className={theme === 'dark' ? 'on' : ''} onClick={() => toggleTheme('dark')} aria-label="Escuro">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
           </div>
         </div>
+
+      {/* ── CHAT CARD ── */}
+      <div className="kc-main">
 
         {/* Messages */}
         <div className="kc-messages">
@@ -1250,6 +1051,10 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+      {/* /kc-main */}
+
+      </div>
+      {/* /kc-wrap */}
     </div>
   )
 }
