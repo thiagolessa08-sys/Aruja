@@ -89,11 +89,11 @@ export default function DashboardPage() {
       style={{
         minHeight: '100vh',
         background: '#eef2f9',
-        padding: '26px 28px',
+        padding: '26px 14px',
         fontFamily: "var(--font-poppins), 'Poppins', sans-serif",
       }}
     >
-      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1560, margin: '0 auto' }}>
 
         {/* ===== TOP NAV ===== */}
         <div

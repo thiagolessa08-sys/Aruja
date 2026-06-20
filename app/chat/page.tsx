@@ -47,7 +47,7 @@ const CSS = `
   min-height: 100vh;
   background: var(--bg);
   color: var(--ink);
-  padding: 26px 28px;
+  padding: 26px 14px;
 
   --bg: #eef2f9;
   --surface: #ffffff;
@@ -74,7 +74,7 @@ const CSS = `
   --input-border: var(--line-2);
 }
 
-.kc-wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; }
+.kc-wrap { max-width: 1560px; margin: 0 auto; display: flex; flex-direction: column; }
 
 /* TOP NAV */
 .kc-nav {
