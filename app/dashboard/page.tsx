@@ -76,6 +76,7 @@ const HOT = [
 export default function DashboardPage() {
   const router = useRouter()
   const [tip, setTip] = useState<Tip | null>(null)
+  const [tipo, setTipo] = useState<'receita' | 'despesa'>('receita')
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -157,10 +158,34 @@ export default function DashboardPage() {
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
             Good Morning, <span style={{ color: '#7d8fce' }}>Selena!</span>
           </h1>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#283e93', color: '#fff', border: 'none', padding: '12px 22px', borderRadius: 24, fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontSize: 14, fontWeight: 500, cursor: 'pointer', boxShadow: '0 8px 18px rgba(40,62,147,0.32)' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"><path d="M12 5v14M5 12h14" /></svg>
-            Check new
-          </button>
+          <div role="radiogroup" aria-label="Tipo" style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
+            {(['receita', 'despesa'] as const).map(op => {
+              const ativo = tipo === op
+              return (
+                <button
+                  key={op}
+                  role="radio"
+                  aria-checked={ativo}
+                  onClick={() => setTipo(op)}
+                  style={{
+                    padding: '10px 26px',
+                    borderRadius: 24,
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontFamily: "var(--font-poppins), 'Poppins', sans-serif",
+                    fontSize: 14,
+                    fontWeight: ativo ? 600 : 500,
+                    background: ativo ? '#283e93' : 'transparent',
+                    color: ativo ? '#fff' : '#5b6477',
+                    boxShadow: ativo ? '0 6px 14px rgba(40,62,147,0.35)' : 'none',
+                    transition: 'background .15s, color .15s',
+                  }}
+                >
+                  {op === 'receita' ? 'Receita' : 'Despesa'}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* ===== TOOLBAR ===== */}
