@@ -310,18 +310,18 @@ export default function DashboardPage() {
               <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação por Categoria / Origem</span>
               <span style={dots}>···</span>
             </div>
-            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS CORRENTES</div>
-                <div style={{ height: 26, width: '90%', borderRadius: 7, marginTop: 8, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 11, boxSizing: 'border-box' }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>370,05M</span>
+                <div style={{ height: 70, width: '90%', borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>370,05M</span>
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS DE CAPITAL</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 8 }}>
-                  <div style={{ height: 26, width: 16, borderRadius: 7, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#283e93' }}>12,94M</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
+                  <div style={{ height: 70, width: 22, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>12,94M</span>
                 </div>
               </div>
             </div>
