@@ -73,15 +73,47 @@ const HOT = [
   { x: 717.3, left: '70.5%' }, { x: 806.0, left: '78.7%' }, { x: 894.7, left: '86.9%' }, { x: 983.3, left: '95.2%' },
 ]
 
+interface KpiCard {
+  label: string
+  value: string
+  subLabel: string
+  subValue: string
+  pct: string
+  dir: 'up' | 'down' | 'flat'
+}
+
+// Fallback = valores reais mais recentes (exibidos enquanto a API carrega ou se falhar)
+const KPIS_FALLBACK: KpiCard[] = [
+  { label: 'Orçado', value: '760,00 mi', subLabel: 'Ano Anterior', subValue: '700,00 mi', pct: '8,57%', dir: 'up' },
+  { label: 'Orçado Atualizado', value: '835,35 mi', subLabel: 'Ano Anterior', subValue: '762,49 mi', pct: '9,56%', dir: 'up' },
+  { label: 'Arrecadação Mês', value: '37,82 mi', subLabel: 'Junho/25', subValue: '49,11 mi', pct: '-22,99%', dir: 'down' },
+  { label: 'Arrecadação Até o Mês', value: '350,43 mi', subLabel: 'Ano Anterior', subValue: '322,84 mi', pct: '8,55%', dir: 'up' },
+  { label: 'Arrecadação Mês Anterior', value: '61,84 mi', subLabel: 'Maio/25', subValue: '45,82 mi', pct: '34,96%', dir: 'up' },
+]
+
+function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
+  if (dir === 'up') return azul ? '#6ee0a0' : '#1fa463'
+  if (dir === 'down') return azul ? '#ff9b8a' : '#d64545'
+  return azul ? 'rgba(255,255,255,0.6)' : '#9098a8'
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [tip, setTip] = useState<Tip | null>(null)
   const [tipo, setTipo] = useState<'receita' | 'despesa'>('receita')
   const [saudacao, setSaudacao] = useState('Bom dia')
+  const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
 
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/orcamento/kpis')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.kpis?.length) setKpis(d.kpis) })
+      .catch(() => { /* mantém fallback */ })
   }, [])
 
   async function handleLogout() {
@@ -115,16 +147,13 @@ export default function DashboardPage() {
     )
   }
 
-  // KPIs (o primeiro é o card azul)
-  const kpis = [
-    { label: 'Orçado Atualizado', value: '877,06 mi', sub: 'Ano Anterior', subVal: '816,64 mi', pct: '7,40%', pctColor: '#1fa463',
-      icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="1.8"><rect x="5" y="3" width="11" height="18" rx="1" /><path d="M8 7h2M12 7h1.5M8 11h2M12 11h1.5M8 15h2M12 15h1.5" /><path d="M16 21h3V11h-3" /></svg> },
-    { label: 'Arrecadação Mês', value: '382,99 mi', sub: 'Ano Anterior', subVal: '739,40 mi', pct: '-48,20%', pctColor: '#d64545',
-      icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="1.8"><ellipse cx="12" cy="6.5" rx="7" ry="3" /><path d="M5 6.5v5c0 1.6 3.1 3 7 3s7-1.4 7-3v-5" /><path d="M5 11.5v5c0 1.6 3.1 3 7 3s7-1.4 7-3v-5" /></svg> },
-    { label: 'Arrecadação Até o Mês', value: '382,99 mi', sub: 'Ano Anterior', subVal: '739,40 mi', pct: '-48,20%', pctColor: '#d64545',
-      icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0-.5 4" /><path d="M20 5v6h-6" /></svg> },
-    { label: 'Arrecadação Mês Anterior', value: '0,00', sub: 'Mês Atual', subVal: '0,00', pct: '0,00%', pctColor: '#9098a8',
-      icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="1.8"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg> },
+  // Ícones dos 5 KPIs (cor herdada do container via currentColor)
+  const kpiIcons = [
+    <svg key="0" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17.5" cy="9" r="2.3" /><path d="M16 19a4.5 4.5 0 0 1 5.5-4.4" /></svg>,
+    <svg key="1" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5" y="3" width="11" height="18" rx="1" /><path d="M8 7h2M12 7h1.5M8 11h2M12 11h1.5M8 15h2M12 15h1.5" /><path d="M16 21h3V11h-3" /></svg>,
+    <svg key="2" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><ellipse cx="12" cy="6.5" rx="7" ry="3" /><path d="M5 6.5v5c0 1.6 3.1 3 7 3s7-1.4 7-3v-5" /><path d="M5 11.5v5c0 1.6 3.1 3 7 3s7-1.4 7-3v-5" /></svg>,
+    <svg key="3" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0-.5 4" /><path d="M20 5v6h-6" /></svg>,
+    <svg key="4" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>,
   ]
 
   return (
@@ -224,35 +253,24 @@ export default function DashboardPage() {
 
         {/* ===== KPIs ===== */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
-          {/* Card azul: Orçado */}
-          <div style={{ background: '#283e93', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 20px rgba(40,62,147,0.22)' }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.88)', lineHeight: 1.25, display: 'block' }}>Orçado</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17.5" cy="9" r="2.3" /><path d="M16 19a4.5 4.5 0 0 1 5.5-4.4" /></svg>
+          {kpis.map((k, i) => {
+            const azul = i === 0
+            return (
+              <div key={k.label} style={azul
+                ? { background: '#283e93', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 20px rgba(40,62,147,0.22)' }
+                : { background: '#fff', borderRadius: 16, padding: '12px 14px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: azul ? 'rgba(255,255,255,0.88)' : '#1f2a44', lineHeight: 1.25, display: 'block' }}>{k.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: azul ? 'rgba(255,255,255,0.14)' : '#e9edf8', color: azul ? '#fff' : '#283e93', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{kpiIcons[i]}</div>
+                  <span style={{ fontSize: 19, fontWeight: 700, color: azul ? '#fff' : '#1f2a44', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>{k.value}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
+                  <span style={{ fontSize: 11, color: azul ? 'rgba(255,255,255,0.6)' : '#9098a8' }}>{k.subLabel} <span style={{ color: azul ? 'rgba(255,255,255,0.95)' : '#3a4256', fontWeight: 600 }}>{k.subValue}</span></span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: pctColor(k.dir, azul), flex: 'none' }}>{k.pct}</span>
+                </div>
               </div>
-              <span style={{ fontSize: 19, fontWeight: 700, color: '#fff', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>829,72 mi</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>Ano Anterior <span style={{ color: 'rgba(255,255,255,0.95)', fontWeight: 600 }}>761,14 mi</span></span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#6ee0a0', flex: 'none' }}>9,01%</span>
-            </div>
-          </div>
-
-          {/* Cards brancos */}
-          {kpis.map(k => (
-            <div key={k.label} style={{ background: '#fff', borderRadius: 16, padding: '12px 14px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44', lineHeight: 1.25, display: 'block' }}>{k.label}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{k.icon}</div>
-                <span style={{ fontSize: 19, fontWeight: 700, color: '#1f2a44', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>{k.value}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
-                <span style={{ fontSize: 11, color: '#9098a8' }}>{k.sub} <span style={{ color: '#3a4256', fontWeight: 600 }}>{k.subVal}</span></span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: k.pctColor, flex: 'none' }}>{k.pct}</span>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* ===== ROW 1 ===== */}
