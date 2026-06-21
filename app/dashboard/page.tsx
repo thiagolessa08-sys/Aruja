@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -77,6 +77,12 @@ export default function DashboardPage() {
   const router = useRouter()
   const [tip, setTip] = useState<Tip | null>(null)
   const [tipo, setTipo] = useState<'receita' | 'despesa'>('receita')
+  const [saudacao, setSaudacao] = useState('Bom dia')
+
+  useEffect(() => {
+    const h = new Date().getHours()
+    setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
+  }, [])
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -157,7 +163,7 @@ export default function DashboardPage() {
         {/* ===== GREETING ROW ===== */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 4px 0' }}>
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
-            Good Morning, <span style={{ color: '#7d8fce' }}>Selena!</span>
+            {saudacao}, <span style={{ color: '#7d8fce' }}>Roberta!</span>
           </h1>
           <div role="radiogroup" aria-label="Tipo" style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
             {(['receita', 'despesa'] as const).map(op => {
