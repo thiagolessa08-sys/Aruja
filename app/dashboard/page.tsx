@@ -374,8 +374,8 @@ export default function DashboardPage() {
               <span style={dots}>···</span>
             </div>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>R$ 9.618.583,26</div>
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-              <svg viewBox="0 0 200 200" width="158" height="158">
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
+              <svg viewBox="0 0 200 200" width="210" height="210">
                 <g transform="rotate(-90 100 100)">
                   <circle cx="100" cy="100" r="66" fill="none" stroke="#283e93" strokeWidth="30" strokeDasharray="329.0 414.7" strokeDashoffset="0" />
                   <circle cx="100" cy="100" r="66" fill="none" stroke="#e8962e" strokeWidth="30" strokeDasharray="85.3 414.7" strokeDashoffset="-329.0" />
