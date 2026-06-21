@@ -1,4 +1,5 @@
 import { agentQuery, agentSchema } from './agent'
+import { getCatalog } from './catalog-cache'
 
 interface TableSchema {
   name: string
@@ -27,7 +28,15 @@ async function loadAllSchemas(): Promise<TableSchema[]> {
     1000
   )
 
-  const tableNames = listResult.rows.map(r => String(r[0]))
+  let tableNames = listResult.rows.map(r => String(r[0]).trim())
+
+  // ESCOPO: carrega só as tabelas do catálogo (principais), não as ~779 do schema.
+  // Reduz drasticamente o cold start e o tamanho do prompt do Chat.
+  const catalog = getCatalog()
+  if (catalog && catalog.entradas.length) {
+    const escopo = new Set(catalog.entradas.map(e => e.tabela.trim().toUpperCase()))
+    tableNames = tableNames.filter(n => escopo.has(n.toUpperCase()))
+  }
 
   // Carrega schemas em paralelo (lotes de 10 para não sobrecarregar o agent)
   const schemas: TableSchema[] = []
