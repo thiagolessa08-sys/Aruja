@@ -44,7 +44,8 @@ async function loadAllSchemas(): Promise<TableSchema[]> {
     const batch = tableNames.slice(i, i + 10)
     const results = await Promise.allSettled(
       batch.map(async name => {
-        const cols = await agentSchema(`pref_aruja_sp.${name}`)
+        // O endpoint /schema só popula colunas com o nome SEM o prefixo do schema
+        const cols = await agentSchema(name)
         return { name, columns: cols } as TableSchema
       })
     )

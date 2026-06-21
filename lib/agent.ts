@@ -31,7 +31,14 @@ export async function agentSchema(table: string): Promise<ColumnDef[]> {
     headers: headers(),
   })
   if (!res.ok) throw new Error(`Failed to get schema for ${table}: ${res.status}`)
-  return res.json()
+  // O agente retorna { table, columns: [...] } — extrai e normaliza (nomes vêm com padding)
+  const data = await res.json()
+  const cols = Array.isArray(data) ? data : (data?.columns ?? [])
+  return (cols as Array<{ name?: string; type?: string; nullable?: boolean }>).map(c => ({
+    name: String(c.name ?? '').trim(),
+    type: String(c.type ?? '').trim(),
+    nullable: Boolean(c.nullable),
+  }))
 }
 
 export interface QueryResult {
