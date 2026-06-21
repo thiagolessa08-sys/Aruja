@@ -349,13 +349,13 @@ export default function DashboardPage() {
                 <line x1="8" y1="300" x2="1072" y2="300" stroke="#e3e8f1" strokeWidth="1.5" />
                 <line x1="8" y1="146" x2="1072" y2="146" stroke="#c9d6ee" strokeWidth="1.6" strokeDasharray="5 5" />
                 <circle cx="52.3" cy="146" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
-                <text x="1066" y="139" fontSize="12" fill="#5b6477" fontFamily="Poppins" textAnchor="end">Média 61,6 mi</text>
+                <text x="1066" y="139" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="end">Média 61,6 mi</text>
                 {BARS.map((b, i) => (
                   <g key={i}>
                     <rect x={b.ant.x} y={b.ant.y} width="24" height={b.ant.h} rx="6" fill="url(#arrAnt)" />
                     {b.atu ? <rect x={b.atu.x} y={b.atu.y} width="24" height={b.atu.h} rx="6" fill="url(#arrAtu)" /> : null}
-                    <text x={b.tx} y="324" fontSize="13" fill="#3a4256" fontFamily="Poppins" textAnchor="middle">{b.mes}</text>
-                    <text x={b.tx} y="350" fontSize="12" fill="#5b6477" fontFamily="Poppins" textAnchor="middle">{b.pct}</text>
+                    <text x={b.tx} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.mes}</text>
+                    <text x={b.tx} y="350" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="middle">{b.pct}</text>
                   </g>
                 ))}
                 {HOT.map((h, i) => (
