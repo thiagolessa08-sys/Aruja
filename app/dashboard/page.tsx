@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const toolPill: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
   const dots: React.CSSProperties = { color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14, flex: 'none' }
+  const axisFont: React.CSSProperties = { fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontWeight: 500 }
 
   function Tooltip({ t }: { t: Tip }) {
     return (
@@ -238,20 +239,22 @@ export default function DashboardPage() {
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e8962e' }}></span>Previsto
                 </span>
               </div>
-              <svg viewBox="0 0 300 160" width="100%" style={{ display: 'block' }}>
-                <text x="4" y="36" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">600</text>
-                <text x="4" y="92" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">400</text>
-                <text x="4" y="140" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">200</text>
-                <line x1="110" y1="20" x2="110" y2="140" stroke="#cfd8e8" strokeWidth="1.5" strokeDasharray="4 4" />
-                <path d="M30 95 C55 70 80 60 110 80 C140 100 165 120 195 110 C225 100 255 70 290 60" fill="none" stroke="#e8962e" strokeWidth="3" strokeLinecap="round" />
-                <path d="M30 70 C55 95 80 110 110 80 C140 50 165 50 195 70 C225 90 255 95 290 85" fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" />
-                <circle cx="110" cy="80" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
-                <text x="20" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">2022</text>
-                <text x="92" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">2023</text>
-                <text x="172" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">2024</text>
-                <text x="264" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">2025</text>
+              <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
+                <text x="4" y="32" fontSize="9" fill="#aeb6c6" style={axisFont}>600</text>
+                <text x="4" y="76" fontSize="9" fill="#aeb6c6" style={axisFont}>400</text>
+                <text x="4" y="114" fontSize="9" fill="#aeb6c6" style={axisFont}>200</text>
+                <g transform="matrix(1,0,0,0.78,0,4.4)">
+                  <line x1="110" y1="20" x2="110" y2="140" stroke="#cfd8e8" strokeWidth="1.5" strokeDasharray="4 4" />
+                  <path d="M30 95 C55 70 80 60 110 80 C140 100 165 120 195 110 C225 100 255 70 290 60" fill="none" stroke="#e8962e" strokeWidth="3" strokeLinecap="round" />
+                  <path d="M30 70 C55 95 80 110 110 80 C140 50 165 50 195 70 C225 90 255 95 290 85" fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" />
+                  <circle cx="110" cy="80" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
+                </g>
+                <text x="20" y="126" fontSize="9" fill="#aeb6c6" style={axisFont}>2022</text>
+                <text x="92" y="126" fontSize="9" fill="#aeb6c6" style={axisFont}>2023</text>
+                <text x="172" y="126" fontSize="9" fill="#aeb6c6" style={axisFont}>2024</text>
+                <text x="264" y="126" fontSize="9" fill="#aeb6c6" style={axisFont}>2025</text>
                 {[{ x: 10, w: 72 }, { x: 82, w: 73 }, { x: 155, w: 72 }, { x: 227, w: 73 }].map((r, i) => (
-                  <rect key={i} onMouseEnter={() => setTip(REPORT[i])} x={r.x} y="0" width={r.w} height="150" fill="transparent" pointerEvents="all" />
+                  <rect key={i} onMouseEnter={() => setTip(REPORT[i])} x={r.x} y="0" width={r.w} height="120" fill="transparent" pointerEvents="all" />
                 ))}
               </svg>
               {tipReport ? <Tooltip t={tipReport} /> : null}
@@ -259,16 +262,16 @@ export default function DashboardPage() {
           </div>
 
           {/* News From The Doctor */}
-          <div style={{ position: 'relative', borderRadius: 22, padding: 20, background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
+          <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ width: 20, height: 20, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
               </div>
               <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Today&apos;s info</span>
             </div>
-            <div style={{ marginTop: 26, fontSize: 18, fontWeight: 600, color: '#fff' }}>News From The Doctor</div>
-            <p style={{ margin: '10px 0 0', fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>Our process is designed to make booking appointments, consultations, and treatments easy and convenient for you.</p>
-            <div style={{ display: 'flex', gap: 6, marginTop: 18 }}>
+            <div style={{ marginTop: 14, fontSize: 17, fontWeight: 600, color: '#fff' }}>News From The Doctor</div>
+            <p style={{ margin: '8px 0 0', fontSize: 12, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)' }}>Our process is designed to make booking appointments, consultations, and treatments easy and convenient for you.</p>
+            <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
               <span style={{ height: 4, width: 26, borderRadius: 3, background: '#fff' }}></span>
               <span style={{ height: 4, width: 18, borderRadius: 3, background: 'rgba(255,255,255,0.4)' }}></span>
               <span style={{ height: 4, width: 18, borderRadius: 3, background: 'rgba(255,255,255,0.4)' }}></span>
@@ -282,17 +285,17 @@ export default function DashboardPage() {
               <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação por Categoria / Origem</span>
               <span style={dots}>···</span>
             </div>
-            <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS CORRENTES</div>
-                <div style={{ height: 28, width: '90%', borderRadius: 7, marginTop: 9, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 11, boxSizing: 'border-box' }}>
+                <div style={{ height: 26, width: '90%', borderRadius: 7, marginTop: 8, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 11, boxSizing: 'border-box' }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>370,05M</span>
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS DE CAPITAL</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 9 }}>
-                  <div style={{ height: 28, width: 16, borderRadius: 7, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 8 }}>
+                  <div style={{ height: 26, width: 16, borderRadius: 7, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#283e93' }}>12,94M</span>
                 </div>
               </div>
