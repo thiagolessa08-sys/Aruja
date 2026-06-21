@@ -97,12 +97,19 @@ function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   return azul ? 'rgba(255,255,255,0.6)' : '#9098a8'
 }
 
+const INSIGHTS_FALLBACK = [
+  'Arrecadação acumulada de 2026 soma R$ 350,4 mi, +8,6% frente ao mesmo período de 2025.',
+  'Impostos lideram a receita de 2026 com R$ 106,5 mi, seguidos das transferências estaduais.',
+  'Junho/2026 arrecadou R$ 37,8 mi, abaixo do ritmo dos meses anteriores.',
+]
+
 export default function DashboardPage() {
   const router = useRouter()
   const [tip, setTip] = useState<Tip | null>(null)
   const [tipo, setTipo] = useState<'receita' | 'despesa'>('receita')
   const [saudacao, setSaudacao] = useState('Bom dia')
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
+  const [insights, setInsights] = useState<string[] | null>(null)
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -114,6 +121,13 @@ export default function DashboardPage() {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.kpis?.length) setKpis(d.kpis) })
       .catch(() => { /* mantém fallback */ })
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/orcamento/insights')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK))
+      .catch(() => setInsights(INSIGHTS_FALLBACK))
   }, [])
 
   async function handleLogout() {
@@ -317,16 +331,25 @@ export default function DashboardPage() {
               <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
               </div>
-              <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Today&apos;s info</span>
+              <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Receita</span>
             </div>
-            <div style={{ marginTop: 14, fontSize: 17, fontWeight: 600, color: '#fff' }}>News From The Doctor</div>
-            <p style={{ margin: '8px 0 0', fontSize: 12, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)' }}>Our process is designed to make booking appointments, consultations, and treatments easy and convenient for you.</p>
-            <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-              <span style={{ height: 4, width: 26, borderRadius: 3, background: '#fff' }}></span>
-              <span style={{ height: 4, width: 18, borderRadius: 3, background: 'rgba(255,255,255,0.4)' }}></span>
-              <span style={{ height: 4, width: 18, borderRadius: 3, background: 'rgba(255,255,255,0.4)' }}></span>
-              <span style={{ height: 4, width: 18, borderRadius: 3, background: 'rgba(255,255,255,0.4)' }}></span>
-            </div>
+            <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de Receita</div>
+            {insights === null ? (
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{ height: 9, borderRadius: 5, width: i === 1 ? '85%' : '95%', background: 'rgba(255,255,255,0.18)' }} />
+                ))}
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {insights.map((t, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
+                    <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Arrecadação por Categoria / Origem */}
