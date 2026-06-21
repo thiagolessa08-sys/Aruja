@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 interface Tip {
-  chart: 'report' | 'trend' | 'bars'
+  chart: 'report' | 'arrec'
   left: string
   top: string
   title: string
@@ -14,6 +14,64 @@ interface Tip {
   l2?: string
   l2c?: string
 }
+
+const TABELA: { mes: string; vals: string[] }[] = [
+  { mes: 'Janeiro', vals: ['59.444.202,79', '70.277.740,32', '67.267.295,16', '79.892.897,62'] },
+  { mes: 'Fevereiro', vals: ['50.717.657,63', '59.214.382,03', '65.331.666,15', '65.321.156,77'] },
+  { mes: 'Março', vals: ['47.157.120,97', '45.822.256,18', '51.917.374,15', '68.504.503,41'] },
+  { mes: 'Abril', vals: ['39.127.073,13', '52.022.165,40', '65.406.361,89', '60.991.512,54'] },
+  { mes: 'Maio', vals: ['57.188.731,92', '61.750.170,60', '50.931.379,40', '67.310.295,16'] },
+  { mes: 'Junho', vals: ['44.739.854,30', '53.914.449,85', '53.133.699,70', '40.964.944,01'] },
+  { mes: 'Julho', vals: ['42.472.101,24', '62.045.430,91', '66.520.173,99', '0,00'] },
+  { mes: 'Agosto', vals: ['45.519.058,10', '45.926.095,41', '50.313.236,53', '0,00'] },
+  { mes: 'Setembro', vals: ['43.546.105,23', '42.539.041,30', '60.812.822,43', '0,00'] },
+  { mes: 'Outubro', vals: ['47.709.058,28', '48.617.789,93', '55.450.322,91', '0,00'] },
+  { mes: 'Novembro', vals: ['41.832.693,05', '44.077.491,00', '53.783.640,71', '0,00'] },
+  { mes: 'Dezembro', vals: ['56.444.473,03', '69.069.098,08', '98.529.179,10', '0,00'] },
+]
+
+const ARREC: Tip[] = [
+  { chart: 'arrec', title: 'Janeiro · 18,77%', l1: 'Ano Anterior: 67,3 mi', l1c: '#283e93', l2: 'Ano Atual: 79,9 mi', l2c: '#e8962e', left: '4.8%', top: '26.4%' },
+  { chart: 'arrec', title: 'Fevereiro · -0,02%', l1: 'Ano Anterior: 65,3 mi', l1c: '#283e93', l2: 'Ano Atual: 65,3 mi', l2c: '#e8962e', left: '13.1%', top: '36.0%' },
+  { chart: 'arrec', title: 'Março · 31,95%', l1: 'Ano Anterior: 51,9 mi', l1c: '#283e93', l2: 'Ano Atual: 68,5 mi', l2c: '#e8962e', left: '21.3%', top: '33.9%' },
+  { chart: 'arrec', title: 'Abril · -6,75%', l1: 'Ano Anterior: 65,4 mi', l1c: '#283e93', l2: 'Ano Atual: 61,0 mi', l2c: '#e8962e', left: '29.5%', top: '35.9%' },
+  { chart: 'arrec', title: 'Maio · 32,16%', l1: 'Ano Anterior: 50,9 mi', l1c: '#283e93', l2: 'Ano Atual: 67,3 mi', l2c: '#e8962e', left: '37.7%', top: '34.7%' },
+  { chart: 'arrec', title: 'Junho · -22,90%', l1: 'Ano Anterior: 53,1 mi', l1c: '#283e93', l2: 'Ano Atual: 41,0 mi', l2c: '#e8962e', left: '45.9%', top: '44.0%' },
+  { chart: 'arrec', title: 'Julho · -100,00%', l1: 'Ano Anterior: 66,5 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '54.1%', top: '35.2%' },
+  { chart: 'arrec', title: 'Agosto · -100,00%', l1: 'Ano Anterior: 50,3 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '62.3%', top: '45.9%' },
+  { chart: 'arrec', title: 'Setembro · -100,00%', l1: 'Ano Anterior: 60,8 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '70.5%', top: '38.9%' },
+  { chart: 'arrec', title: 'Outubro · -100,00%', l1: 'Ano Anterior: 55,5 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '78.7%', top: '42.4%' },
+  { chart: 'arrec', title: 'Novembro · -100,00%', l1: 'Ano Anterior: 53,8 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '86.9%', top: '43.6%' },
+  { chart: 'arrec', title: 'Dezembro · -100,00%', l1: 'Ano Anterior: 98,5 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '95.2%', top: '14.1%' },
+]
+
+const REPORT: Tip[] = [
+  { chart: 'report', title: '2022', l1: 'Arrecadado: 412,6 mi', l1c: '#283e93', l2: 'Previsto: 365,0 mi', l2c: '#e8962e', left: '15%', top: '28%' },
+  { chart: 'report', title: '2023', l1: 'Arrecadado: 478,3 mi', l1c: '#283e93', l2: 'Previsto: 510,2 mi', l2c: '#e8962e', left: '39%', top: '28%' },
+  { chart: 'report', title: '2024', l1: 'Arrecadado: 521,9 mi', l1c: '#283e93', l2: 'Previsto: 489,4 mi', l2c: '#e8962e', left: '64%', top: '28%' },
+  { chart: 'report', title: '2025', l1: 'Arrecadado: 564,1 mi', l1c: '#283e93', l2: 'Previsto: 540,8 mi', l2c: '#e8962e', left: '88%', top: '28%' },
+]
+
+// barras visíveis do gráfico "Arrecadação por Mês"
+const BARS = [
+  { ant: { x: 24.3, y: 131.8, h: 168.3 }, atu: { x: 56.3, y: 100.3, h: 199.8 }, tx: 52.3, mes: 'Janeiro', pct: '18,77%' },
+  { ant: { x: 113.0, y: 136.8, h: 163.3 }, atu: { x: 145.0, y: 136.8, h: 163.3 }, tx: 141.0, mes: 'Fevereiro', pct: '-0,02%' },
+  { ant: { x: 201.7, y: 170.3, h: 129.8 }, atu: { x: 233.7, y: 128.8, h: 171.3 }, tx: 229.7, mes: 'Março', pct: '31,95%' },
+  { ant: { x: 290.3, y: 136.5, h: 163.5 }, atu: { x: 322.3, y: 147.5, h: 152.5 }, tx: 318.3, mes: 'Abril', pct: '-6,75%' },
+  { ant: { x: 379.0, y: 172.8, h: 127.3 }, atu: { x: 411.0, y: 131.8, h: 168.3 }, tx: 407.0, mes: 'Maio', pct: '32,16%' },
+  { ant: { x: 467.7, y: 167.3, h: 132.8 }, atu: { x: 499.7, y: 197.5, h: 102.5 }, tx: 495.7, mes: 'Junho', pct: '-22,90%' },
+  { ant: { x: 556.3, y: 133.8, h: 166.3 }, atu: null, tx: 584.3, mes: 'Julho', pct: '-100,00%' },
+  { ant: { x: 645.0, y: 174.3, h: 125.8 }, atu: null, tx: 673.0, mes: 'Agosto', pct: '-100,00%' },
+  { ant: { x: 733.7, y: 148.0, h: 152.0 }, atu: null, tx: 761.7, mes: 'Setembro', pct: '-100,00%' },
+  { ant: { x: 822.3, y: 161.3, h: 138.8 }, atu: null, tx: 850.3, mes: 'Outubro', pct: '-100,00%' },
+  { ant: { x: 911.0, y: 165.5, h: 134.5 }, atu: null, tx: 939.0, mes: 'Novembro', pct: '-100,00%' },
+  { ant: { x: 999.7, y: 53.8, h: 246.3 }, atu: null, tx: 1027.7, mes: 'Dezembro', pct: '-100,00%' },
+]
+const HOT = [
+  { x: 8.0, left: '4.8%' }, { x: 96.7, left: '13.1%' }, { x: 185.3, left: '21.3%' }, { x: 274.0, left: '29.5%' },
+  { x: 362.7, left: '37.7%' }, { x: 451.3, left: '45.9%' }, { x: 540.0, left: '54.1%' }, { x: 628.7, left: '62.3%' },
+  { x: 717.3, left: '70.5%' }, { x: 806.0, left: '78.7%' }, { x: 894.7, left: '86.9%' }, { x: 983.3, left: '95.2%' },
+]
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -25,106 +83,54 @@ export default function DashboardPage() {
   }
 
   const tipReport = tip && tip.chart === 'report' ? tip : null
-  const tipTrend = tip && tip.chart === 'trend' ? tip : null
-  const tipBars = tip && tip.chart === 'bars' ? tip : null
+  const tipArrec = tip && tip.chart === 'arrec' ? tip : null
 
-  const card: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 22,
-    padding: 20,
-    boxShadow: '0 6px 22px rgba(40,80,180,0.05)',
-  }
-  const pill: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 500,
-    color: '#283e93',
-    border: '1.5px solid #cdd5ef',
-    borderRadius: 18,
-    padding: '5px 13px',
-  }
-  const navTab: React.CSSProperties = {
-    padding: '9px 18px',
-    borderRadius: 24,
-    color: '#5b6477',
-    fontSize: 14,
-    fontWeight: 500,
-    cursor: 'pointer',
-    textDecoration: 'none',
-  }
+  const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
+  const navTab: React.CSSProperties = { padding: '9px 18px', borderRadius: 24, color: '#5b6477', fontSize: 14, fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }
+  const toolPill: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }
+  const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
+  const dots: React.CSSProperties = { color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14, flex: 'none' }
 
   function Tooltip({ t }: { t: Tip }) {
     return (
-      <div
-        style={{
-          position: 'absolute',
-          left: t.left,
-          top: t.top,
-          transform: 'translate(-50%,-115%)',
-          background: '#23304b',
-          borderRadius: 10,
-          padding: '8px 11px',
-          boxShadow: '0 8px 18px rgba(20,40,90,0.25)',
-          pointerEvents: 'none',
-          whiteSpace: 'nowrap',
-          zIndex: 5,
-        }}
-      >
+      <div style={{ position: 'absolute', left: t.left, top: t.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '9px 12px', boxShadow: '0 8px 18px rgba(20,40,90,0.25)', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{t.title}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 5 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l1c }}></span>
-          {t.l1}
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l1c }}></span>{t.l1}
         </div>
         {t.l2 ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>
-            {t.l2}
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
           </div>
         ) : null}
       </div>
     )
   }
 
+  // KPIs (o primeiro é o card azul)
+  const kpis = [
+    { label: 'Orçado Atualizado', value: '877,06 mi', sub: 'Ano Anterior', subVal: '816,64 mi', pct: '7,40%', pctColor: '#1fa463',
+      icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="1.8"><rect x="5" y="3" width="11" height="18" rx="1" /><path d="M8 7h2M12 7h1.5M8 11h2M12 11h1.5M8 15h2M12 15h1.5" /><path d="M16 21h3V11h-3" /></svg> },
+    { label: 'Arrecadação Mês', value: '382,99 mi', sub: 'Ano Anterior', subVal: '739,40 mi', pct: '-48,20%', pctColor: '#d64545',
+      icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="1.8"><ellipse cx="12" cy="6.5" rx="7" ry="3" /><path d="M5 6.5v5c0 1.6 3.1 3 7 3s7-1.4 7-3v-5" /><path d="M5 11.5v5c0 1.6 3.1 3 7 3s7-1.4 7-3v-5" /></svg> },
+    { label: 'Arrecadação Até o Mês', value: '382,99 mi', sub: 'Ano Anterior', subVal: '739,40 mi', pct: '-48,20%', pctColor: '#d64545',
+      icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0-.5 4" /><path d="M20 5v6h-6" /></svg> },
+    { label: 'Arrecadação Mês Anterior', value: '0,00', sub: 'Mês Atual', subVal: '0,00', pct: '0,00%', pctColor: '#9098a8',
+      icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="1.8"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg> },
+  ]
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#eef2f9',
-        padding: '26px 14px',
-        fontFamily: "var(--font-poppins), 'Poppins', sans-serif",
-      }}
-    >
+    <div style={{ minHeight: '100vh', background: '#eef2f9', padding: '26px 14px', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>
       <div style={{ maxWidth: 1560, margin: '0 auto' }}>
 
         {/* ===== TOP NAV ===== */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: '#ffffff',
-            borderRadius: 20,
-            padding: '12px 18px',
-            boxShadow: '0 6px 22px rgba(40,80,180,0.05)',
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderRadius: 20, padding: '12px 18px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img src="/logo-aruja.png" alt="Prefeitura Municipal de Arujá" style={{ height: 46, width: 'auto', display: 'block' }} />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
-            <span
-              style={{
-                padding: '9px 20px',
-                borderRadius: 24,
-                background: '#283e93',
-                color: '#ffffff',
-                fontSize: 14,
-                fontWeight: 500,
-                boxShadow: '0 6px 14px rgba(40,62,147,0.35)',
-              }}
-            >
-              Orçamento
-            </span>
+            <span style={{ padding: '9px 20px', borderRadius: 24, background: '#283e93', color: '#ffffff', fontSize: 14, fontWeight: 500, boxShadow: '0 6px 14px rgba(40,62,147,0.35)' }}>Orçamento</span>
             <span style={navTab}>Receita</span>
             <span style={navTab}>Despesas</span>
             <span style={navTab}>Tributário</span>
@@ -133,28 +139,14 @@ export default function DashboardPage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <Link href="/catalogo" title="Catálogo de dados" style={{ width: 42, height: 42, borderRadius: '50%', background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2">
-                <circle cx="12" cy="12" r="3.2" />
-                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.88 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.88.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z" />
-              </svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><circle cx="12" cy="12" r="3.2" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.88 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.88.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z" /></svg>
             </Link>
             <div style={{ position: 'relative', width: 42, height: 42, borderRadius: '50%', background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2">
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-              </svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
               <span style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#283e93', border: '2px solid #e9edf8' }}></span>
             </div>
-            <button
-              onClick={handleLogout}
-              title="Sair"
-              style={{ width: 42, height: 42, borderRadius: '50%', overflow: 'hidden', border: '2px solid #ffffff', boxShadow: '0 0 0 1px #e3e9f5', padding: 0, cursor: 'pointer', background: 'transparent' }}
-            >
-              <svg viewBox="0 0 40 40" width="40" height="40">
-                <rect width="40" height="40" fill="#cdd9ee" />
-                <circle cx="20" cy="15" r="8" fill="#9fb2d4" />
-                <path d="M5 40 a15 13 0 0 1 30 0" fill="#9fb2d4" />
-              </svg>
+            <button onClick={handleLogout} title="Sair" style={{ width: 42, height: 42, borderRadius: '50%', overflow: 'hidden', border: '2px solid #ffffff', boxShadow: '0 0 0 1px #e3e9f5', padding: 0, cursor: 'pointer', background: 'transparent' }}>
+              <svg viewBox="0 0 40 40" width="40" height="40"><rect width="40" height="40" fill="#cdd9ee" /><circle cx="20" cy="15" r="8" fill="#9fb2d4" /><path d="M5 40 a15 13 0 0 1 30 0" fill="#9fb2d4" /></svg>
             </button>
           </div>
         </div>
@@ -164,26 +156,8 @@ export default function DashboardPage() {
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
             Good Morning, <span style={{ color: '#7d8fce' }}>Selena!</span>
           </h1>
-          <button
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              background: '#283e93',
-              color: '#fff',
-              border: 'none',
-              padding: '12px 22px',
-              borderRadius: 24,
-              fontFamily: "var(--font-poppins), 'Poppins', sans-serif",
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: 'pointer',
-              boxShadow: '0 8px 18px rgba(40,62,147,0.32)',
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+          <button style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#283e93', color: '#fff', border: 'none', padding: '12px 22px', borderRadius: 24, fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontSize: 14, fontWeight: 500, cursor: 'pointer', boxShadow: '0 8px 18px rgba(40,62,147,0.32)' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"><path d="M12 5v14M5 12h14" /></svg>
             Check new
           </button>
         </div>
@@ -191,14 +165,14 @@ export default function DashboardPage() {
         {/* ===== TOOLBAR ===== */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+            <div style={toolPill}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><path d="M3 6h18M6 12h12M10 18h4" /></svg> Filter
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+            <div style={toolPill}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg> Monthly
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2.4"><path d="M6 9l6 6 6-6" /></svg>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+            <div style={toolPill}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg> Download Data
             </div>
           </div>
@@ -206,47 +180,79 @@ export default function DashboardPage() {
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+            <div style={toolPill}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 16v-4M12 8h.01" /></svg> Support
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+            <div style={toolPill}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg> Content Layout
             </div>
           </div>
         </div>
 
-        {/* ===== ROW 1 ===== */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.32fr 1.05fr 1.05fr 1.05fr', gap: 18, marginTop: 20 }}>
+        {/* ===== KPIs ===== */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
+          {/* Card azul: Orçado */}
+          <div style={{ background: '#283e93', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 20px rgba(40,62,147,0.22)' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.88)', lineHeight: 1.25, display: 'block' }}>Orçado</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17.5" cy="9" r="2.3" /><path d="M16 19a4.5 4.5 0 0 1 5.5-4.4" /></svg>
+              </div>
+              <span style={{ fontSize: 19, fontWeight: 700, color: '#fff', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>829,72 mi</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>Ano Anterior <span style={{ color: 'rgba(255,255,255,0.95)', fontWeight: 600 }}>761,14 mi</span></span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#6ee0a0', flex: 'none' }}>9,01%</span>
+            </div>
+          </div>
 
-          {/* Health Report Pending */}
+          {/* Cards brancos */}
+          {kpis.map(k => (
+            <div key={k.label} style={{ background: '#fff', borderRadius: 16, padding: '12px 14px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44', lineHeight: 1.25, display: 'block' }}>{k.label}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{k.icon}</div>
+                <span style={{ fontSize: 19, fontWeight: 700, color: '#1f2a44', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>{k.value}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#9098a8' }}>{k.sub} <span style={{ color: '#3a4256', fontWeight: 600 }}>{k.subVal}</span></span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: k.pctColor, flex: 'none' }}>{k.pct}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ===== ROW 1 ===== */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.68fr 1fr 1.32fr', gap: 18, marginTop: 20 }}>
+
+          {/* Arrecadação por Ano */}
           <div style={card}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Health Report Pending</span>
-              <span style={pill}>Report</span>
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Arrecadação por Ano</span>
+              <span style={reportBadge}>Anual</span>
             </div>
             <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
               <div style={{ position: 'absolute', left: 30, top: -2, display: 'flex', gap: 10, zIndex: 2 }}>
-                <span style={{ background: '#1f2a44', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>15 Report</span>
+                <span style={{ background: '#283e93', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>Arrecadado</span>
                 <span style={{ background: '#fff', color: '#1f2a44', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px', boxShadow: '0 2px 8px rgba(40,80,180,0.12)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#283e93' }}></span>10 No Report
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e8962e' }}></span>Previsto
                 </span>
               </div>
               <svg viewBox="0 0 300 160" width="100%" style={{ display: 'block' }}>
-                <text x="6" y="36" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">30</text>
-                <text x="6" y="92" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">20</text>
-                <text x="6" y="140" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">10</text>
+                <text x="4" y="36" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">600</text>
+                <text x="4" y="92" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">400</text>
+                <text x="4" y="140" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">200</text>
                 <line x1="110" y1="20" x2="110" y2="140" stroke="#cfd8e8" strokeWidth="1.5" strokeDasharray="4 4" />
-                <path d="M30 95 C55 70 80 60 110 80 C140 100 165 120 195 110 C225 100 255 70 290 60" fill="none" stroke="#aab8e3" strokeWidth="3" strokeLinecap="round" />
+                <path d="M30 95 C55 70 80 60 110 80 C140 100 165 120 195 110 C225 100 255 70 290 60" fill="none" stroke="#e8962e" strokeWidth="3" strokeLinecap="round" />
                 <path d="M30 70 C55 95 80 110 110 80 C140 50 165 50 195 70 C225 90 255 95 290 85" fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" />
                 <circle cx="110" cy="80" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
-                <text x="26" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">Jan</text>
-                <text x="98" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">Feb</text>
-                <text x="178" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">Mar</text>
-                <text x="270" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">Apr</text>
-                <rect onMouseEnter={() => setTip({ chart: 'report', title: 'Jan', l1: '12 Report', l1c: '#283e93', l2: '8 No Report', l2c: '#aab8e3', left: '15%', top: '28%' })} x="10" y="0" width="72" height="150" fill="transparent" pointerEvents="all" />
-                <rect onMouseEnter={() => setTip({ chart: 'report', title: 'Feb', l1: '15 Report', l1c: '#283e93', l2: '10 No Report', l2c: '#aab8e3', left: '39%', top: '28%' })} x="82" y="0" width="73" height="150" fill="transparent" pointerEvents="all" />
-                <rect onMouseEnter={() => setTip({ chart: 'report', title: 'Mar', l1: '18 Report', l1c: '#283e93', l2: '7 No Report', l2c: '#aab8e3', left: '64%', top: '28%' })} x="155" y="0" width="72" height="150" fill="transparent" pointerEvents="all" />
-                <rect onMouseEnter={() => setTip({ chart: 'report', title: 'Apr', l1: '22 Report', l1c: '#283e93', l2: '6 No Report', l2c: '#aab8e3', left: '88%', top: '28%' })} x="227" y="0" width="73" height="150" fill="transparent" pointerEvents="all" />
+                <text x="20" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">2022</text>
+                <text x="92" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">2023</text>
+                <text x="172" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">2024</text>
+                <text x="264" y="156" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">2025</text>
+                {[{ x: 10, w: 72 }, { x: 82, w: 73 }, { x: 155, w: 72 }, { x: 227, w: 73 }].map((r, i) => (
+                  <rect key={i} onMouseEnter={() => setTip(REPORT[i])} x={r.x} y="0" width={r.w} height="150" fill="transparent" pointerEvents="all" />
+                ))}
               </svg>
               {tipReport ? <Tooltip t={tipReport} /> : null}
             </div>
@@ -261,9 +267,7 @@ export default function DashboardPage() {
               <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Today&apos;s info</span>
             </div>
             <div style={{ marginTop: 26, fontSize: 18, fontWeight: 600, color: '#fff' }}>News From The Doctor</div>
-            <p style={{ margin: '10px 0 0', fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>
-              Our process is designed to make booking appointments, consultations, and treatments easy and convenient for you.
-            </p>
+            <p style={{ margin: '10px 0 0', fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>Our process is designed to make booking appointments, consultations, and treatments easy and convenient for you.</p>
             <div style={{ display: 'flex', gap: 6, marginTop: 18 }}>
               <span style={{ height: 4, width: 26, borderRadius: 3, background: '#fff' }}></span>
               <span style={{ height: 4, width: 18, borderRadius: 3, background: 'rgba(255,255,255,0.4)' }}></span>
@@ -272,67 +276,24 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Health Trend Chart */}
+          {/* Arrecadação por Categoria / Origem */}
           <div style={card}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Health Trend Chart</span>
-              <span style={{ color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14 }}>···</span>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação por Categoria / Origem</span>
+              <span style={dots}>···</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
-              <span style={{ fontSize: 30, fontWeight: 700, color: '#1f2a44' }}>85%</span>
-              <span style={{ background: '#d8f5e3', color: '#1fa463', fontSize: 11, fontWeight: 600, borderRadius: 14, padding: '4px 9px' }}>+0,75%</span>
-            </div>
-            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 6, cursor: 'pointer' }}>
-              <svg viewBox="0 0 220 120" width="100%" style={{ display: 'block' }}>
-                <defs>
-                  <linearGradient id="trendg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#283e93" stopOpacity="0.28" />
-                    <stop offset="100%" stopColor="#283e93" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d="M10 96 C30 94 36 90 52 86 C70 81 74 58 92 54 C112 50 118 48 134 45 C156 41 168 24 196 20 L210 18 L210 100 L10 100 Z" fill="url(#trendg)" />
-                <path d="M10 96 C30 94 36 90 52 86 C70 81 74 58 92 54 C112 50 118 48 134 45 C156 41 168 24 196 20 L210 18" fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" />
-                <circle cx="92" cy="54" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
-                <text x="6" y="118" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">Mon</text>
-                <text x="62" y="118" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">Tue</text>
-                <text x="120" y="118" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">Wed</text>
-                <text x="178" y="118" fontSize="11" fill="#aeb6c6" fontFamily="Poppins">Thu</text>
-                <rect onMouseEnter={() => setTip({ chart: 'trend', title: 'Monday', l1: 'Score 62%', l1c: '#283e93', left: '16%', top: '78%' })} x="10" y="0" width="52" height="105" fill="transparent" pointerEvents="all" />
-                <rect onMouseEnter={() => setTip({ chart: 'trend', title: 'Tuesday', l1: 'Score 70%', l1c: '#283e93', left: '41%', top: '56%' })} x="62" y="0" width="58" height="105" fill="transparent" pointerEvents="all" />
-                <rect onMouseEnter={() => setTip({ chart: 'trend', title: 'Wednesday', l1: 'Score 78%', l1c: '#283e93', left: '68%', top: '40%' })} x="120" y="0" width="58" height="105" fill="transparent" pointerEvents="all" />
-                <rect onMouseEnter={() => setTip({ chart: 'trend', title: 'Thursday', l1: 'Score 85%', l1c: '#283e93', left: '90%', top: '18%' })} x="178" y="0" width="42" height="105" fill="transparent" pointerEvents="all" />
-              </svg>
-              {tipTrend ? <Tooltip t={tipTrend} /> : null}
-            </div>
-          </div>
-
-          {/* Checkup progress */}
-          <div style={card}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Checkup progress</span>
-              <span style={{ color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14 }}>···</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 22 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 12, background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="9" r="1.6" /><path d="M21 16l-5-5L5 21" /></svg>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>22 Agustus, 2024</div>
-                <div style={{ position: 'relative', height: 5, borderRadius: 4, background: '#e6eaf6', marginTop: 9 }}>
-                  <div style={{ position: 'absolute', left: 0, top: 0, height: 5, width: '62%', borderRadius: 4, background: '#283e93' }}></div>
-                  <div style={{ position: 'absolute', left: '62%', top: '50%', transform: 'translate(-50%,-50%)', width: 9, height: 9, borderRadius: '50%', background: '#283e93', border: '2px solid #fff', boxShadow: '0 0 0 1px #283e93' }}></div>
+            <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS CORRENTES</div>
+                <div style={{ height: 28, width: '90%', borderRadius: 7, marginTop: 9, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 11, boxSizing: 'border-box' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>370,05M</span>
                 </div>
               </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 12, background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="9" r="1.6" /><path d="M21 16l-5-5L5 21" /></svg>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>16 Agustus, 2024</div>
-                <div style={{ position: 'relative', height: 5, borderRadius: 4, background: '#e6eaf6', marginTop: 9 }}>
-                  <div style={{ position: 'absolute', left: 0, top: 0, height: 5, width: '45%', borderRadius: 4, background: '#283e93' }}></div>
-                  <div style={{ position: 'absolute', left: '45%', top: '50%', transform: 'translate(-50%,-50%)', width: 9, height: 9, borderRadius: '50%', background: '#283e93', border: '2px solid #fff', boxShadow: '0 0 0 1px #283e93' }}></div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS DE CAPITAL</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 9 }}>
+                  <div style={{ height: 28, width: 16, borderRadius: 7, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#283e93' }}>12,94M</span>
                 </div>
               </div>
             </div>
@@ -340,137 +301,105 @@ export default function DashboardPage() {
         </div>
 
         {/* ===== ROW 2 ===== */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1.55fr 1.05fr', gap: 18, marginTop: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2.75fr 1fr', gap: 18, marginTop: 18 }}>
 
-          {/* Medical Information */}
-          <div style={card}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Medical Information</span>
-              <span style={pill}>See Details</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 14, overflow: 'hidden' }}>
-                  <svg viewBox="0 0 44 44" width="44" height="44"><rect width="44" height="44" fill="#cdd9ee" /><circle cx="22" cy="17" r="9" fill="#9fb2d4" /><path d="M5 44 a17 14 0 0 1 34 0" fill="#9fb2d4" /></svg>
-                </div>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44' }}>Cameron Williamson</div>
-                  <div style={{ fontSize: 12, color: '#9098a8' }}>Pasien</div>
-                </div>
+          {/* Arrecadação por Mês */}
+          <div style={{ position: 'relative', background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Arrecadação por Mês</span>
+              <div style={{ display: 'flex', gap: 22, fontSize: 12, color: '#5b6477' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Valor Arrecadação Ano Anterior</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>Valor Arrecadação Ano Atual</span>
               </div>
-              <svg width="44" height="44" viewBox="0 0 44 44">
-                <g fill="#283e93">
-                  <rect x="0" y="0" width="14" height="14" rx="2" /><rect x="3" y="3" width="8" height="8" rx="1" fill="#fff" /><rect x="5" y="5" width="4" height="4" fill="#283e93" />
-                  <rect x="30" y="0" width="14" height="14" rx="2" /><rect x="33" y="3" width="8" height="8" rx="1" fill="#fff" /><rect x="35" y="5" width="4" height="4" fill="#283e93" />
-                  <rect x="0" y="30" width="14" height="14" rx="2" /><rect x="3" y="33" width="8" height="8" rx="1" fill="#fff" /><rect x="5" y="35" width="4" height="4" fill="#283e93" />
-                  <rect x="18" y="0" width="4" height="4" /><rect x="24" y="4" width="4" height="4" /><rect x="18" y="8" width="4" height="4" />
-                  <rect x="24" y="18" width="4" height="4" /><rect x="32" y="18" width="4" height="4" /><rect x="40" y="22" width="4" height="4" />
-                  <rect x="20" y="24" width="4" height="4" /><rect x="28" y="28" width="4" height="4" /><rect x="36" y="30" width="4" height="4" />
-                  <rect x="24" y="36" width="4" height="4" /><rect x="32" y="40" width="4" height="4" /><rect x="40" y="38" width="4" height="4" />
-                  <rect x="18" y="22" width="4" height="4" />
+            </div>
+            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 16, cursor: 'pointer' }}>
+              <svg viewBox="0 0 1080 380" width="100%" style={{ display: 'block' }}>
+                <defs>
+                  <linearGradient id="arrAnt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
+                  <linearGradient id="arrAtu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
+                </defs>
+                <line x1="8" y1="300" x2="1072" y2="300" stroke="#e3e8f1" strokeWidth="1.5" />
+                <line x1="8" y1="146" x2="1072" y2="146" stroke="#c9d6ee" strokeWidth="1.6" strokeDasharray="5 5" />
+                <circle cx="52.3" cy="146" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
+                <text x="1066" y="139" fontSize="12" fill="#5b6477" fontFamily="Poppins" textAnchor="end">Média 61,6 mi</text>
+                {BARS.map((b, i) => (
+                  <g key={i}>
+                    <rect x={b.ant.x} y={b.ant.y} width="24" height={b.ant.h} rx="6" fill="url(#arrAnt)" />
+                    {b.atu ? <rect x={b.atu.x} y={b.atu.y} width="24" height={b.atu.h} rx="6" fill="url(#arrAtu)" /> : null}
+                    <text x={b.tx} y="324" fontSize="13" fill="#3a4256" fontFamily="Poppins" textAnchor="middle">{b.mes}</text>
+                    <text x={b.tx} y="350" fontSize="12" fill="#5b6477" fontFamily="Poppins" textAnchor="middle">{b.pct}</text>
+                  </g>
+                ))}
+                {HOT.map((h, i) => (
+                  <rect key={i} onMouseEnter={() => setTip(ARREC[i])} x={h.x} y="40" width="88.7" height="260.0" fill="transparent" pointerEvents="all" />
+                ))}
+              </svg>
+              {tipArrec ? <Tooltip t={tipArrec} /> : null}
+            </div>
+          </div>
+
+          {/* Arrecadação Dívida Ativa */}
+          <div style={card}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação Dívida Ativa</span>
+              <span style={dots}>···</span>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>R$ 9.618.583,26</div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+              <svg viewBox="0 0 200 200" width="158" height="158">
+                <g transform="rotate(-90 100 100)">
+                  <circle cx="100" cy="100" r="66" fill="none" stroke="#283e93" strokeWidth="30" strokeDasharray="329.0 414.7" strokeDashoffset="0" />
+                  <circle cx="100" cy="100" r="66" fill="none" stroke="#e8962e" strokeWidth="30" strokeDasharray="85.3 414.7" strokeDashoffset="-329.0" />
+                  <circle cx="100" cy="100" r="66" fill="none" stroke="#aab8e3" strokeWidth="30" strokeDasharray="2.0 414.7" strokeDashoffset="-414.3" />
                 </g>
               </svg>
             </div>
-            <div style={{ display: 'flex', gap: 24, marginTop: 20 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: '#9098a8' }}>Medical History</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44', marginTop: 3 }}>Medical inpatient care</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93', flex: 'none' }}></span>
+                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>IMPOSTOS</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>7,63M <span style={{ color: '#9098a8', fontWeight: 500 }}>(79,33%)</span></span>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: '#9098a8' }}>Current Medications</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44', marginTop: 3 }}>Herbal medicine</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e', flex: 'none' }}></span>
+                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>TAXAS</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>1,98M <span style={{ color: '#9098a8', fontWeight: 500 }}>(20,58%)</span></span>
               </div>
-            </div>
-            <div style={{ height: 1, background: '#eef1f7', margin: '18px 0' }}></div>
-            <div style={{ display: 'flex', gap: 24 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: '#9098a8' }}>Allergies</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44', marginTop: 3 }}>No allergies present</div>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: '#9098a8' }}>Primary Physician</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44', marginTop: 3 }}>Dr.Leslie Alexander</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ width: 11, height: 11, borderRadius: 3, background: '#aab8e3', flex: 'none' }}></span>
+                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>DEMAIS RECEITAS CORRENTES</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>8,27K <span style={{ color: '#9098a8', fontWeight: 500 }}>(0,09%)</span></span>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Patient health report */}
-          <div style={{ position: 'relative', ...card }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Patient health report</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontSize: 12, color: '#6b7384' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#aab8e3' }}></span>Progress</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#283e93' }}></span>Recovery</span>
-                </div>
-                <span style={pill}>See Details</span>
-              </div>
-            </div>
-
-            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
-              <svg viewBox="0 0 500 250" width="100%" style={{ display: 'block' }}>
-                <defs>
-                  <linearGradient id="barg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#c2cdef" /></linearGradient>
-                  <linearGradient id="barl" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e9edf8" /><stop offset="100%" stopColor="#f6f9fe" /></linearGradient>
-                </defs>
-                <text x="14" y="28" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">70</text>
-                <text x="14" y="93" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">50</text>
-                <text x="14" y="158" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">30</text>
-                <text x="14" y="223" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">10</text>
-
-                <line x1="48" y1="88" x2="492" y2="88" stroke="#c9d6ee" strokeWidth="1.6" strokeDasharray="5 5" />
-
-                <rect onMouseEnter={() => setTip({ chart: 'bars', title: 'January', l1: 'Towards recovery: 30', l1c: '#5870c4', l2: 'Treatment process: 18', l2c: '#1f2a44', left: '16%', top: '60%' })} x="67" y="150" width="28" height="80" rx="8" fill="url(#barl)" />
-                <rect onMouseEnter={() => setTip({ chart: 'bars', title: 'February', l1: 'Towards recovery: 73', l1c: '#5870c4', l2: 'Treatment process: 40', l2c: '#1f2a44', left: '32%', top: '9%' })} x="148" y="22" width="28" height="208" rx="8" fill="url(#barg)" />
-                <rect onMouseEnter={() => setTip({ chart: 'bars', title: 'March', l1: 'Towards recovery: 24', l1c: '#5870c4', l2: 'Treatment process: 14', l2c: '#1f2a44', left: '49%', top: '66%' })} x="229" y="165" width="28" height="65" rx="8" fill="url(#barl)" />
-                <rect onMouseEnter={() => setTip({ chart: 'bars', title: 'April', l1: 'Towards recovery: 27', l1c: '#5870c4', l2: 'Treatment process: 16', l2c: '#1f2a44', left: '65%', top: '63%' })} x="310" y="158" width="28" height="72" rx="8" fill="url(#barl)" />
-                <rect onMouseEnter={() => setTip({ chart: 'bars', title: 'May', l1: 'Towards recovery: 46', l1c: '#5870c4', l2: 'Treatment process: 28', l2c: '#1f2a44', left: '81%', top: '40%' })} x="391" y="100" width="28" height="130" rx="8" fill="url(#barg)" />
-                <rect onMouseEnter={() => setTip({ chart: 'bars', title: 'June', l1: 'Towards recovery: 30', l1c: '#5870c4', l2: 'Treatment process: 20', l2c: '#1f2a44', left: '94%', top: '60%' })} x="455" y="150" width="28" height="80" rx="8" fill="url(#barl)" />
-
-                <circle cx="81" cy="88" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
-
-                <text x="68" y="246" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">Jan</text>
-                <text x="149" y="246" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">Feb</text>
-                <text x="230" y="246" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">Mar</text>
-                <text x="311" y="246" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">Apr</text>
-                <text x="392" y="246" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">May</text>
-                <text x="456" y="246" fontSize="12" fill="#aeb6c6" fontFamily="Poppins">Jun</text>
-              </svg>
-
-              {tipBars ? <Tooltip t={tipBars} /> : null}
-            </div>
-          </div>
-
-          {/* My Doctor */}
-          <div style={card}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>My Doctor</span>
-              <span style={pill}>See Details</span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20 }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', flex: 'none' }}><svg viewBox="0 0 44 44" width="44" height="44"><rect width="44" height="44" fill="#cfe0f7" /><circle cx="22" cy="17" r="9" fill="#8fb0e0" /><path d="M5 44 a17 14 0 0 1 34 0" fill="#8fb0e0" /></svg></div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44' }}>Dr.Leslie Alexander</div>
-                <div style={{ fontSize: 12, color: '#9098a8' }}>Hasan Sadikin Hospital</div>
-              </div>
-            </div>
-            <div style={{ height: 1, background: '#eef1f7', margin: '16px 0' }}></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', flex: 'none' }}><svg viewBox="0 0 44 44" width="44" height="44"><rect width="44" height="44" fill="#f3d9e2" /><circle cx="22" cy="17" r="9" fill="#d29bb0" /><path d="M5 44 a17 14 0 0 1 34 0" fill="#d29bb0" /></svg></div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44' }}>Dr.Savannah Nguyen</div>
-                <div style={{ fontSize: 12, color: '#9098a8' }}>Hasan Sadikin Hospital</div>
-              </div>
-            </div>
-            <div style={{ height: 1, background: '#eef1f7', margin: '16px 0' }}></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', flex: 'none' }}><svg viewBox="0 0 44 44" width="44" height="44"><rect width="44" height="44" fill="#cfe0f7" /><circle cx="22" cy="17" r="9" fill="#7f93b8" /><path d="M5 44 a17 14 0 0 1 34 0" fill="#7f93b8" /></svg></div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44' }}>Dr.Darlene Robertson</div>
-                <div style={{ fontSize: 12, color: '#9098a8' }}>Hasan Sadikin Hospital</div>
-              </div>
-            </div>
+        {/* ===== Histórico Mensal (tabela) ===== */}
+        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Histórico Mensal de Arrecadação por Ano</span>
+          <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Meses', '2023', '2024', '2025', '2026'].map((h, i) => (
+                    <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {TABELA.map((row, ri) => {
+                  const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
+                  return (
+                    <tr key={row.mes}>
+                      <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.mes}</td>
+                      {row.vals.map((v, ci) => (
+                        <td key={ci} style={{ background: cellBg, color: v === '0,00' ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>R$ {v}</td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
 
