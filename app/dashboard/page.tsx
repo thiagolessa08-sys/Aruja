@@ -240,19 +240,19 @@ export default function DashboardPage() {
                 </span>
               </div>
               <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
-                <text x="4" y="32" fontSize="9" fill="#aeb6c6" style={axisFont}>600</text>
-                <text x="4" y="76" fontSize="9" fill="#aeb6c6" style={axisFont}>400</text>
-                <text x="4" y="114" fontSize="9" fill="#aeb6c6" style={axisFont}>200</text>
+                <text x="4" y="32" fontSize="6.5" fill="#aeb6c6" style={axisFont}>600</text>
+                <text x="4" y="76" fontSize="6.5" fill="#aeb6c6" style={axisFont}>400</text>
+                <text x="4" y="114" fontSize="6.5" fill="#aeb6c6" style={axisFont}>200</text>
                 <g transform="matrix(1,0,0,0.78,0,4.4)">
                   <line x1="110" y1="20" x2="110" y2="140" stroke="#cfd8e8" strokeWidth="1.5" strokeDasharray="4 4" />
                   <path d="M30 95 C55 70 80 60 110 80 C140 100 165 120 195 110 C225 100 255 70 290 60" fill="none" stroke="#e8962e" strokeWidth="3" strokeLinecap="round" />
                   <path d="M30 70 C55 95 80 110 110 80 C140 50 165 50 195 70 C225 90 255 95 290 85" fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" />
                   <circle cx="110" cy="80" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
                 </g>
-                <text x="20" y="126" fontSize="9" fill="#aeb6c6" style={axisFont}>2022</text>
-                <text x="92" y="126" fontSize="9" fill="#aeb6c6" style={axisFont}>2023</text>
-                <text x="172" y="126" fontSize="9" fill="#aeb6c6" style={axisFont}>2024</text>
-                <text x="264" y="126" fontSize="9" fill="#aeb6c6" style={axisFont}>2025</text>
+                <text x="20" y="126" fontSize="6.5" fill="#aeb6c6" style={axisFont}>2022</text>
+                <text x="92" y="126" fontSize="6.5" fill="#aeb6c6" style={axisFont}>2023</text>
+                <text x="172" y="126" fontSize="6.5" fill="#aeb6c6" style={axisFont}>2024</text>
+                <text x="264" y="126" fontSize="6.5" fill="#aeb6c6" style={axisFont}>2025</text>
                 {[{ x: 10, w: 72 }, { x: 82, w: 73 }, { x: 155, w: 72 }, { x: 227, w: 73 }].map((r, i) => (
                   <rect key={i} onMouseEnter={() => setTip(REPORT[i])} x={r.x} y="0" width={r.w} height="120" fill="transparent" pointerEvents="all" />
                 ))}
