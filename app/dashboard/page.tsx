@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import PainelReceita from './PainelReceita'
+import PainelReceita, { type FiltrosReceita } from './PainelReceita'
 import PainelDespesa, { type FiltrosDespesa } from './PainelDespesa'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -20,6 +20,12 @@ export default function DashboardPage() {
   const [fMes, setFMes] = useState('')
   const [fSec, setFSec] = useState('')
   const [fInd, setFInd] = useState('Liquidado')
+
+  // Filtros do painel de Receita
+  const [optsRec, setOptsRec] = useState<{ anos: number[]; especies: string[] }>({ anos: [], especies: [] })
+  const [rAno, setRAno] = useState<number | ''>('')
+  const [rMes, setRMes] = useState('')
+  const [rEsp, setREsp] = useState('')
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -40,6 +46,18 @@ export default function DashboardPage() {
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    fetch('/api/orcamento/filtros')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && !d.error) {
+          setOptsRec({ anos: d.anos ?? [], especies: d.especies ?? [] })
+          if (d.anos?.length) setRAno(d.anos[0])
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   function selecionar(op: 'receita' | 'despesa') {
     setTipo(op)
     window.history.replaceState(null, '', `?v=${op}`)
@@ -55,6 +73,7 @@ export default function DashboardPage() {
   const selectPill: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: '9px 14px', fontSize: 13, fontWeight: 600, color: '#283e93', border: '1.5px solid #e3e9f5', boxShadow: '0 4px 12px rgba(40,80,180,0.04)', fontFamily: 'inherit', cursor: 'pointer', maxWidth: 220 }
 
   const filtros: FiltrosDespesa = { ano: fAno, mes: fMes, secretaria: fSec, indicador: fInd }
+  const filtrosReceita: FiltrosReceita = { ano: rAno, mes: rMes, especie: rEsp }
 
   return (
     <div style={{ minHeight: '100vh', background: '#eef2f9', padding: '26px 14px', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>
@@ -140,16 +159,17 @@ export default function DashboardPage() {
               </>
             ) : (
               <>
-                <div style={toolPill}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><path d="M3 6h18M6 12h12M10 18h4" /></svg> Filter
-                </div>
-                <div style={toolPill}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg> Monthly
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2.4"><path d="M6 9l6 6 6-6" /></svg>
-                </div>
-                <div style={toolPill}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg> Download Data
-                </div>
+                <select aria-label="Ano" value={rAno} onChange={e => setRAno(Number(e.target.value))} style={selectPill}>
+                  {optsRec.anos.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+                <select aria-label="Mês" value={rMes} onChange={e => setRMes(e.target.value)} style={selectPill}>
+                  <option value="">Mês: Todos</option>
+                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+                <select aria-label="Espécie" value={rEsp} onChange={e => setREsp(e.target.value)} style={{ ...selectPill, background: '#283e93', color: '#fff', border: 'none' }}>
+                  <option value="">Espécie: Todas</option>
+                  {optsRec.especies.map(esp => <option key={esp} value={esp}>{esp}</option>)}
+                </select>
               </>
             )}
           </div>
@@ -167,7 +187,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ===== PAINEL (Receita / Despesa) ===== */}
-        {tipo === 'receita' ? <PainelReceita /> : <PainelDespesa filtros={filtros} />}
+        {tipo === 'receita' ? <PainelReceita filtros={filtrosReceita} /> : <PainelDespesa filtros={filtros} />}
 
       </div>
     </div>

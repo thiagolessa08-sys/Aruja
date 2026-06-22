@@ -144,25 +144,38 @@ const INSIGHTS_FALLBACK = [
   'Junho/2026 arrecadou R$ 37,8 mi, abaixo do ritmo dos meses anteriores.',
 ]
 
-export default function PainelReceita() {
+export interface FiltrosReceita { ano: number | ''; mes: string; especie: string }
+
+function buildQS(f: FiltrosReceita): string {
+  const p = new URLSearchParams()
+  if (f.ano) p.set('ano', String(f.ano))
+  if (f.mes) p.set('mes', f.mes)
+  if (f.especie) p.set('especie', f.especie)
+  const s = p.toString()
+  return s ? `?${s}` : ''
+}
+
+export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) {
   const [tip, setTip] = useState<Tip | null>(null)
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
 
+  const qs = buildQS(filtros)
+
   useEffect(() => {
-    fetch('/api/orcamento/graficos')
+    fetch(`/api/orcamento/graficos${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setGraf(d) })
       .catch(() => { /* mantém fallback */ })
-  }, [])
+  }, [qs])
 
   useEffect(() => {
-    fetch('/api/orcamento/kpis')
+    fetch(`/api/orcamento/kpis${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.kpis?.length) setKpis(d.kpis) })
       .catch(() => { /* mantém fallback */ })
-  }, [])
+  }, [qs])
 
   useEffect(() => {
     fetch('/api/orcamento/insights')

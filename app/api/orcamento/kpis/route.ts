@@ -1,7 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
+import { lerFiltros } from '@/lib/receita-filtros'
 
+const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 interface Kpi {
@@ -21,25 +23,25 @@ function variacao(atual: number, anterior: number): { pct: string; dir: 'up' | '
   if (!anterior) return { pct: '0,00%', dir: 'flat' }
   const r = ((atual - anterior) / Math.abs(anterior)) * 100
   const dir = r > 0.005 ? 'up' : r < -0.005 ? 'down' : 'flat'
-  const sinal = r > 0 ? '' : ''
-  return { pct: sinal + r.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%', dir }
+  return { pct: r.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%', dir }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = getSession()
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
   try {
-    const SCHEMA = 'pref_aruja_sp'
+    const f = lerFiltros(req.nextUrl.searchParams)
 
     const [receita, orcado, alteracao] = await Promise.all([
       agentQuery(`
-        SELECT d.NO_ANO AS ano, d.NO_MES AS mes,
+        SELECT d.NO_ANO AS ano, d.NO_MES AS mes, nr.DS_ESPECIE_RECEITA AS esp,
           SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA IN (1,2) THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS liquida
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
+        JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        GROUP BY d.NO_ANO, d.NO_MES`, 2000),
+        GROUP BY d.NO_ANO, d.NO_MES, nr.DS_ESPECIE_RECEITA`, 5000),
       agentQuery(`
         SELECT d.NO_ANO AS ano, SUM(f.VL_ORC_APROV_LEI) AS loa
         FROM ${SCHEMA}.FATO_BIORC_ELABORACAO_ORCAMENTO f
@@ -52,38 +54,38 @@ export async function GET() {
         GROUP BY d.NO_ANO`, 100),
     ])
 
-    // Mapas auxiliares
-    const arrec = new Map<string, number>() // "ano-mes" -> liquida
-    let anoAtual = 0
-    let mesAtual = 0
+    // Arrecadação por ano-mês, aplicando filtro de espécie em JS
+    const arrec = new Map<string, number>()
+    const mesesPorAno = new Map<number, number>()
+    let anoMax = 0
     for (const r of receita.rows) {
-      const ano = Number(r[0]); const mes = Number(r[1]); const v = Number(r[2]) || 0
-      arrec.set(`${ano}-${mes}`, v)
-      if (ano > anoAtual || (ano === anoAtual && mes > mesAtual)) { anoAtual = ano; mesAtual = mes }
+      const esp = String(r[2] ?? '').trim()
+      if (f.especie && esp !== f.especie) continue
+      const ano = Number(r[0]), mes = Number(r[1]), v = Number(r[3]) || 0
+      arrec.set(`${ano}-${mes}`, (arrec.get(`${ano}-${mes}`) ?? 0) + v)
+      mesesPorAno.set(ano, Math.max(mesesPorAno.get(ano) ?? 0, mes))
+      if (ano > anoMax) anoMax = ano
     }
+
+    const anoAtual = f.ano || anoMax
+    const anoAnt = anoAtual - 1
+    const mesAtual = f.mes || mesesPorAno.get(anoAtual) || 12
+
+    const get = (ano: number, mes: number) => arrec.get(`${ano}-${mes}`) ?? 0
+    const ytd = (ano: number, ateMes: number) => { let s = 0; for (let m = 1; m <= ateMes; m++) s += get(ano, m); return s }
+    const mesAntMes = mesAtual > 1 ? mesAtual - 1 : 12
+    const mesAntAno = mesAtual > 1 ? anoAtual : anoAtual - 1
+
     const loa = new Map<number, number>()
     for (const r of orcado.rows) loa.set(Number(r[0]), Number(r[1]) || 0)
     const alt = new Map<number, number>()
     for (const r of alteracao.rows) alt.set(Number(r[0]), Number(r[1]) || 0)
 
-    const anoAnt = anoAtual - 1
-    const get = (ano: number, mes: number) => arrec.get(`${ano}-${mes}`) ?? 0
-    const ytd = (ano: number, ateMes: number) => {
-      let s = 0
-      for (let m = 1; m <= ateMes; m++) s += get(ano, m)
-      return s
-    }
-    // mês anterior (trata virada de ano)
-    const mesAntMes = mesAtual > 1 ? mesAtual - 1 : 12
-    const mesAntAno = mesAtual > 1 ? anoAtual : anoAtual - 1
-
-    // Orçado e Orçado Atualizado
     const orcAtual = loa.get(anoAtual) ?? 0
     const orcAnt = loa.get(anoAnt) ?? 0
     const orcAtualizadoAtual = (loa.get(anoAtual) ?? 0) + (alt.get(anoAtual) ?? 0)
     const orcAtualizadoAnt = (loa.get(anoAnt) ?? 0) + (alt.get(anoAnt) ?? 0)
 
-    // Arrecadação
     const arrecMes = get(anoAtual, mesAtual)
     const arrecMesAnt = get(anoAnt, mesAtual)
     const arrecYtd = ytd(anoAtual, mesAtual)
