@@ -129,7 +129,56 @@
     ],
     "ITBI": [
       "FATO_BIORC_EXECUCAO_RECEITA",
-      "DIM_BIORC_NATUREZA_RECEITA"
+      "DIM_BIORC_NATUREZA_RECEITA",
+      "tb_dsod_itbi_imovel_urbano"
+    ],
+    "contribuinte": [
+      "tb_dsod_contribuinte"
+    ],
+    "CPF": [
+      "tb_dsod_contribuinte"
+    ],
+    "CNPJ": [
+      "tb_dsod_contribuinte"
+    ],
+    "imovel": [
+      "tb_dsod_imovel_urbano",
+      "tb_dsod_imovel_urbano_lanc"
+    ],
+    "imobiliario": [
+      "tb_dsod_imovel_urbano",
+      "tb_dsod_imovel_urbano_lanc"
+    ],
+    "IPTU": [
+      "tb_dsod_imovel_urbano",
+      "tb_dsod_imovel_urbano_lanc"
+    ],
+    "iptu lancado": [
+      "tb_dsod_imovel_urbano_lanc"
+    ],
+    "valor venal": [
+      "tb_dsod_imovel_urbano_lanc"
+    ],
+    "mobiliario": [
+      "tb_dsod_contribuinte_mobiliario"
+    ],
+    "ISS": [
+      "tb_dsod_contribuinte_mobiliario"
+    ],
+    "empresa": [
+      "tb_dsod_contribuinte_mobiliario"
+    ],
+    "devedor": [
+      "tb_dsod_devedor_contribuinte"
+    ],
+    "inadimplencia": [
+      "tb_dsod_devedor_contribuinte"
+    ],
+    "bairro": [
+      "tb_dsod_contribuinte_endereco"
+    ],
+    "CEP": [
+      "tb_dsod_contribuinte_endereco"
     ]
   },
   "entradas": [
@@ -723,6 +772,171 @@
         "DS_CLASSIFICACAO_TIPO_DIVIDA": "Classificação do tipo de dívida"
       },
       "joins_comuns": []
+    },
+    {
+      "tabela": "tb_dsod_contribuinte",
+      "descricao": "Cadastro de contribuintes (181 mil) — pessoas físicas e jurídicas. Chave cd_contr usada por imóveis, mobiliário e devedores. Tabela flat (não BIORC).",
+      "conceitos": [
+        "contribuinte",
+        "pessoa fisica",
+        "pessoa juridica",
+        "CPF",
+        "CNPJ",
+        "cadastro contribuinte",
+        "inscricao municipal"
+      ],
+      "colunas_chave": {
+        "cd_contr": "Chave do contribuinte (PK; join com imóvel/mobiliário/devedor)",
+        "no_cpf_cnpj": "CPF ou CNPJ",
+        "ic_pessoa": "Tipo de pessoa (F=física, J=jurídica)",
+        "nm_rsocial": "Nome / Razão social",
+        "nm_fantasia": "Nome fantasia",
+        "no_insc_municipal": "Inscrição municipal",
+        "ds_sit_cadast": "Situação cadastral",
+        "ds_endereco_email": "E-mail"
+      },
+      "joins_comuns": [
+        "tb_dsod_imovel_urbano ON cd_contr = cd_contr_proprietario",
+        "tb_dsod_contribuinte_mobiliario ON cd_contr = cd_contr",
+        "tb_dsod_devedor_contribuinte ON cd_contr = cd_contr",
+        "tb_dsod_contribuinte_endereco ON cd_contr = cd_contr"
+      ]
+    },
+    {
+      "tabela": "tb_dsod_contribuinte_endereco",
+      "descricao": "Endereço do contribuinte (CEP, logradouro, complemento). Use cd_cep para chegar ao bairro (TB_CEP_BAIRRO).",
+      "conceitos": [
+        "endereco contribuinte",
+        "CEP",
+        "logradouro",
+        "bairro"
+      ],
+      "colunas_chave": {
+        "cd_contr": "Contribuinte (join tb_dsod_contribuinte)",
+        "cd_cep": "CEP",
+        "no_logr": "Número/logradouro",
+        "ds_complemento": "Complemento"
+      },
+      "joins_comuns": [
+        "tb_dsod_contribuinte ON cd_contr = cd_contr"
+      ]
+    },
+    {
+      "tabela": "tb_dsod_imovel_urbano",
+      "descricao": "Cadastro imobiliário urbano (37 mil imóveis) — base do IPTU. Liga ao contribuinte proprietário e aos lançamentos anuais.",
+      "conceitos": [
+        "imovel",
+        "imobiliario",
+        "IPTU",
+        "cadastro imobiliario",
+        "inscricao imobiliaria",
+        "imovel urbano"
+      ],
+      "colunas_chave": {
+        "cd_imovel_urbano": "PK do imóvel (join lançamento/ITBI)",
+        "cd_contr_proprietario": "Contribuinte proprietário (join tb_dsod_contribuinte.cd_contr)",
+        "no_inscricao_imovel": "Inscrição imobiliária",
+        "cd_cep": "CEP do imóvel",
+        "no_ano_inicio_tributacao": "Ano de início da tributação",
+        "vl_area_terreno": "Área do terreno (m²)",
+        "vl_area_edificaca": "Área edificada (m²)"
+      },
+      "joins_comuns": [
+        "tb_dsod_contribuinte ON cd_contr_proprietario = cd_contr",
+        "tb_dsod_imovel_urbano_lanc ON cd_imovel_urbano = cd_imovel_urbano",
+        "tb_dsod_itbi_imovel_urbano ON cd_imovel_urbano = cd_imovel_urbano"
+      ]
+    },
+    {
+      "tabela": "tb_dsod_imovel_urbano_lanc",
+      "descricao": "Lançamentos de IPTU por imóvel e exercício (794 mil) — valor venal, alíquota, descontos e fatores de cálculo. O valor do IPTU ≈ vl_venal_tributavel × vl_aliquota.",
+      "conceitos": [
+        "lancamento IPTU",
+        "iptu lancado",
+        "valor venal",
+        "aliquota IPTU",
+        "exercicio IPTU",
+        "desconto bom pagador"
+      ],
+      "colunas_chave": {
+        "cd_imovel_urbano": "Imóvel (join tb_dsod_imovel_urbano)",
+        "no_exercicio_lancamento": "Ano (exercício) do lançamento",
+        "dt_lancamento": "Data do lançamento",
+        "vl_venal_imovel": "Valor venal total do imóvel",
+        "vl_venal_tributavel": "Valor venal tributável (base do IPTU)",
+        "vl_aliquota": "Alíquota do IPTU",
+        "vl_desconto_bom_pagador": "Desconto bom pagador",
+        "ic_desconto_IPTU": "Indica desconto de IPTU"
+      },
+      "joins_comuns": [
+        "tb_dsod_imovel_urbano ON cd_imovel_urbano = cd_imovel_urbano"
+      ]
+    },
+    {
+      "tabela": "tb_dsod_itbi_imovel_urbano",
+      "descricao": "ITBI por imóvel urbano (24 mil) — vincula transmissões (ITBI) ao imóvel.",
+      "conceitos": [
+        "ITBI",
+        "transmissao imovel",
+        "itbi imovel"
+      ],
+      "colunas_chave": {
+        "cd_itbi": "Código do ITBI",
+        "cd_imovel_urbano": "Imóvel (join tb_dsod_imovel_urbano)",
+        "ic_tipo_itbi": "Tipo de ITBI"
+      },
+      "joins_comuns": [
+        "tb_dsod_imovel_urbano ON cd_imovel_urbano = cd_imovel_urbano"
+      ]
+    },
+    {
+      "tabela": "tb_dsod_contribuinte_mobiliario",
+      "descricao": "Cadastro mobiliário (37 mil) — empresas/contribuintes de ISS: atividade, natureza jurídica, porte, capital social, datas de atividade.",
+      "conceitos": [
+        "mobiliario",
+        "ISS",
+        "empresa",
+        "atividade economica",
+        "natureza juridica",
+        "cadastro mobiliario",
+        "CNAE"
+      ],
+      "colunas_chave": {
+        "cd_contr_mob": "PK do cadastro mobiliário",
+        "cd_contr": "Contribuinte (join tb_dsod_contribuinte)",
+        "ds_grupo": "Grupo",
+        "ds_situacao": "Situação",
+        "ds_atividade_livre": "Atividade econômica (texto livre)",
+        "ds_nat_juridica": "Natureza jurídica",
+        "ds_porte_empresa": "Porte da empresa",
+        "ic_micro_empresa": "Indica microempresa",
+        "vl_capital_social": "Capital social",
+        "qt_funcionarios": "Qtd. de funcionários",
+        "dt_inicio_atividade": "Início de atividade",
+        "dt_enc_atividade": "Encerramento de atividade"
+      },
+      "joins_comuns": [
+        "tb_dsod_contribuinte ON cd_contr = cd_contr"
+      ]
+    },
+    {
+      "tabela": "tb_dsod_devedor_contribuinte",
+      "descricao": "Vínculo de contribuintes devedores (4 mi de registros) por setor — base para inadimplência/dívida por contribuinte.",
+      "conceitos": [
+        "devedor",
+        "inadimplencia",
+        "inadimplente",
+        "divida contribuinte",
+        "setor devedor"
+      ],
+      "colunas_chave": {
+        "cd_contr": "Contribuinte devedor (join tb_dsod_contribuinte)",
+        "cd_devedor": "Código do devedor",
+        "ds_setor_devedor": "Setor da dívida (ex.: IPTU, ISS)"
+      },
+      "joins_comuns": [
+        "tb_dsod_contribuinte ON cd_contr = cd_contr"
+      ]
     }
   ]
 }
