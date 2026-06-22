@@ -900,7 +900,7 @@ export default function ChatPage() {
           <div className="kc-tabs">
             <Link href="/dashboard" className="kc-tab">Orçamento</Link>
             <span className="kc-tab">Contribuinte</span>
-            <span className="kc-tab">Imobiliário</span>
+            <Link href="/imobiliario" className="kc-tab">Imobiliário</Link>
             <span className="kc-tab">Mobiliário</span>
             <span className="kc-tab">Arrecada Mais</span>
             <span className="kc-tab active">Chat</span>

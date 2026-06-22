@@ -110,7 +110,7 @@ export default function CatalogoPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
             <Link href="/dashboard" style={navTab}>Orçamento</Link>
             <span style={navTab}>Contribuinte</span>
-            <span style={navTab}>Imobiliário</span>
+            <Link href="/imobiliario" style={navTab}>Imobiliário</Link>
             <span style={navTab}>Mobiliário</span>
             <span style={navTab}>Arrecada Mais</span>
             <Link href="/chat" style={navTab}>Chat</Link>
