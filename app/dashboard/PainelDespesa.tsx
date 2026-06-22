@@ -147,9 +147,9 @@ function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
 }
 
 const INSIGHTS_FALLBACK = [
-  'Arrecadação acumulada de 2026 soma R$ 350,4 mi, +8,6% frente ao mesmo período de 2025.',
-  'Impostos lideram a receita de 2026 com R$ 106,5 mi, seguidos das transferências estaduais.',
-  'Junho/2026 arrecadou R$ 37,8 mi, abaixo do ritmo dos meses anteriores.',
+  'Despesa paga acumulada de 2026 soma R$ 575,9 mi, +10,5% frente ao mesmo período de 2025.',
+  'Outras Despesas Correntes e Pessoal lideram os gastos pagos em 2026.',
+  'Empenhado (R$ 771,3 mi) segue acima do liquidado e do pago no ano, ritmo a acompanhar.',
 ]
 
 export default function PainelDespesa() {
@@ -185,7 +185,7 @@ export default function PainelDespesa() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/orcamento/insights')
+    fetch('/api/despesa/insights')
       .then(r => r.ok ? r.json() : null)
       .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK))
       .catch(() => setInsights(INSIGHTS_FALLBACK))
