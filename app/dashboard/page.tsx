@@ -78,7 +78,6 @@ export default function DashboardPage() {
     backgroundRepeat: 'no-repeat', backgroundPosition: 'right 11px center',
   }
   const selectPill: React.CSSProperties = { ...selectBase, backgroundColor: '#fff', color: '#283e93', border: '1.5px solid #e3e9f5', backgroundImage: chevron('%23283e93') }
-  const selectPillAzul: React.CSSProperties = { ...selectBase, backgroundColor: '#283e93', color: '#fff', border: 'none', backgroundImage: chevron('%23ffffff') }
 
   const filtros: FiltrosDespesa = { ano: fAno, mes: fMes, secretaria: fSec, indicador: fInd }
   const filtrosReceita: FiltrosReceita = { ano: rAno, mes: rMes, especie: rEsp }
@@ -161,7 +160,7 @@ export default function DashboardPage() {
                   <option value="">Secretaria: Todas</option>
                   {opts.secretarias.map(s => <option key={s.sk} value={s.sk}>{s.nome}</option>)}
                 </select>
-                <select aria-label="Indicador" value={fInd} onChange={e => setFInd(e.target.value)} style={selectPillAzul}>
+                <select aria-label="Indicador" value={fInd} onChange={e => setFInd(e.target.value)} style={selectPill}>
                   {INDICADORES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
                 </select>
               </>
@@ -174,7 +173,7 @@ export default function DashboardPage() {
                   <option value="">Mês: Todos</option>
                   {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
-                <select aria-label="Espécie" value={rEsp} onChange={e => setREsp(e.target.value)} style={selectPillAzul}>
+                <select aria-label="Espécie" value={rEsp} onChange={e => setREsp(e.target.value)} style={selectPill}>
                   <option value="">Espécie: Todas</option>
                   {optsRec.especies.map(esp => <option key={esp} value={esp}>{esp}</option>)}
                 </select>
