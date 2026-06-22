@@ -79,6 +79,15 @@ const FALLBACK_DESPESA_ANO: PorAno[] = [
   { ano: 2025, arrecadado: 1075995807, previsto: 1075995807 },
 ]
 
+// Liquidado por Mês — real (substituído pelo fetch de /api/despesa/graficos)
+const _LIQ_ANT = [61400000, 55700000, 47300000, 50100000, 44700000, 52700000, 52400000, 47900000, 46100000, 49900000, 49700000, 74100000]
+const _LIQ_ATU = [72100000, 55200000, 55900000, 56100000, 59300000, 27700000, 0, 0, 0, 0, 0, 0]
+const FALLBACK_DESPESA_MES: PorMes[] = _LIQ_ANT.map((ant, i) => {
+  const atu = _LIQ_ATU[i]
+  const pct = ant ? ((atu - ant) / ant) * 100 : (atu > 0 ? 100 : 0)
+  return { mes: i + 1, nome: MESES_NOME[i], anoAnterior: ant, anoAtual: atu, pct }
+})
+
 interface SubElementoItem { subelemento: string; elemento: string; liquidado: number }
 interface SubElementoData { ano: number; elemento: string; elementos: string[]; itens: SubElementoItem[] }
 
@@ -179,6 +188,7 @@ export default function PainelDespesa() {
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
   const [despesaAno, setDespesaAno] = useState<PorAno[]>(FALLBACK_DESPESA_ANO)
+  const [despesaMes, setDespesaMes] = useState<PorMes[]>(FALLBACK_DESPESA_MES)
   const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
   const [elementoSel, setElementoSel] = useState('TODOS')
 
@@ -203,6 +213,9 @@ export default function PainelDespesa() {
         if (d?.porAno?.length) {
           setDespesaAno(d.porAno.map((p: { ano: number; pago: number }) => ({ ano: p.ano, arrecadado: p.pago, previsto: p.pago })))
         }
+        if (d?.porMes?.length) {
+          setDespesaMes(d.porMes)
+        }
       })
       .catch(() => { /* mantém fallback */ })
   }, [])
@@ -226,7 +239,7 @@ export default function PainelDespesa() {
 
   const g = graf ?? FALLBACK_GRAF
   const gl = geomLinha(despesaAno)
-  const gb = geomBar(g.porMes)
+  const gb = geomBar(despesaMes)
 
   // Donut Dívida Ativa
   const da = g.dividaAtiva
@@ -406,13 +419,13 @@ export default function PainelDespesa() {
       {/* ===== ROW 2 ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '2.75fr 1fr', gap: 18, marginTop: 18 }}>
 
-        {/* Arrecadação por Mês */}
+        {/* Liquidado por Mês */}
         <div style={{ position: 'relative', background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Arrecadação por Mês</span>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Liquidado por Mês</span>
             <div style={{ display: 'flex', gap: 22, fontSize: 12, color: '#5b6477' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Valor Arrecadação Ano Anterior</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>Valor Arrecadação Ano Atual</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Ano Anterior</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>Ano Atual</span>
             </div>
           </div>
           <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 16, cursor: 'pointer' }}>
