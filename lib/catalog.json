@@ -94,28 +94,6 @@
     "reducao orcamentaria": [
       "FATO_BIORC_ALTERACAO_ORCAMENTARIA_DESPESA"
     ],
-    "contribuinte": [
-      "PREFEITURA_IPTU_LANCADO",
-      "PREFEITURA_IPTU_PAGO"
-    ],
-    "IPTU": [
-      "PREFEITURA_IPTU_LANCADO",
-      "PREFEITURA_IPTU_PAGO"
-    ],
-    "iptu lancado": [
-      "PREFEITURA_IPTU_LANCADO"
-    ],
-    "iptu pago": [
-      "PREFEITURA_IPTU_PAGO"
-    ],
-    "inadimplencia": [
-      "PREFEITURA_IPTU_LANCADO",
-      "PREFEITURA_IPTU_PAGO"
-    ],
-    "bairro": [
-      "PREFEITURA_IPTU_LANCADO",
-      "PREFEITURA_IPTU_PAGO"
-    ],
     "previsao receita": [
       "FATO_BIORC_ELABORACAO_PREVISAO_RECEITA"
     ],
@@ -626,68 +604,6 @@
       ],
       "exemplos_query": [
         "-- Despesas por função de governo (saúde, educação, etc.):\nSELECT TOP 10\n  func.DS_FUNCAO,\n  SUM(f.VL_SALDO_MES_PAGO) AS total_pago\nFROM pref_aruja_sp.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f\nJOIN pref_aruja_sp.BRIDGE_BIORC_FUNCIONAL_PROGRAMATICA b ON f.SK_FUNCIONAL_PROGRAMATICA = b.SK_FUNCIONAL_PROGRAMATICA\nJOIN pref_aruja_sp.DIM_BIORC_FUNCAO func ON b.SK_FUNCAO = func.SK_FUNCAO\nJOIN pref_aruja_sp.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO\nWHERE d.NO_ANO = 2025\nGROUP BY func.DS_FUNCAO\nORDER BY total_pago DESC"
-      ]
-    },
-    {
-      "tabela": "PREFEITURA_IPTU_LANCADO",
-      "descricao": "IPTU lançado por contribuinte e mês. Tabela flat (não segue padrão DIM/FATO) com dados individuais de cada contribuinte — CPF/CNPJ, nome, bairro, CEP e valor lançado mês a mês. Disponível para 2024, 2025 e 2026.",
-      "conceitos": [
-        "contribuinte",
-        "IPTU",
-        "iptu lancado",
-        "bairro",
-        "inadimplencia",
-        "tributo"
-      ],
-      "colunas_chave": {
-        "CPF_CNPJ": "CPF ou CNPJ do contribuinte (pode estar mascarado)",
-        "NOME": "Nome do contribuinte/proprietário",
-        "Bairro": "Bairro do imóvel — atenção: nome da coluna com B maiúsculo",
-        "no_cep": "CEP do imóvel",
-        "Tributo": "Tipo do tributo (valor fixo: 'IPTU')",
-        "Ano_Mes": "Período no formato YYYYMM (ex: 202502 = fevereiro 2025) — coluna numérica, use LEFT(CAST(Ano_Mes AS VARCHAR(6)),4) para extrair o ano e RIGHT(CAST(Ano_Mes AS VARCHAR(6)),2) para o mês",
-        "Valor_Lancado": "Valor do IPTU lançado (cobrado) naquele mês para o contribuinte"
-      },
-      "joins_comuns": [
-        "PREFEITURA_IPTU_PAGO ON CPF_CNPJ = CPF_CNPJ AND Ano_Mes = Ano_Mes"
-      ],
-      "exemplos_query": [
-        "-- Total de IPTU lançado por ano:\nSELECT LEFT(CAST(Ano_Mes AS VARCHAR(6)),4) AS ano, COUNT(DISTINCT CPF_CNPJ) AS contribuintes, SUM(Valor_Lancado) AS total_lancado\nFROM pref_aruja_sp.PREFEITURA_IPTU_LANCADO\nGROUP BY LEFT(CAST(Ano_Mes AS VARCHAR(6)),4)\nORDER BY ano DESC",
-        "-- Maiores contribuintes IPTU em 2025:\nSELECT TOP 20 CPF_CNPJ, NOME, Bairro, SUM(Valor_Lancado) AS total_lancado\nFROM pref_aruja_sp.PREFEITURA_IPTU_LANCADO\nWHERE LEFT(CAST(Ano_Mes AS VARCHAR(6)),4) = '2025'\nGROUP BY CPF_CNPJ, NOME, Bairro\nORDER BY total_lancado DESC",
-        "-- IPTU lançado por bairro em 2025:\nSELECT Bairro, COUNT(DISTINCT CPF_CNPJ) AS contribuintes, SUM(Valor_Lancado) AS total_lancado\nFROM pref_aruja_sp.PREFEITURA_IPTU_LANCADO\nWHERE LEFT(CAST(Ano_Mes AS VARCHAR(6)),4) = '2025'\nGROUP BY Bairro\nORDER BY total_lancado DESC"
-      ]
-    },
-    {
-      "tabela": "PREFEITURA_IPTU_PAGO",
-      "descricao": "IPTU efetivamente pago por contribuinte e mês. Inclui valor pago, juros, multa e correção monetária. Permite calcular inadimplência cruzando com PREFEITURA_IPTU_LANCADO. Disponível para 2024, 2025 e 2026 (parcial).",
-      "conceitos": [
-        "contribuinte",
-        "IPTU",
-        "iptu pago",
-        "bairro",
-        "inadimplencia",
-        "multa",
-        "juros",
-        "arrecadacao"
-      ],
-      "colunas_chave": {
-        "CPF_CNPJ": "CPF ou CNPJ do contribuinte",
-        "NOME": "Nome do contribuinte/proprietário",
-        "Bairro": "Bairro do imóvel — atenção: nome da coluna com B maiúsculo",
-        "CEP": "CEP do imóvel",
-        "Tributo": "Tipo do tributo (valor fixo: 'IPTU')",
-        "Ano_Mes": "Período no formato YYYYMM (ex: 202502 = fevereiro 2025)",
-        "Valor_Pago": "Valor principal do IPTU pago",
-        "Valor_Juros": "Juros por atraso no pagamento",
-        "Valor_Multa": "Multa por inadimplência",
-        "Valor_Correcao": "Correção monetária aplicada"
-      },
-      "joins_comuns": [
-        "PREFEITURA_IPTU_LANCADO ON CPF_CNPJ = CPF_CNPJ AND Ano_Mes = Ano_Mes"
-      ],
-      "exemplos_query": [
-        "-- Total pago, juros e multa por ano:\nSELECT LEFT(CAST(Ano_Mes AS VARCHAR(6)),4) AS ano, COUNT(DISTINCT CPF_CNPJ) AS contribuintes, SUM(Valor_Pago) AS total_pago, SUM(Valor_Juros) AS total_juros, SUM(Valor_Multa) AS total_multa\nFROM pref_aruja_sp.PREFEITURA_IPTU_PAGO\nGROUP BY LEFT(CAST(Ano_Mes AS VARCHAR(6)),4)\nORDER BY ano DESC",
-        "-- Inadimplencia 2025: lancado vs pago por bairro:\nSELECT l.Bairro, SUM(l.Valor_Lancado) AS lancado, ISNULL(SUM(p.Valor_Pago),0) AS pago, SUM(l.Valor_Lancado) - ISNULL(SUM(p.Valor_Pago),0) AS inadimplente\nFROM pref_aruja_sp.PREFEITURA_IPTU_LANCADO l\nLEFT JOIN pref_aruja_sp.PREFEITURA_IPTU_PAGO p ON l.CPF_CNPJ = p.CPF_CNPJ AND l.Ano_Mes = p.Ano_Mes\nWHERE LEFT(CAST(l.Ano_Mes AS VARCHAR(6)),4) = '2025'\nGROUP BY l.Bairro\nORDER BY inadimplente DESC"
       ]
     },
     {
