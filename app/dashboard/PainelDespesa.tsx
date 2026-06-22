@@ -79,6 +79,27 @@ const FALLBACK_DESPESA_ANO: PorAno[] = [
   { ano: 2025, arrecadado: 1075995807, previsto: 1075995807 },
 ]
 
+interface SubElementoItem { subelemento: string; elemento: string; liquidado: number }
+interface SubElementoData { ano: number; elemento: string; elementos: string[]; itens: SubElementoItem[] }
+
+// Liquidado por SubElemento — real (substituído pelo fetch de /api/despesa/liquidado-subelemento)
+const FALLBACK_SUBELEMENTO: SubElementoData = {
+  ano: 2026,
+  elemento: 'TODOS',
+  elementos: [],
+  itens: [
+    { subelemento: 'VENCIMENTOS E SALÁRIOS', elemento: 'VENCIMENTOS E VANTAGENS FIXAS - PESSOAL CIVIL', liquidado: 67525017.60 },
+    { subelemento: 'CONTRATO DE GESTÃO', elemento: 'CONTRATO DE GESTÃO', liquidado: 52626420.89 },
+    { subelemento: 'OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA', elemento: 'OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA', liquidado: 40871733.33 },
+    { subelemento: 'SUBVENÇÕES SOCIAIS', elemento: 'SUBVENÇÕES SOCIAIS', liquidado: 17985918.46 },
+    { subelemento: 'CONTRIBUIÇÕES PREVIDENCIÁRIAS - INSS', elemento: 'OBRIGAÇÕES PATRONAIS', liquidado: 16359914.83 },
+    { subelemento: 'SERVIÇO MÉDICO-HOSPITALAR, ODONTOLÓGICO E LABORATORIAIS', elemento: 'OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA', liquidado: 12748719.69 },
+    { subelemento: 'LIMPEZA E CONSERVAÇÃO', elemento: 'OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA', liquidado: 11965759.07 },
+    { subelemento: 'INDENIZAÇÃO AUXÍLIO ALIMENTAÇÃO', elemento: 'AUXÍLIO ALIMENTAÇÃO', liquidado: 10756261.91 },
+    { subelemento: 'GRATIFICAÇÃO POR TEMPO DE SERVIÇO', elemento: 'VENCIMENTOS E VANTAGENS FIXAS - PESSOAL CIVIL', liquidado: 9038209.06 },
+  ],
+}
+
 // Geometria — gráfico de linha "Arrecadação por Ano"
 function geomLinha(d: PorAno[]) {
   const mi = (v: number) => v / 1e6
@@ -158,6 +179,8 @@ export default function PainelDespesa() {
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
   const [despesaAno, setDespesaAno] = useState<PorAno[]>(FALLBACK_DESPESA_ANO)
+  const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
+  const [elementoSel, setElementoSel] = useState('TODOS')
 
   useEffect(() => {
     fetch('/api/orcamento/graficos')
@@ -165,6 +188,13 @@ export default function PainelDespesa() {
       .then(d => { if (d && !d.error) setGraf(d) })
       .catch(() => { /* mantém fallback */ })
   }, [])
+
+  useEffect(() => {
+    fetch(`/api/despesa/liquidado-subelemento?elemento=${encodeURIComponent(elementoSel)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error) setSubElemento(d) })
+      .catch(() => { /* mantém fallback */ })
+  }, [elementoSel])
 
   useEffect(() => {
     fetch('/api/despesa/graficos')
@@ -333,26 +363,42 @@ export default function PainelDespesa() {
           )}
         </div>
 
-        {/* Arrecadação por Categoria / Origem */}
+        {/* Liquidado por SubElemento */}
         <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação por Categoria / Origem</span>
-            <span style={dots}>···</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Liquidado por SubElemento</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 11, color: '#9098a8' }}>Elemento:</span>
+              <select
+                value={elementoSel}
+                onChange={e => setElementoSel(e.target.value)}
+                style={{ fontSize: 11, fontWeight: 600, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 10, padding: '4px 8px', background: '#fff', fontFamily: 'inherit', cursor: 'pointer', maxWidth: 140 }}
+              >
+                <option value="TODOS">TODOS</option>
+                {subElemento.elementos.map(el => (
+                  <option key={el} value={el}>{el}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS CORRENTES</div>
-              <div style={{ height: 70, width: '90%', borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtM(g.categoria.correntes)}</span>
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS DE CAPITAL</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
-                <div style={{ height: 70, width: `${Math.max(3, 90 * g.categoria.capital / (g.categoria.correntes || 1)).toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtM(g.categoria.capital)}</span>
-              </div>
-            </div>
+          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 11 }}>
+            {subElemento.itens.length === 0 ? (
+              <span style={{ fontSize: 12, color: '#9098a8' }}>Sem dados para este elemento.</span>
+            ) : (
+              subElemento.itens.map((it, i) => {
+                const max = subElemento.itens[0]?.liquidado || 1
+                const pct = Math.max(2, (it.liquidado / max) * 100)
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={it.subelemento}>{it.subelemento}</span>
+                    <div style={{ flex: 1, height: 14, background: '#eef1f7', borderRadius: 7, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct.toFixed(1)}%`, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', borderRadius: 7 }} />
+                    </div>
+                    <span style={{ flex: 'none', fontSize: 11, fontWeight: 600, color: '#283e93', minWidth: 48, textAlign: 'right' }}>{fmtM(it.liquidado)}</span>
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
       </div>
