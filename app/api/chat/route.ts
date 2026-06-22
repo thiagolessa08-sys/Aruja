@@ -32,7 +32,7 @@ PROIBIDO — NUNCA FAÇA ISSO:
 ══════════════════════════════════════════
 ✗ Consultar SYS.SYSTAB, SYS.SYSTABCOL, INFORMATION_SCHEMA ou qualquer tabela de metadados
 ✗ Rodar queries de "exploração" para descobrir tabelas ou colunas
-✗ Fazer mais de 3 queries por resposta
+✗ Fazer mais de 6 queries por resposta
 ✗ Responder sem interpretar os dados (não liste só os resultados — analise)
 ✗ Usar LIMIT (Sybase IQ usa TOP N)
 ✗ Usar UPPER() ou LOWER() para comparar strings
@@ -81,7 +81,7 @@ REGRAS DE NEGÓCIO — DIM_BIORC_INSTITUCIONAL:
 COMO RESPONDER:
 ══════════════════════════════════════════
 1. Identifique as tabelas relevantes no schema abaixo
-2. Execute a query (máx 2-3 queries por resposta)
+2. Execute a query (máx 6 queries por resposta; ao terminar de coletar, ESCREVA a resposta — nunca pare sem responder)
 3. ESTRUTURA OBRIGATÓRIA da resposta — nesta ordem exata:
    a) **Insights** primeiro: escreva 2-4 frases destacando o número mais importante,
       tendências, comparações ou alertas. Use **negrito** para valores-chave.
@@ -126,9 +126,10 @@ export async function POST(req: NextRequest) {
 
       const msgs: Anthropic.MessageParam[] = [...messages]
       let queryCount = 0
-      const MAX_QUERIES = 3
+      let answered = false
+      const MAX_QUERIES = 6
 
-      for (let turn = 0; turn < 8; turn++) {
+      for (let turn = 0; turn < 12; turn++) {
         let response: Anthropic.Message | null = null
         for (let attempt = 0; attempt < 4; attempt++) {
           try {
@@ -153,13 +154,19 @@ export async function POST(req: NextRequest) {
         }
         if (!response) throw new Error('Falha após 4 tentativas (API overloaded)')
 
+        let temTexto = false
         for (const block of response.content) {
           if (block.type === 'text' && block.text) {
+            temTexto = true
             await send({ type: 'text', text: block.text })
           }
         }
 
-        if (response.stop_reason === 'end_turn') break
+        if (response.stop_reason === 'end_turn') {
+          if (temTexto) answered = true
+          msgs.push({ role: 'assistant', content: response.content })
+          break
+        }
 
         if (response.stop_reason === 'tool_use') {
           msgs.push({ role: 'assistant', content: response.content })
@@ -191,6 +198,24 @@ export async function POST(req: NextRequest) {
           }
 
           msgs.push({ role: 'user', content: toolResults })
+        }
+      }
+
+      // Rede de segurança: se terminou sem resposta final (ex.: atingiu o limite
+      // de consultas), força uma conclusão com os dados já coletados.
+      if (!answered) {
+        msgs.push({
+          role: 'user',
+          content: 'Com base apenas nos dados já retornados acima, escreva agora a resposta final seguindo a estrutura obrigatória (insights em texto e depois a tabela markdown). NÃO use ferramentas e não peça mais consultas.',
+        })
+        const final = await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: msgs,
+        })
+        for (const block of final.content) {
+          if (block.type === 'text' && block.text) await send({ type: 'text', text: block.text })
         }
       }
     } catch (e) {
