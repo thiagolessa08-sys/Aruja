@@ -70,7 +70,15 @@ export default function DashboardPage() {
 
   const navTab: React.CSSProperties = { padding: '9px 18px', borderRadius: 24, color: '#5b6477', fontSize: 14, fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }
   const toolPill: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }
-  const selectPill: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: '9px 14px', fontSize: 13, fontWeight: 600, color: '#283e93', border: '1.5px solid #e3e9f5', boxShadow: '0 4px 12px rgba(40,80,180,0.04)', fontFamily: 'inherit', cursor: 'pointer', maxWidth: 220 }
+  const chevron = (cor: string) => `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${cor}' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`
+  const selectBase: React.CSSProperties = {
+    borderRadius: 22, padding: '9px 30px 9px 14px', fontSize: 13, fontWeight: 600,
+    boxShadow: '0 4px 12px rgba(40,80,180,0.04)', fontFamily: 'inherit', cursor: 'pointer', maxWidth: 220,
+    appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 11px center',
+  }
+  const selectPill: React.CSSProperties = { ...selectBase, backgroundColor: '#fff', color: '#283e93', border: '1.5px solid #e3e9f5', backgroundImage: chevron('%23283e93') }
+  const selectPillAzul: React.CSSProperties = { ...selectBase, backgroundColor: '#283e93', color: '#fff', border: 'none', backgroundImage: chevron('%23ffffff') }
 
   const filtros: FiltrosDespesa = { ano: fAno, mes: fMes, secretaria: fSec, indicador: fInd }
   const filtrosReceita: FiltrosReceita = { ano: rAno, mes: rMes, especie: rEsp }
@@ -153,7 +161,7 @@ export default function DashboardPage() {
                   <option value="">Secretaria: Todas</option>
                   {opts.secretarias.map(s => <option key={s.sk} value={s.sk}>{s.nome}</option>)}
                 </select>
-                <select aria-label="Indicador" value={fInd} onChange={e => setFInd(e.target.value)} style={{ ...selectPill, background: '#283e93', color: '#fff', border: 'none' }}>
+                <select aria-label="Indicador" value={fInd} onChange={e => setFInd(e.target.value)} style={selectPillAzul}>
                   {INDICADORES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
                 </select>
               </>
@@ -166,7 +174,7 @@ export default function DashboardPage() {
                   <option value="">Mês: Todos</option>
                   {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
-                <select aria-label="Espécie" value={rEsp} onChange={e => setREsp(e.target.value)} style={{ ...selectPill, background: '#283e93', color: '#fff', border: 'none' }}>
+                <select aria-label="Espécie" value={rEsp} onChange={e => setREsp(e.target.value)} style={selectPillAzul}>
                   <option value="">Espécie: Todas</option>
                   {optsRec.especies.map(esp => <option key={esp} value={esp}>{esp}</option>)}
                 </select>
