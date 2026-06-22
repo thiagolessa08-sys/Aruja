@@ -189,6 +189,7 @@ export default function PainelDespesa() {
   const [graf, setGraf] = useState<Graficos | null>(null)
   const [despesaAno, setDespesaAno] = useState<PorAno[]>(FALLBACK_DESPESA_ANO)
   const [despesaMes, setDespesaMes] = useState<PorMes[]>(FALLBACK_DESPESA_MES)
+  const [despesaCategoria, setDespesaCategoria] = useState({ correntes: 309320000, capital: 16980000 })
   const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
   const [elementoSel, setElementoSel] = useState('TODOS')
 
@@ -216,6 +217,9 @@ export default function PainelDespesa() {
         if (d?.porMes?.length) {
           setDespesaMes(d.porMes)
         }
+        if (d?.categoria) {
+          setDespesaCategoria(d.categoria)
+        }
       })
       .catch(() => { /* mantém fallback */ })
   }, [])
@@ -241,17 +245,16 @@ export default function PainelDespesa() {
   const gl = geomLinha(despesaAno)
   const gb = geomBar(despesaMes)
 
-  // Donut Dívida Ativa
-  const da = g.dividaAtiva
+  // Donut Liquidado por Categoria/Grupo
+  const catTotal = despesaCategoria.correntes + despesaCategoria.capital
   const donutC = 2 * Math.PI * 66
   let _off = 0
   const donut = [
-    { nome: 'IMPOSTOS', v: da.impostos, cor: '#283e93' },
-    { nome: 'TAXAS', v: da.taxas, cor: '#e8962e' },
-    { nome: 'DEMAIS RECEITAS CORRENTES', v: da.demais, cor: '#aab8e3' },
+    { nome: 'DESPESAS CORRENTES', v: despesaCategoria.correntes, cor: '#283e93' },
+    { nome: 'DESPESAS DE CAPITAL', v: despesaCategoria.capital, cor: '#e8962e' },
   ].map(p => {
-    const len = da.total ? (p.v / da.total) * donutC : 0
-    const seg = { ...p, len, off: -_off, pct: da.total ? (p.v / da.total) * 100 : 0 }
+    const len = catTotal ? (p.v / catTotal) * donutC : 0
+    const seg = { ...p, len, off: -_off, pct: catTotal ? (p.v / catTotal) * 100 : 0 }
     _off += len
     return seg
   })
@@ -453,13 +456,13 @@ export default function PainelDespesa() {
           </div>
         </div>
 
-        {/* Arrecadação Dívida Ativa */}
+        {/* Liquidado por Categoria/Grupo */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação Dívida Ativa</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Liquidado por Categoria / Grupo</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(da.total)}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(catTotal)}</div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
             <svg viewBox="0 0 200 200" width="210" height="210">
               <g transform="rotate(-90 100 100)">

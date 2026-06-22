@@ -60,7 +60,26 @@ export async function GET() {
       porMes.push({ mes: m, nome: MESES[m], anoAnterior: ant, anoAtual: atu, pct })
     }
 
-    const data = { porAno, porMes }
+    // Liquidado por categoria econômica (Correntes x Capital) no ano atual
+    const categoriaR = await agentQuery(`
+      SELECT gd.DS_CATEGORIA AS categoria, SUM(f.VL_SALDO_MES_LIQUIDADO) AS liq
+      FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
+      JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_DESPESA nd ON f.SK_NATUREZA_DESPESA = nd.SK_NATUREZA_DESPESA
+      JOIN ${SCHEMA}.DIM_BIORC_GRUPO_DESPESA gd ON nd.SK_GRUPO_DESPESA = gd.SK_GRUPO_DESPESA
+      JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO
+      WHERE d.NO_ANO = ${anoAtual}
+      GROUP BY gd.DS_CATEGORIA`, 50)
+
+    let correntes = 0, capital = 0
+    for (const r of categoriaR.rows) {
+      const cat = String(r[0] ?? '').trim().toUpperCase()
+      const v = Number(r[1]) || 0
+      if (cat.includes('CORRENTE')) correntes += v
+      else if (cat.includes('CAPITAL')) capital += v
+      // "Não Localizado" / "Não informado" são ignorados (dados sem classificação)
+    }
+
+    const data = { porAno, porMes, categoria: { correntes, capital } }
     cache = { data, at: Date.now() }
     return NextResponse.json(data)
   } catch (e) {
