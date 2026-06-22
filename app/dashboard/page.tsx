@@ -83,16 +83,17 @@ function geomLinha(d: PorAno[]) {
   const n = d.length
   const X = (i: number) => n <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (n - 1)
   const Y = (vMi: number) => yT + ((hi - vMi) / span) * (yB - yT)
-  const toPath = (key: 'arrecadado' | 'previsto') => d.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(mi(p[key])).toFixed(1)}`).join(' ')
+  const linha = d.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(mi(p.arrecadado)).toFixed(1)}`).join(' ')
+  const area = `${linha} L${X(n - 1).toFixed(1)} ${yB} L${X(0).toFixed(1)} ${yB} Z`
   const ticks = [hi, (hi + lo) / 2, lo].map(t => ({ v: Math.round(t), y: Y(t) }))
   const labels = d.map((p, i) => ({ ano: p.ano, x: X(i) }))
-  const dots = d.map((p) => ({ x: X(d.indexOf(p)), y: Y(mi(p.arrecadado)) }))
+  const dots = d.map((p, i) => ({ x: X(i), y: Y(mi(p.arrecadado)) }))
   const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
   const hot = d.map((p, i) => ({
     x: X(i) - half, w: half * 2,
-    tip: { chart: 'report' as const, title: String(p.ano), l1: `Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', l2: `Previsto: ${fmtMi(p.previsto)}`, l2c: '#e8962e', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Math.min(Y(mi(p.arrecadado)), Y(mi(p.previsto))) / 130 * 100).toFixed(1)}%` },
+    tip: { chart: 'report' as const, title: String(p.ano), l1: `Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
   }))
-  return { pathArr: toPath('arrecadado'), pathPrev: toPath('previsto'), ticks, labels, dots, hot }
+  return { linha, area, ticks, labels, dots, hot }
 }
 
 // Geometria — gráfico de barras "Arrecadação por Mês"
@@ -368,16 +369,19 @@ export default function DashboardPage() {
             <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
               <div style={{ position: 'absolute', left: 30, top: -2, display: 'flex', gap: 10, zIndex: 2 }}>
                 <span style={{ background: '#283e93', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>Arrecadado</span>
-                <span style={{ background: '#fff', color: '#1f2a44', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px', boxShadow: '0 2px 8px rgba(40,80,180,0.12)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e8962e' }}></span>Previsto
-                </span>
               </div>
               <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
+                <defs>
+                  <linearGradient id="areaArrec" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#283e93" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="#283e93" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
                 {gl.ticks.map((t, i) => (
                   <text key={i} x="4" y={(t.y + 3).toFixed(1)} fontSize="6.5" fill="#aeb6c6" style={axisFont}>{t.v}</text>
                 ))}
-                <path d={gl.pathPrev} fill="none" stroke="#e8962e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <path d={gl.pathArr} fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={gl.area} fill="url(#areaArrec)" stroke="none" />
+                <path d={gl.linha} fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                 {gl.dots.map((p, i) => (
                   <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />
                 ))}
