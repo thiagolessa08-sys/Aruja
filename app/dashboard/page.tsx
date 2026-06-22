@@ -14,7 +14,16 @@ export default function DashboardPage() {
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
+    // Lê a seleção da URL (?v=despesa) ao abrir
+    const v = new URLSearchParams(window.location.search).get('v')
+    if (v === 'despesa' || v === 'receita') setTipo(v)
   }, [])
+
+  function selecionar(op: 'receita' | 'despesa') {
+    setTipo(op)
+    // Reflete a seleção na URL sem navegar (mantém /dashboard?v=...)
+    window.history.replaceState(null, '', `?v=${op}`)
+  }
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -70,7 +79,7 @@ export default function DashboardPage() {
                   key={op}
                   role="radio"
                   aria-checked={ativo}
-                  onClick={() => setTipo(op)}
+                  onClick={() => selecionar(op)}
                   style={{
                     padding: '10px 26px',
                     borderRadius: 24,
