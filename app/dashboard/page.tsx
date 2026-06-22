@@ -30,48 +30,90 @@ const TABELA: { mes: string; vals: string[] }[] = [
   { mes: 'Dezembro', vals: ['56.444.473,03', '69.069.098,08', '98.529.179,10', '0,00'] },
 ]
 
-const ARREC: Tip[] = [
-  { chart: 'arrec', title: 'Janeiro · 18,77%', l1: 'Ano Anterior: 67,3 mi', l1c: '#283e93', l2: 'Ano Atual: 79,9 mi', l2c: '#e8962e', left: '4.8%', top: '26.4%' },
-  { chart: 'arrec', title: 'Fevereiro · -0,02%', l1: 'Ano Anterior: 65,3 mi', l1c: '#283e93', l2: 'Ano Atual: 65,3 mi', l2c: '#e8962e', left: '13.1%', top: '36.0%' },
-  { chart: 'arrec', title: 'Março · 31,95%', l1: 'Ano Anterior: 51,9 mi', l1c: '#283e93', l2: 'Ano Atual: 68,5 mi', l2c: '#e8962e', left: '21.3%', top: '33.9%' },
-  { chart: 'arrec', title: 'Abril · -6,75%', l1: 'Ano Anterior: 65,4 mi', l1c: '#283e93', l2: 'Ano Atual: 61,0 mi', l2c: '#e8962e', left: '29.5%', top: '35.9%' },
-  { chart: 'arrec', title: 'Maio · 32,16%', l1: 'Ano Anterior: 50,9 mi', l1c: '#283e93', l2: 'Ano Atual: 67,3 mi', l2c: '#e8962e', left: '37.7%', top: '34.7%' },
-  { chart: 'arrec', title: 'Junho · -22,90%', l1: 'Ano Anterior: 53,1 mi', l1c: '#283e93', l2: 'Ano Atual: 41,0 mi', l2c: '#e8962e', left: '45.9%', top: '44.0%' },
-  { chart: 'arrec', title: 'Julho · -100,00%', l1: 'Ano Anterior: 66,5 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '54.1%', top: '35.2%' },
-  { chart: 'arrec', title: 'Agosto · -100,00%', l1: 'Ano Anterior: 50,3 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '62.3%', top: '45.9%' },
-  { chart: 'arrec', title: 'Setembro · -100,00%', l1: 'Ano Anterior: 60,8 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '70.5%', top: '38.9%' },
-  { chart: 'arrec', title: 'Outubro · -100,00%', l1: 'Ano Anterior: 55,5 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '78.7%', top: '42.4%' },
-  { chart: 'arrec', title: 'Novembro · -100,00%', l1: 'Ano Anterior: 53,8 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '86.9%', top: '43.6%' },
-  { chart: 'arrec', title: 'Dezembro · -100,00%', l1: 'Ano Anterior: 98,5 mi', l1c: '#283e93', l2: 'Ano Atual: 0,0', l2c: '#e8962e', left: '95.2%', top: '14.1%' },
-]
+const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
-const REPORT: Tip[] = [
-  { chart: 'report', title: '2022', l1: 'Arrecadado: 412,6 mi', l1c: '#283e93', l2: 'Previsto: 365,0 mi', l2c: '#e8962e', left: '15%', top: '28%' },
-  { chart: 'report', title: '2023', l1: 'Arrecadado: 478,3 mi', l1c: '#283e93', l2: 'Previsto: 510,2 mi', l2c: '#e8962e', left: '39%', top: '28%' },
-  { chart: 'report', title: '2024', l1: 'Arrecadado: 521,9 mi', l1c: '#283e93', l2: 'Previsto: 489,4 mi', l2c: '#e8962e', left: '64%', top: '28%' },
-  { chart: 'report', title: '2025', l1: 'Arrecadado: 564,1 mi', l1c: '#283e93', l2: 'Previsto: 540,8 mi', l2c: '#e8962e', left: '88%', top: '28%' },
-]
+interface PorAno { ano: number; arrecadado: number; previsto: number }
+interface PorMes { mes: number; nome: string; anoAnterior: number; anoAtual: number; pct: number }
+interface Graficos {
+  porAno: PorAno[]
+  porMes: PorMes[]
+  categoria: { correntes: number; capital: number }
+  dividaAtiva: { total: number; impostos: number; taxas: number; demais: number }
+  historico: { anos: number[]; linhas: { mes: string; vals: number[] }[] }
+}
 
-// barras visíveis do gráfico "Arrecadação por Mês"
-const BARS = [
-  { ant: { x: 24.3, y: 131.8, h: 168.3 }, atu: { x: 56.3, y: 100.3, h: 199.8 }, tx: 52.3, mes: 'Janeiro', pct: '18,77%' },
-  { ant: { x: 113.0, y: 136.8, h: 163.3 }, atu: { x: 145.0, y: 136.8, h: 163.3 }, tx: 141.0, mes: 'Fevereiro', pct: '-0,02%' },
-  { ant: { x: 201.7, y: 170.3, h: 129.8 }, atu: { x: 233.7, y: 128.8, h: 171.3 }, tx: 229.7, mes: 'Março', pct: '31,95%' },
-  { ant: { x: 290.3, y: 136.5, h: 163.5 }, atu: { x: 322.3, y: 147.5, h: 152.5 }, tx: 318.3, mes: 'Abril', pct: '-6,75%' },
-  { ant: { x: 379.0, y: 172.8, h: 127.3 }, atu: { x: 411.0, y: 131.8, h: 168.3 }, tx: 407.0, mes: 'Maio', pct: '32,16%' },
-  { ant: { x: 467.7, y: 167.3, h: 132.8 }, atu: { x: 499.7, y: 197.5, h: 102.5 }, tx: 495.7, mes: 'Junho', pct: '-22,90%' },
-  { ant: { x: 556.3, y: 133.8, h: 166.3 }, atu: null, tx: 584.3, mes: 'Julho', pct: '-100,00%' },
-  { ant: { x: 645.0, y: 174.3, h: 125.8 }, atu: null, tx: 673.0, mes: 'Agosto', pct: '-100,00%' },
-  { ant: { x: 733.7, y: 148.0, h: 152.0 }, atu: null, tx: 761.7, mes: 'Setembro', pct: '-100,00%' },
-  { ant: { x: 822.3, y: 161.3, h: 138.8 }, atu: null, tx: 850.3, mes: 'Outubro', pct: '-100,00%' },
-  { ant: { x: 911.0, y: 165.5, h: 134.5 }, atu: null, tx: 939.0, mes: 'Novembro', pct: '-100,00%' },
-  { ant: { x: 999.7, y: 53.8, h: 246.3 }, atu: null, tx: 1027.7, mes: 'Dezembro', pct: '-100,00%' },
-]
-const HOT = [
-  { x: 8.0, left: '4.8%' }, { x: 96.7, left: '13.1%' }, { x: 185.3, left: '21.3%' }, { x: 274.0, left: '29.5%' },
-  { x: 362.7, left: '37.7%' }, { x: 451.3, left: '45.9%' }, { x: 540.0, left: '54.1%' }, { x: 628.7, left: '62.3%' },
-  { x: 717.3, left: '70.5%' }, { x: 806.0, left: '78.7%' }, { x: 894.7, left: '86.9%' }, { x: 983.3, left: '95.2%' },
-]
+const parseBR = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.')) || 0
+const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
+const fmtM = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M'
+const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
+function fmtCompact(v: number): string {
+  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M'
+  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'K'
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
+}
+
+// Fallback com valores reais (substituído pelo fetch de /api/orcamento/graficos)
+const _A2025 = [60899312.06, 59622020.95, 47029868.84, 60347748.41, 45822535.10, 49114933.97, 61364457.01, 45837000.04, 55988948.69, 51201371.49, 49437783.52, 92478116.43]
+const _A2026 = [72824455.17, 60263870.41, 61773438.84, 55902811.85, 61842501.23, 37821665.45, 0, 0, 0, 0, 0, 0]
+const FALLBACK_GRAF: Graficos = {
+  porAno: [
+    { ano: 2022, arrecadado: 482473693, previsto: 341200000 },
+    { ano: 2023, arrecadado: 525597074, previsto: 530000000 },
+    { ano: 2024, arrecadado: 600375250, previsto: 606000000 },
+    { ano: 2025, arrecadado: 679144097, previsto: 700000000 },
+  ],
+  porMes: _A2025.map((ant, i) => {
+    const atu = _A2026[i]
+    const pct = ant ? ((atu - ant) / ant) * 100 : (atu > 0 ? 100 : 0)
+    return { mes: i + 1, nome: MESES_NOME[i], anoAnterior: ant, anoAtual: atu, pct }
+  }),
+  categoria: { correntes: 337489272, capital: 12939471 },
+  dividaAtiva: { total: 9618583, impostos: 7630496, taxas: 1979821, demais: 8266 },
+  historico: { anos: [2023, 2024, 2025, 2026], linhas: TABELA.map(t => ({ mes: t.mes, vals: t.vals.map(parseBR) })) },
+}
+
+// Geometria — gráfico de linha "Arrecadação por Ano"
+function geomLinha(d: PorAno[]) {
+  const mi = (v: number) => v / 1e6
+  const vals = d.flatMap(p => [mi(p.arrecadado), mi(p.previsto)])
+  const hi = Math.ceil(Math.max(...vals) / 100) * 100
+  const lo = Math.max(0, Math.floor(Math.min(...vals) / 100) * 100)
+  const xL = 34, xR = 290, yT = 20, yB = 112, span = hi - lo || 1
+  const n = d.length
+  const X = (i: number) => n <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (n - 1)
+  const Y = (vMi: number) => yT + ((hi - vMi) / span) * (yB - yT)
+  const toPath = (key: 'arrecadado' | 'previsto') => d.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(mi(p[key])).toFixed(1)}`).join(' ')
+  const ticks = [hi, (hi + lo) / 2, lo].map(t => ({ v: Math.round(t), y: Y(t) }))
+  const labels = d.map((p, i) => ({ ano: p.ano, x: X(i) }))
+  const dots = d.map((p) => ({ x: X(d.indexOf(p)), y: Y(mi(p.arrecadado)) }))
+  const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
+  const hot = d.map((p, i) => ({
+    x: X(i) - half, w: half * 2,
+    tip: { chart: 'report' as const, title: String(p.ano), l1: `Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', l2: `Previsto: ${fmtMi(p.previsto)}`, l2c: '#e8962e', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Math.min(Y(mi(p.arrecadado)), Y(mi(p.previsto))) / 130 * 100).toFixed(1)}%` },
+  }))
+  return { pathArr: toPath('arrecadado'), pathPrev: toPath('previsto'), ticks, labels, dots, hot }
+}
+
+// Geometria — gráfico de barras "Arrecadação por Mês"
+function geomBar(d: PorMes[]) {
+  const W = 1080, H = 380, top = 40, bottom = 300
+  const max = Math.max(1, ...d.flatMap(m => [m.anoAnterior, m.anoAtual]))
+  const sc = (v: number) => (v / max) * (bottom - top - 10)
+  const gw = W / 12
+  const bars = d.map((m, i) => {
+    const cx = i * gw + gw / 2
+    const hAnt = sc(m.anoAnterior), hAtu = sc(m.anoAtual)
+    return {
+      cx, nome: m.nome, pct: fmtPct(m.pct),
+      ant: { x: cx - 28, y: bottom - hAnt, h: hAnt },
+      atu: m.anoAtual > 0 ? { x: cx + 4, y: bottom - hAtu, h: hAtu } : null,
+      tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtMi(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtMi(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hAnt, hAtu)) / H * 100).toFixed(1)}%` },
+    }
+  })
+  const media = d.reduce((s, m) => s + m.anoAnterior, 0) / 12
+  return { bars, W, H, bottom, yMedia: bottom - sc(media), media }
+}
 
 interface KpiCard {
   label: string
@@ -110,6 +152,14 @@ export default function DashboardPage() {
   const [saudacao, setSaudacao] = useState('Bom dia')
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
   const [insights, setInsights] = useState<string[] | null>(null)
+  const [graf, setGraf] = useState<Graficos | null>(null)
+
+  useEffect(() => {
+    fetch('/api/orcamento/graficos')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error) setGraf(d) })
+      .catch(() => { /* mantém fallback */ })
+  }, [])
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -137,6 +187,25 @@ export default function DashboardPage() {
 
   const tipReport = tip && tip.chart === 'report' ? tip : null
   const tipArrec = tip && tip.chart === 'arrec' ? tip : null
+
+  const g = graf ?? FALLBACK_GRAF
+  const gl = geomLinha(g.porAno)
+  const gb = geomBar(g.porMes)
+
+  // Donut Dívida Ativa
+  const da = g.dividaAtiva
+  const donutC = 2 * Math.PI * 66
+  let _off = 0
+  const donut = [
+    { nome: 'IMPOSTOS', v: da.impostos, cor: '#283e93' },
+    { nome: 'TAXAS', v: da.taxas, cor: '#e8962e' },
+    { nome: 'DEMAIS RECEITAS CORRENTES', v: da.demais, cor: '#aab8e3' },
+  ].map(p => {
+    const len = da.total ? (p.v / da.total) * donutC : 0
+    const seg = { ...p, len, off: -_off, pct: da.total ? (p.v / da.total) * 100 : 0 }
+    _off += len
+    return seg
+  })
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const navTab: React.CSSProperties = { padding: '9px 18px', borderRadius: 24, color: '#5b6477', fontSize: 14, fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }
@@ -304,21 +373,19 @@ export default function DashboardPage() {
                 </span>
               </div>
               <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
-                <text x="4" y="32" fontSize="6.5" fill="#aeb6c6" style={axisFont}>600</text>
-                <text x="4" y="76" fontSize="6.5" fill="#aeb6c6" style={axisFont}>400</text>
-                <text x="4" y="114" fontSize="6.5" fill="#aeb6c6" style={axisFont}>200</text>
-                <g transform="matrix(1,0,0,0.78,0,4.4)">
-                  <line x1="110" y1="20" x2="110" y2="140" stroke="#cfd8e8" strokeWidth="1.5" strokeDasharray="4 4" />
-                  <path d="M30 95 C55 70 80 60 110 80 C140 100 165 120 195 110 C225 100 255 70 290 60" fill="none" stroke="#e8962e" strokeWidth="3" strokeLinecap="round" />
-                  <path d="M30 70 C55 95 80 110 110 80 C140 50 165 50 195 70 C225 90 255 95 290 85" fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" />
-                  <circle cx="110" cy="80" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
-                </g>
-                <text x="20" y="126" fontSize="6.5" fill="#aeb6c6" style={axisFont}>2022</text>
-                <text x="92" y="126" fontSize="6.5" fill="#aeb6c6" style={axisFont}>2023</text>
-                <text x="172" y="126" fontSize="6.5" fill="#aeb6c6" style={axisFont}>2024</text>
-                <text x="264" y="126" fontSize="6.5" fill="#aeb6c6" style={axisFont}>2025</text>
-                {[{ x: 10, w: 72 }, { x: 82, w: 73 }, { x: 155, w: 72 }, { x: 227, w: 73 }].map((r, i) => (
-                  <rect key={i} onMouseEnter={() => setTip(REPORT[i])} x={r.x} y="0" width={r.w} height="120" fill="transparent" pointerEvents="all" />
+                {gl.ticks.map((t, i) => (
+                  <text key={i} x="4" y={(t.y + 3).toFixed(1)} fontSize="6.5" fill="#aeb6c6" style={axisFont}>{t.v}</text>
+                ))}
+                <path d={gl.pathPrev} fill="none" stroke="#e8962e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={gl.pathArr} fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                {gl.dots.map((p, i) => (
+                  <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />
+                ))}
+                {gl.labels.map((l, i) => (
+                  <text key={i} x={l.x.toFixed(1)} y="126" fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>
+                ))}
+                {gl.hot.map((r, i) => (
+                  <rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height="120" fill="transparent" pointerEvents="all" />
                 ))}
               </svg>
               {tipReport ? <Tooltip t={tipReport} /> : null}
@@ -362,14 +429,14 @@ export default function DashboardPage() {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS CORRENTES</div>
                 <div style={{ height: 70, width: '90%', borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>370,05M</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtM(g.categoria.correntes)}</span>
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS DE CAPITAL</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
-                  <div style={{ height: 70, width: 22, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>12,94M</span>
+                  <div style={{ height: 70, width: `${Math.max(3, 90 * g.categoria.capital / (g.categoria.correntes || 1)).toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtM(g.categoria.capital)}</span>
                 </div>
               </div>
             </div>
@@ -394,20 +461,19 @@ export default function DashboardPage() {
                   <linearGradient id="arrAnt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
                   <linearGradient id="arrAtu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
                 </defs>
-                <line x1="8" y1="300" x2="1072" y2="300" stroke="#e3e8f1" strokeWidth="1.5" />
-                <line x1="8" y1="146" x2="1072" y2="146" stroke="#c9d6ee" strokeWidth="1.6" strokeDasharray="5 5" />
-                <circle cx="52.3" cy="146" r="5" fill="#283e93" stroke="#fff" strokeWidth="2.5" />
-                <text x="1066" y="139" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="end">Média 61,6 mi</text>
-                {BARS.map((b, i) => (
+                <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+                <line x1="8" y1={gb.yMedia.toFixed(1)} x2="1072" y2={gb.yMedia.toFixed(1)} stroke="#c9d6ee" strokeWidth="1.6" strokeDasharray="5 5" />
+                <text x="1066" y={(gb.yMedia - 7).toFixed(1)} fontSize="12" fill="#5b6477" style={axisFont} textAnchor="end">Média {fmtMi(gb.media)}</text>
+                {gb.bars.map((b, i) => (
                   <g key={i}>
-                    <rect x={b.ant.x} y={b.ant.y} width="24" height={b.ant.h} rx="6" fill="url(#arrAnt)" />
-                    {b.atu ? <rect x={b.atu.x} y={b.atu.y} width="24" height={b.atu.h} rx="6" fill="url(#arrAtu)" /> : null}
-                    <text x={b.tx} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.mes}</text>
-                    <text x={b.tx} y="350" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="middle">{b.pct}</text>
+                    <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill="url(#arrAnt)" />
+                    {b.atu ? <rect x={b.atu.x.toFixed(1)} y={b.atu.y.toFixed(1)} width="24" height={b.atu.h.toFixed(1)} rx="6" fill="url(#arrAtu)" /> : null}
+                    <text x={b.cx.toFixed(1)} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.nome}</text>
+                    <text x={b.cx.toFixed(1)} y="350" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="middle">{b.pct}</text>
                   </g>
                 ))}
-                {HOT.map((h, i) => (
-                  <rect key={i} onMouseEnter={() => setTip(ARREC[i])} x={h.x} y="40" width="88.7" height="260.0" fill="transparent" pointerEvents="all" />
+                {gb.bars.map((b, i) => (
+                  <rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - 44).toFixed(1)} y="40" width="88" height="260" fill="transparent" pointerEvents="all" />
                 ))}
               </svg>
               {tipArrec ? <Tooltip t={tipArrec} /> : null}
@@ -420,32 +486,24 @@ export default function DashboardPage() {
               <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação Dívida Ativa</span>
               <span style={dots}>···</span>
             </div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>R$ 9.618.583,26</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(da.total)}</div>
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
               <svg viewBox="0 0 200 200" width="210" height="210">
                 <g transform="rotate(-90 100 100)">
-                  <circle cx="100" cy="100" r="66" fill="none" stroke="#283e93" strokeWidth="30" strokeDasharray="329.0 414.7" strokeDashoffset="0" />
-                  <circle cx="100" cy="100" r="66" fill="none" stroke="#e8962e" strokeWidth="30" strokeDasharray="85.3 414.7" strokeDashoffset="-329.0" />
-                  <circle cx="100" cy="100" r="66" fill="none" stroke="#aab8e3" strokeWidth="30" strokeDasharray="2.0 414.7" strokeDashoffset="-414.3" />
+                  {donut.map((s, i) => (
+                    <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
+                  ))}
                 </g>
               </svg>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93', flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>IMPOSTOS</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>7,63M <span style={{ color: '#9098a8', fontWeight: 500 }}>(79,33%)</span></span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e', flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>TAXAS</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>1,98M <span style={{ color: '#9098a8', fontWeight: 500 }}>(20,58%)</span></span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: '#aab8e3', flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>DEMAIS RECEITAS CORRENTES</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>8,27K <span style={{ color: '#9098a8', fontWeight: 500 }}>(0,09%)</span></span>
-              </div>
+              {donut.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                  <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -457,19 +515,19 @@ export default function DashboardPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['Meses', '2023', '2024', '2025', '2026'].map((h, i) => (
+                  {['Meses', ...g.historico.anos.map(String)].map((h, i) => (
                     <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {TABELA.map((row, ri) => {
+                {g.historico.linhas.map((row, ri) => {
                   const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
                   return (
                     <tr key={row.mes}>
                       <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.mes}</td>
                       {row.vals.map((v, ci) => (
-                        <td key={ci} style={{ background: cellBg, color: v === '0,00' ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>R$ {v}</td>
+                        <td key={ci} style={{ background: cellBg, color: v === 0 ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(v)}</td>
                       ))}
                     </tr>
                   )
