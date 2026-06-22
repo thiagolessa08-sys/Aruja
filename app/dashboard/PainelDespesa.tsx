@@ -125,11 +125,11 @@ interface KpiCard {
 
 // Fallback = valores reais mais recentes (exibidos enquanto a API carrega ou se falhar)
 const KPIS_FALLBACK: KpiCard[] = [
-  { label: 'Orçado', value: '760,00 mi', subLabel: 'Ano Anterior', subValue: '700,00 mi', pct: '8,57%', dir: 'up' },
-  { label: 'Orçado Atualizado', value: '835,35 mi', subLabel: 'Ano Anterior', subValue: '762,49 mi', pct: '9,56%', dir: 'up' },
-  { label: 'Arrecadação Mês', value: '37,82 mi', subLabel: 'Junho/25', subValue: '49,11 mi', pct: '-22,99%', dir: 'down' },
-  { label: 'Arrecadação Até o Mês', value: '350,43 mi', subLabel: 'Ano Anterior', subValue: '322,84 mi', pct: '8,55%', dir: 'up' },
-  { label: 'Arrecadação Mês Anterior', value: '61,84 mi', subLabel: 'Maio/25', subValue: '45,82 mi', pct: '34,96%', dir: 'up' },
+  { label: 'Dotação Inicial', value: '760,00 mi', subLabel: 'Ano Anterior', subValue: '700,00 mi', pct: '8,57%', dir: 'up' },
+  { label: 'Dotação Atualizada', value: '835,35 mi', subLabel: 'Ano Anterior', subValue: '762,49 mi', pct: '9,56%', dir: 'up' },
+  { label: 'Valor Empenho', value: '771,25 mi', subLabel: 'Ano Anterior', subValue: '694,36 mi', pct: '11,07%', dir: 'up' },
+  { label: 'Valor Liquidado', value: '579,53 mi', subLabel: 'Ano Anterior', subValue: '542,70 mi', pct: '6,78%', dir: 'up' },
+  { label: 'Valor Pago', value: '575,94 mi', subLabel: 'Ano Anterior', subValue: '521,02 mi', pct: '10,54%', dir: 'up' },
 ]
 
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
@@ -158,7 +158,7 @@ export default function PainelDespesa() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/orcamento/kpis')
+    fetch('/api/despesa/kpis')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.kpis?.length) setKpis(d.kpis) })
       .catch(() => { /* mantém fallback */ })
