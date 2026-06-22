@@ -1,73 +1,60 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
+import { lerFiltros, whereExtra, indCol } from '@/lib/despesa-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
-let cache: { data: unknown; at: number } | null = null
-const TTL = 30 * 60 * 1000 // 30 min
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = getSession()
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  if (cache && Date.now() - cache.at < TTL) {
-    return NextResponse.json(cache.data)
-  }
-
   try {
+    const f = lerFiltros(req.nextUrl.searchParams)
+    const col = indCol(f.indicador)
+    const weSecMes = whereExtra({ ...f }) // mês + secretaria
+    const weSec = whereExtra({ ...f, mes: null }) // só secretaria (para séries que ignoram mês)
+
+    // Série mensal por ano (sem restringir mês — gráficos por ano/mês usam todos os meses)
     const mensalR = await agentQuery(`
-      SELECT d.NO_ANO AS ano, d.NO_MES AS mes,
-        SUM(f.VL_SALDO_MES_EMPENHADO) AS emp,
-        SUM(f.VL_SALDO_MES_LIQUIDADO) AS liq,
-        SUM(f.VL_SALDO_MES_PAGO) AS pago
+      SELECT d.NO_ANO AS ano, d.NO_MES AS mes, SUM(f.${col}) AS v
       FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO
-      GROUP BY d.NO_ANO, d.NO_MES`, 2000)
+      WHERE 1=1${weSec}
+      GROUP BY d.NO_ANO, d.NO_MES`, 3000)
 
-    const emp = new Map<string, number>(), liq = new Map<string, number>(), pago = new Map<string, number>()
-    const totaisAno = new Map<number, { emp: number; pago: number }>()
-    let anoAtual = 0, mesAtual = 0
+    const val = new Map<string, number>()
+    const totalAno = new Map<number, number>()
+    let anoMax = 0
     for (const r of mensalR.rows) {
-      const ano = Number(r[0]), mes = Number(r[1])
-      emp.set(`${ano}-${mes}`, Number(r[2]) || 0)
-      liq.set(`${ano}-${mes}`, Number(r[3]) || 0)
-      pago.set(`${ano}-${mes}`, Number(r[4]) || 0)
-      const acc = totaisAno.get(ano) ?? { emp: 0, pago: 0 }
-      acc.emp += Number(r[2]) || 0
-      acc.pago += Number(r[4]) || 0
-      totaisAno.set(ano, acc)
-      if (ano > anoAtual || (ano === anoAtual && mes > mesAtual)) { anoAtual = ano; mesAtual = mes }
+      const ano = Number(r[0]), mes = Number(r[1]), v = Number(r[2]) || 0
+      val.set(`${ano}-${mes}`, v)
+      totalAno.set(ano, (totalAno.get(ano) ?? 0) + v)
+      if (ano > anoMax) anoMax = ano
     }
-    const anoAnt = anoAtual - 1
+    const ano = f.ano || anoMax
+    const anoAnt = ano - 1
 
-    const anos = [...totaisAno.keys()].sort((a, b) => a - b)
-    const latestFull = anos.length ? anos[anos.length - 1] - 1 : new Date().getFullYear() - 1 // último ano provavelmente parcial
-    const anosAno = [latestFull - 3, latestFull - 2, latestFull - 1, latestFull]
-
-    const porAno = anosAno.map(ano => ({
-      ano,
-      empenhado: totaisAno.get(ano)?.emp ?? 0,
-      pago: totaisAno.get(ano)?.pago ?? 0,
-    }))
+    const anosAno = [ano - 3, ano - 2, ano - 1, ano]
+    const porAno = anosAno.map(a => ({ ano: a, pago: totalAno.get(a) ?? 0 }))
 
     const porMes = []
     for (let m = 1; m <= 12; m++) {
-      const ant = liq.get(`${anoAnt}-${m}`) ?? 0
-      const atu = liq.get(`${anoAtual}-${m}`) ?? 0
+      const ant = val.get(`${anoAnt}-${m}`) ?? 0
+      const atu = val.get(`${ano}-${m}`) ?? 0
       const pct = ant ? ((atu - ant) / ant) * 100 : (atu > 0 ? 100 : 0)
       porMes.push({ mes: m, nome: MESES[m], anoAnterior: ant, anoAtual: atu, pct })
     }
 
-    // Liquidado por categoria econômica (Correntes x Capital) no ano atual
+    // Categoria econômica (Correntes x Capital) — respeita ano + mês + secretaria
     const categoriaR = await agentQuery(`
-      SELECT gd.DS_CATEGORIA AS categoria, SUM(f.VL_SALDO_MES_LIQUIDADO) AS liq
+      SELECT gd.DS_CATEGORIA AS categoria, SUM(f.${col}) AS v
       FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
       JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_DESPESA nd ON f.SK_NATUREZA_DESPESA = nd.SK_NATUREZA_DESPESA
       JOIN ${SCHEMA}.DIM_BIORC_GRUPO_DESPESA gd ON nd.SK_GRUPO_DESPESA = gd.SK_GRUPO_DESPESA
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO
-      WHERE d.NO_ANO = ${anoAtual}
+      WHERE d.NO_ANO = ${ano}${weSecMes}
       GROUP BY gd.DS_CATEGORIA`, 50)
 
     let correntes = 0, capital = 0
@@ -76,14 +63,10 @@ export async function GET() {
       const v = Number(r[1]) || 0
       if (cat.includes('CORRENTE')) correntes += v
       else if (cat.includes('CAPITAL')) capital += v
-      // "Não Localizado" / "Não informado" são ignorados (dados sem classificação)
     }
 
-    const data = { porAno, porMes, categoria: { correntes, capital } }
-    cache = { data, at: Date.now() }
-    return NextResponse.json(data)
+    return NextResponse.json({ porAno, porMes, categoria: { correntes, capital } })
   } catch (e) {
-    if (cache) return NextResponse.json(cache.data)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }

@@ -203,41 +203,48 @@ const INSIGHTS_FALLBACK = [
   'Empenhado (R$ 771,3 mi) segue acima do liquidado e do pago no ano, ritmo a acompanhar.',
 ]
 
-export default function PainelDespesa() {
+export interface FiltrosDespesa { ano: number | ''; mes: string; secretaria: string; indicador: string }
+
+function buildQS(f: FiltrosDespesa): string {
+  const p = new URLSearchParams()
+  if (f.ano) p.set('ano', String(f.ano))
+  if (f.mes) p.set('mes', f.mes)
+  if (f.secretaria) p.set('secretaria', f.secretaria)
+  if (f.indicador) p.set('indicador', f.indicador)
+  const s = p.toString()
+  return s ? `?${s}` : ''
+}
+
+export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) {
   const [tip, setTip] = useState<Tip | null>(null)
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
   const [insights, setInsights] = useState<string[] | null>(null)
-  const [graf, setGraf] = useState<Graficos | null>(null)
   const [despesaAno, setDespesaAno] = useState<PorAno[]>(FALLBACK_DESPESA_ANO)
   const [despesaMes, setDespesaMes] = useState<PorMes[]>(FALLBACK_DESPESA_MES)
   const [despesaCategoria, setDespesaCategoria] = useState({ correntes: 309320000, capital: 16980000 })
   const [fornecedores, setFornecedores] = useState<FornecedoresData>(FALLBACK_FORNECEDORES)
-
-  useEffect(() => {
-    fetch('/api/despesa/fornecedores')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.itens?.length) setFornecedores(d) })
-      .catch(() => { /* mantém fallback */ })
-  }, [])
   const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
   const [elementoSel, setElementoSel] = useState('TODOS')
 
-  useEffect(() => {
-    fetch('/api/orcamento/graficos')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setGraf(d) })
-      .catch(() => { /* mantém fallback */ })
-  }, [])
+  const qs = buildQS(filtros)
 
   useEffect(() => {
-    fetch(`/api/despesa/liquidado-subelemento?elemento=${encodeURIComponent(elementoSel)}`)
+    fetch(`/api/despesa/fornecedores${qs}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.itens?.length) setFornecedores(d) })
+      .catch(() => { /* mantém fallback */ })
+  }, [qs])
+
+  useEffect(() => {
+    const sep = qs ? '&' : '?'
+    fetch(`/api/despesa/liquidado-subelemento${qs}${sep}elemento=${encodeURIComponent(elementoSel)}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setSubElemento(d) })
       .catch(() => { /* mantém fallback */ })
-  }, [elementoSel])
+  }, [elementoSel, qs])
 
   useEffect(() => {
-    fetch('/api/despesa/graficos')
+    fetch(`/api/despesa/graficos${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.porAno?.length) {
@@ -251,14 +258,14 @@ export default function PainelDespesa() {
         }
       })
       .catch(() => { /* mantém fallback */ })
-  }, [])
+  }, [qs])
 
   useEffect(() => {
-    fetch('/api/despesa/kpis')
+    fetch(`/api/despesa/kpis${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.kpis?.length) setKpis(d.kpis) })
       .catch(() => { /* mantém fallback */ })
-  }, [])
+  }, [qs])
 
   useEffect(() => {
     fetch('/api/despesa/insights')
@@ -270,7 +277,6 @@ export default function PainelDespesa() {
   const tipReport = tip && tip.chart === 'report' ? tip : null
   const tipArrec = tip && tip.chart === 'arrec' ? tip : null
 
-  const g = graf ?? FALLBACK_GRAF
   const gl = geomLinha(despesaAno)
   const gb = geomBar(despesaMes)
 

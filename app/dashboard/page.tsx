@@ -4,24 +4,44 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PainelReceita from './PainelReceita'
-import PainelDespesa from './PainelDespesa'
+import PainelDespesa, { type FiltrosDespesa } from './PainelDespesa'
+
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const INDICADORES = ['Dotação Inicial', 'Dotação Atualizada', 'Empenhado', 'Liquidado', 'Pago']
 
 export default function DashboardPage() {
   const router = useRouter()
   const [tipo, setTipo] = useState<'receita' | 'despesa'>('receita')
   const [saudacao, setSaudacao] = useState('Bom dia')
 
+  // Opções e estado dos filtros (painel de Despesa)
+  const [opts, setOpts] = useState<{ anos: number[]; secretarias: { sk: number; nome: string }[] }>({ anos: [], secretarias: [] })
+  const [fAno, setFAno] = useState<number | ''>('')
+  const [fMes, setFMes] = useState('')
+  const [fSec, setFSec] = useState('')
+  const [fInd, setFInd] = useState('Liquidado')
+
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
-    // Lê a seleção da URL (?v=despesa) ao abrir
     const v = new URLSearchParams(window.location.search).get('v')
     if (v === 'despesa' || v === 'receita') setTipo(v)
   }, [])
 
+  useEffect(() => {
+    fetch('/api/despesa/secretarias')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && !d.error) {
+          setOpts({ anos: d.anos ?? [], secretarias: d.secretarias ?? [] })
+          if (d.anos?.length) setFAno(d.anos[0]) // ano mais recente
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   function selecionar(op: 'receita' | 'despesa') {
     setTipo(op)
-    // Reflete a seleção na URL sem navegar (mantém /dashboard?v=...)
     window.history.replaceState(null, '', `?v=${op}`)
   }
 
@@ -32,6 +52,9 @@ export default function DashboardPage() {
 
   const navTab: React.CSSProperties = { padding: '9px 18px', borderRadius: 24, color: '#5b6477', fontSize: 14, fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }
   const toolPill: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }
+  const selectPill: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: '9px 14px', fontSize: 13, fontWeight: 600, color: '#283e93', border: '1.5px solid #e3e9f5', boxShadow: '0 4px 12px rgba(40,80,180,0.04)', fontFamily: 'inherit', cursor: 'pointer', maxWidth: 220 }
+
+  const filtros: FiltrosDespesa = { ano: fAno, mes: fMes, secretaria: fSec, indicador: fInd }
 
   return (
     <div style={{ minHeight: '100vh', background: '#eef2f9', padding: '26px 14px', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>
@@ -81,17 +104,11 @@ export default function DashboardPage() {
                   aria-checked={ativo}
                   onClick={() => selecionar(op)}
                   style={{
-                    padding: '10px 26px',
-                    borderRadius: 24,
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontFamily: "var(--font-poppins), 'Poppins', sans-serif",
-                    fontSize: 14,
+                    padding: '10px 26px', borderRadius: 24, border: 'none', cursor: 'pointer',
+                    fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontSize: 14,
                     fontWeight: ativo ? 600 : 500,
-                    background: ativo ? '#283e93' : 'transparent',
-                    color: ativo ? '#fff' : '#5b6477',
-                    boxShadow: ativo ? '0 6px 14px rgba(40,62,147,0.35)' : 'none',
-                    transition: 'background .15s, color .15s',
+                    background: ativo ? '#283e93' : 'transparent', color: ativo ? '#fff' : '#5b6477',
+                    boxShadow: ativo ? '0 6px 14px rgba(40,62,147,0.35)' : 'none', transition: 'background .15s, color .15s',
                   }}
                 >
                   {op === 'receita' ? 'Receita' : 'Despesa'}
@@ -102,18 +119,39 @@ export default function DashboardPage() {
         </div>
 
         {/* ===== TOOLBAR ===== */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={toolPill}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><path d="M3 6h18M6 12h12M10 18h4" /></svg> Filter
-            </div>
-            <div style={toolPill}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg> Monthly
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2.4"><path d="M6 9l6 6 6-6" /></svg>
-            </div>
-            <div style={toolPill}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg> Download Data
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 0', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {tipo === 'despesa' ? (
+              <>
+                <select aria-label="Ano" value={fAno} onChange={e => setFAno(Number(e.target.value))} style={selectPill}>
+                  {opts.anos.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+                <select aria-label="Mês" value={fMes} onChange={e => setFMes(e.target.value)} style={selectPill}>
+                  <option value="">Mês: Todos</option>
+                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+                <select aria-label="Secretaria" value={fSec} onChange={e => setFSec(e.target.value)} style={selectPill}>
+                  <option value="">Secretaria: Todas</option>
+                  {opts.secretarias.map(s => <option key={s.sk} value={s.sk}>{s.nome}</option>)}
+                </select>
+                <select aria-label="Indicador" value={fInd} onChange={e => setFInd(e.target.value)} style={{ ...selectPill, background: '#283e93', color: '#fff', border: 'none' }}>
+                  {INDICADORES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                </select>
+              </>
+            ) : (
+              <>
+                <div style={toolPill}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><path d="M3 6h18M6 12h12M10 18h4" /></svg> Filter
+                </div>
+                <div style={toolPill}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg> Monthly
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2.4"><path d="M6 9l6 6 6-6" /></svg>
+                </div>
+                <div style={toolPill}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4256" strokeWidth="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg> Download Data
+                </div>
+              </>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
@@ -129,7 +167,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ===== PAINEL (Receita / Despesa) ===== */}
-        {tipo === 'receita' ? <PainelReceita /> : <PainelDespesa />}
+        {tipo === 'receita' ? <PainelReceita /> : <PainelDespesa filtros={filtros} />}
 
       </div>
     </div>

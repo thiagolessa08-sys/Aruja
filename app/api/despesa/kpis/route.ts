@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
+import { lerFiltros, whereExtra } from '@/lib/despesa-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -24,11 +25,14 @@ function variacao(atual: number, anterior: number): { pct: string; dir: 'up' | '
   return { pct: r.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%', dir }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = getSession()
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
   try {
+    const f = lerFiltros(req.nextUrl.searchParams)
+    const we = whereExtra({ ...f, mes: null }) // mês tratado em JS; aqui só secretaria
+
     const [execucao, orcado, alteracao] = await Promise.all([
       agentQuery(`
         SELECT d.NO_ANO AS ano, d.NO_MES AS mes,
@@ -37,7 +41,8 @@ export async function GET() {
           SUM(f.VL_SALDO_MES_PAGO) AS pago
         FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO
-        GROUP BY d.NO_ANO, d.NO_MES`, 2000),
+        WHERE 1=1${we}
+        GROUP BY d.NO_ANO, d.NO_MES`, 3000),
       agentQuery(`
         SELECT d.NO_ANO AS ano, SUM(f.VL_ORC_APROV_LEI) AS loa
         FROM ${SCHEMA}.FATO_BIORC_ELABORACAO_ORCAMENTO f
@@ -50,21 +55,27 @@ export async function GET() {
         GROUP BY d.NO_ANO`, 100),
     ])
 
-    const emp = new Map<string, number>()
-    const liq = new Map<string, number>()
-    const pago = new Map<string, number>()
-    let anoAtual = 0, mesAtual = 0
+    const emp = new Map<string, number>(), liq = new Map<string, number>(), pago = new Map<string, number>()
+    const mesesPorAno = new Map<number, number>()
+    let anoMax = 0
     for (const r of execucao.rows) {
       const ano = Number(r[0]), mes = Number(r[1])
       emp.set(`${ano}-${mes}`, Number(r[2]) || 0)
       liq.set(`${ano}-${mes}`, Number(r[3]) || 0)
       pago.set(`${ano}-${mes}`, Number(r[4]) || 0)
-      if (ano > anoAtual || (ano === anoAtual && mes > mesAtual)) { anoAtual = ano; mesAtual = mes }
+      mesesPorAno.set(ano, Math.max(mesesPorAno.get(ano) ?? 0, mes))
+      if (ano > anoMax) anoMax = ano
     }
-    const anoAnt = anoAtual - 1
-    const ytd = (m: Map<string, number>, ano: number) => {
+
+    const ano = f.ano || anoMax
+    const anoAnt = ano - 1
+    // mês de referência: específico (filtro) ou último mês com dados do ano
+    const mesRef = f.mes || mesesPorAno.get(ano) || 12
+
+    const soma = (m: Map<string, number>, a: number) => {
+      if (f.mes) return m.get(`${a}-${f.mes}`) ?? 0
       let s = 0
-      for (let i = 1; i <= mesAtual; i++) s += m.get(`${ano}-${i}`) ?? 0
+      for (let i = 1; i <= mesRef; i++) s += m.get(`${a}-${i}`) ?? 0
       return s
     }
 
@@ -73,24 +84,26 @@ export async function GET() {
     const alt = new Map<number, number>()
     for (const r of alteracao.rows) alt.set(Number(r[0]), Number(r[1]) || 0)
 
-    const dotIniAtual = loa.get(anoAtual) ?? 0
+    const dotIniAtual = loa.get(ano) ?? 0
     const dotIniAnt = loa.get(anoAnt) ?? 0
-    const dotAtuAtual = (loa.get(anoAtual) ?? 0) + (alt.get(anoAtual) ?? 0)
+    const dotAtuAtual = (loa.get(ano) ?? 0) + (alt.get(ano) ?? 0)
     const dotAtuAnt = (loa.get(anoAnt) ?? 0) + (alt.get(anoAnt) ?? 0)
 
-    const empA = ytd(emp, anoAtual), empB = ytd(emp, anoAnt)
-    const liqA = ytd(liq, anoAtual), liqB = ytd(liq, anoAnt)
-    const pagoA = ytd(pago, anoAtual), pagoB = ytd(pago, anoAnt)
+    const empA = soma(emp, ano), empB = soma(emp, anoAnt)
+    const liqA = soma(liq, ano), liqB = soma(liq, anoAnt)
+    const pagoA = soma(pago, ano), pagoB = soma(pago, anoAnt)
+
+    const subAno = `Ano Anterior`
 
     const kpis: Kpi[] = [
-      { label: 'Dotação Inicial', value: fmtMi(dotIniAtual), subLabel: 'Ano Anterior', subValue: fmtMi(dotIniAnt), ...variacao(dotIniAtual, dotIniAnt) },
-      { label: 'Dotação Atualizada', value: fmtMi(dotAtuAtual), subLabel: 'Ano Anterior', subValue: fmtMi(dotAtuAnt), ...variacao(dotAtuAtual, dotAtuAnt) },
-      { label: 'Valor Empenho', value: fmtMi(empA), subLabel: 'Ano Anterior', subValue: fmtMi(empB), ...variacao(empA, empB) },
-      { label: 'Valor Liquidado', value: fmtMi(liqA), subLabel: 'Ano Anterior', subValue: fmtMi(liqB), ...variacao(liqA, liqB) },
-      { label: 'Valor Pago', value: fmtMi(pagoA), subLabel: 'Ano Anterior', subValue: fmtMi(pagoB), ...variacao(pagoA, pagoB) },
+      { label: 'Dotação Inicial', value: fmtMi(dotIniAtual), subLabel: subAno, subValue: fmtMi(dotIniAnt), ...variacao(dotIniAtual, dotIniAnt) },
+      { label: 'Dotação Atualizada', value: fmtMi(dotAtuAtual), subLabel: subAno, subValue: fmtMi(dotAtuAnt), ...variacao(dotAtuAtual, dotAtuAnt) },
+      { label: 'Valor Empenho', value: fmtMi(empA), subLabel: subAno, subValue: fmtMi(empB), ...variacao(empA, empB) },
+      { label: 'Valor Liquidado', value: fmtMi(liqA), subLabel: subAno, subValue: fmtMi(liqB), ...variacao(liqA, liqB) },
+      { label: 'Valor Pago', value: fmtMi(pagoA), subLabel: subAno, subValue: fmtMi(pagoB), ...variacao(pagoA, pagoB) },
     ]
 
-    return NextResponse.json({ kpis, referencia: { ano: anoAtual, mes: mesAtual } })
+    return NextResponse.json({ kpis, referencia: { ano, mes: mesRef } })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
