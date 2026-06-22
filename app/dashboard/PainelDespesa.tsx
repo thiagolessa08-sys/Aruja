@@ -253,7 +253,7 @@ export default function PainelDespesa() {
         {/* Arrecadação por Ano */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Arrecadação por Ano</span>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Despesas por Ano</span>
             <span style={reportBadge}>Anual</span>
           </div>
           <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
