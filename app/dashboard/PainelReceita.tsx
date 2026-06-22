@@ -439,6 +439,15 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                   </tr>
                 )
               })}
+              <tr>
+                <td style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Total</td>
+                {g.historico.anos.map((_, ci) => {
+                  const totalCol = g.historico.linhas.reduce((s, row) => s + (row.vals[ci] ?? 0), 0)
+                  return (
+                    <td key={ci} style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{fmtReais(totalCol)}</td>
+                  )
+                })}
+              </tr>
             </tbody>
           </table>
         </div>
