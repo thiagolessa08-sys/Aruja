@@ -71,6 +71,14 @@ const FALLBACK_GRAF: Graficos = {
   historico: { anos: [2023, 2024, 2025, 2026], linhas: TABELA.map(t => ({ mes: t.mes, vals: t.vals.map(parseBR) })) },
 }
 
+// Despesas por Ano — Valor Pago real (substituído pelo fetch de /api/despesa/graficos)
+const FALLBACK_DESPESA_ANO: PorAno[] = [
+  { ano: 2022, arrecadado: 626930502, previsto: 626930502 },
+  { ano: 2023, arrecadado: 737772419, previsto: 737772419 },
+  { ano: 2024, arrecadado: 965317788, previsto: 965317788 },
+  { ano: 2025, arrecadado: 1075995807, previsto: 1075995807 },
+]
+
 // Geometria — gráfico de linha "Arrecadação por Ano"
 function geomLinha(d: PorAno[]) {
   const mi = (v: number) => v / 1e6
@@ -89,7 +97,7 @@ function geomLinha(d: PorAno[]) {
   const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
   const hot = d.map((p, i) => ({
     x: X(i) - half, w: half * 2,
-    tip: { chart: 'report' as const, title: String(p.ano), l1: `Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
+    tip: { chart: 'report' as const, title: String(p.ano), l1: `Pago: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
   }))
   return { linha, area, ticks, labels, dots, hot }
 }
@@ -149,11 +157,23 @@ export default function PainelDespesa() {
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
+  const [despesaAno, setDespesaAno] = useState<PorAno[]>(FALLBACK_DESPESA_ANO)
 
   useEffect(() => {
     fetch('/api/orcamento/graficos')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setGraf(d) })
+      .catch(() => { /* mantém fallback */ })
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/despesa/graficos')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.porAno?.length) {
+          setDespesaAno(d.porAno.map((p: { ano: number; pago: number }) => ({ ano: p.ano, arrecadado: p.pago, previsto: p.pago })))
+        }
+      })
       .catch(() => { /* mantém fallback */ })
   }, [])
 
@@ -175,7 +195,7 @@ export default function PainelDespesa() {
   const tipArrec = tip && tip.chart === 'arrec' ? tip : null
 
   const g = graf ?? FALLBACK_GRAF
-  const gl = geomLinha(g.porAno)
+  const gl = geomLinha(despesaAno)
   const gb = geomBar(g.porMes)
 
   // Donut Dívida Ativa
@@ -258,7 +278,7 @@ export default function PainelDespesa() {
           </div>
           <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
             <div style={{ position: 'absolute', left: 30, top: -2, display: 'flex', gap: 10, zIndex: 2 }}>
-              <span style={{ background: '#283e93', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>Arrecadado</span>
+              <span style={{ background: '#283e93', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>Pago</span>
             </div>
             <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
               <defs>
