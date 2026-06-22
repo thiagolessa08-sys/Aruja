@@ -79,6 +79,27 @@ const FALLBACK_DESPESA_ANO: PorAno[] = [
   { ano: 2025, arrecadado: 1075995807, previsto: 1075995807 },
 ]
 
+interface FornecedorItem { doc: string; nome: string; empenhado: number; liquidado: number; pago: number }
+interface FornecedoresData { ano: number; itens: FornecedorItem[]; total: { empenhado: number; liquidado: number; pago: number } }
+
+// Fornecedores - Valor de Liquidado — real (substituído pelo fetch de /api/despesa/fornecedores)
+const FALLBACK_FORNECEDORES: FornecedoresData = {
+  ano: 2026,
+  itens: [
+    { doc: '012.828.423/0001-83', nome: 'FUNDO MUNICIPAL DE SAUDE DE ARUJA', empenhado: 145166542.04, liquidado: 145166542.04, pago: 143166542.04 },
+    { doc: '056.901.275/0001-50', nome: 'PREFEITURA MUNICIPAL DE ARUJA', empenhado: 100140011.90, liquidado: 99192179.92, pago: 99172301.13 },
+    { doc: '029.979.036/0001-40', nome: 'INSTITUTO NACIONAL DO SEGURO SOCIAL', empenhado: 39797417.26, liquidado: 39797417.26, pago: 39797417.26 },
+    { doc: '058.478.652/0001-16', nome: 'CAMARA MUNICIPAL DE ARUJA', empenhado: 36585524.24, liquidado: 36585524.24, pago: 36585524.24 },
+    { doc: '013.689.392/0001-90', nome: 'FUNDO MUNICIPAL DE ASSISTENCIA SOCIAL DE ARUJA', empenhado: 26257482.58, liquidado: 26257482.58, pago: 26257482.58 },
+    { doc: '017.508.792/0001-02', nome: 'AMIS- ASSOCIACAO MISSAO INTEGRAL SEMEAR DE GESTAO', empenhado: 31146538.53, liquidado: 24652708.78, pago: 24652708.78 },
+    { doc: '000.360.305/1187-09', nome: 'CAIXA ECONOMICA FEDERAL', empenhado: 14857367.48, liquidado: 14821812.95, pago: 14821812.95 },
+    { doc: '007.868.290/0001-39', nome: 'INSTITUTO BRASILEIRO DE GESTAO E ASSISTENCIA A SAU', empenhado: 32450787.32, liquidado: 13940323.85, pago: 13940323.85 },
+    { doc: '000.884.554/0001-07', nome: 'ELECTRA SERVICOS DE INFRAESTRUTURA URBANA LTDA', empenhado: 15301388.60, liquidado: 10596603.85, pago: 10596603.85 },
+    { doc: '000.338.763/0013-80', nome: 'PLENA SAUDE S.A.', empenhado: 15196896.94, liquidado: 9162965.58, pago: 9162965.58 },
+  ],
+  total: { empenhado: 771253883.97, liquidado: 579530624.32, pago: 575941807.44 },
+}
+
 // Liquidado por Mês — real (substituído pelo fetch de /api/despesa/graficos)
 const _LIQ_ANT = [61400000, 55700000, 47300000, 50100000, 44700000, 52700000, 52400000, 47900000, 46100000, 49900000, 49700000, 74100000]
 const _LIQ_ATU = [72100000, 55200000, 55900000, 56100000, 59300000, 27700000, 0, 0, 0, 0, 0, 0]
@@ -190,6 +211,14 @@ export default function PainelDespesa() {
   const [despesaAno, setDespesaAno] = useState<PorAno[]>(FALLBACK_DESPESA_ANO)
   const [despesaMes, setDespesaMes] = useState<PorMes[]>(FALLBACK_DESPESA_MES)
   const [despesaCategoria, setDespesaCategoria] = useState({ correntes: 309320000, capital: 16980000 })
+  const [fornecedores, setFornecedores] = useState<FornecedoresData>(FALLBACK_FORNECEDORES)
+
+  useEffect(() => {
+    fetch('/api/despesa/fornecedores')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.itens?.length) setFornecedores(d) })
+      .catch(() => { /* mantém fallback */ })
+  }, [])
   const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
   const [elementoSel, setElementoSel] = useState('TODOS')
 
@@ -484,30 +513,39 @@ export default function PainelDespesa() {
         </div>
       </div>
 
-      {/* ===== Histórico Mensal (tabela) ===== */}
+      {/* ===== Fornecedores - Valor de Liquidado (tabela) ===== */}
       <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Histórico Mensal de Arrecadação por Ano</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Fornecedores - Valor de Liquidado</span>
+          <span style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, borderRadius: 14, padding: '6px 16px' }}>Top 10</span>
+        </div>
         <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Meses', ...g.historico.anos.map(String)].map((h, i) => (
+                {['Fornecedores', 'Empenhado', 'Liquidado', 'Pago'].map((h, i) => (
                   <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {g.historico.linhas.map((row, ri) => {
+              {fornecedores.itens.map((f, ri) => {
                 const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
                 return (
-                  <tr key={row.mes}>
-                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.mes}</td>
-                    {row.vals.map((v, ci) => (
-                      <td key={ci} style={{ background: cellBg, color: v === 0 ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(v)}</td>
+                  <tr key={f.doc}>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{f.doc} {f.nome}</td>
+                    {[f.empenhado, f.liquidado, f.pago].map((v, ci) => (
+                      <td key={ci} style={{ background: cellBg, color: v === 0 ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{v === 0 ? '—' : fmtReais(v)}</td>
                     ))}
                   </tr>
                 )
               })}
+              <tr>
+                <td style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Total</td>
+                {[fornecedores.total.empenhado, fornecedores.total.liquidado, fornecedores.total.pago].map((v, ci) => (
+                  <td key={ci} style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{fmtReais(v)}</td>
+                ))}
+              </tr>
             </tbody>
           </table>
         </div>
