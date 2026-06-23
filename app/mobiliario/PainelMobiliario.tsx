@@ -2,114 +2,119 @@
 
 import { useState, useEffect } from 'react'
 
-export interface FiltrosImobiliario { ano: number | ''; faixa: number | '' }
+export interface FiltrosMobiliario { ano: number | ''; situacao: string }
 
 interface Tip { chart: 'linha' | 'bar'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
 
-interface PorAno { ano: number; arrecadado: number }
-interface LancArrec { ano: number; lancado: number; arrecadado: number }
-interface Faixa { id: number; label: string; qt: number }
-interface Exercicio { ano: number; qt: number; venal: number; lancado: number | null; arrecadado: number; pct: number | null }
+interface PorAno { ano: number; iss: number }
+interface AbEnc { ano: number; aberturas: number; encerramentos: number }
+interface Porte { label: string; qt: number }
+interface Segmento { nome: string; qt: number; pct: number }
 interface Graficos {
   porAno: PorAno[]
-  faixas: Faixa[]
-  lancVsArrec: LancArrec[]
-  venalComposicao: { terreno: number; predial: number }
-  exercicios: Exercicio[]
+  portes: Porte[]
+  ativInat: { ativas: number; inativas: number }
+  abVsEnc: AbEnc[]
+  segmentos: Segmento[]
 }
-
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
-const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
-// ===== Fallbacks (valores reais validados no IQ — exibidos enquanto a API carrega) =====
-const KPIS_FALLBACK: KpiCard[] = [
-  { label: 'Imóveis Lançados', value: '33.281', subLabel: 'Ano Anterior', subValue: '33.065', pct: '0,65%', dir: 'up' },
-  { label: 'Valor Venal Total', value: '9,03 bi', subLabel: 'Ano Anterior', subValue: '8,38 bi', pct: '7,74%', dir: 'up' },
-  { label: 'IPTU Lançado (est.)', value: '74,32 mi', subLabel: 'Ano Anterior', subValue: '69,38 mi', pct: '7,12%', dir: 'up' },
-  { label: 'IPTU Arrecadado', value: '42,23 mi', subLabel: 'Ano Anterior', subValue: '65,11 mi', pct: '-35,14%', dir: 'down' },
-  { label: 'Arrecadação IPTU', value: '56,8%', subLabel: 'do Lançado', subValue: '74,32 mi', pct: '-39,46%', dir: 'down' },
+// ===== Fallbacks (valores reais validados no IQ) =====
+const KPIS_CAD: KpiCard[] = [
+  { label: 'Empresas Cadastradas', value: '37.066', subLabel: 'Ativas', subValue: '18.384', pct: '49,6%', dir: 'up' },
+  { label: 'Empresas Ativas', value: '18.384', subLabel: 'Inativas', subValue: '18.682', pct: '49,6%', dir: 'down' },
+  { label: 'Aberturas no Exercício', value: '484', subLabel: 'Ano Anterior', subValue: '3.211', pct: '-84,93%', dir: 'down' },
+  { label: 'Encerramentos no Exercício', value: '623', subLabel: 'Ano Anterior', subValue: '2.864', pct: '-78,25%', dir: 'down' },
+  { label: 'ISS Arrecadado', value: '43,50 mi', subLabel: 'Ano Anterior', subValue: '74,00 mi', pct: '-41,22%', dir: 'down' },
 ]
+const KPIS_ARREC: KpiCard[] = [KPIS_CAD[4], KPIS_CAD[1], KPIS_CAD[0], KPIS_CAD[2], KPIS_CAD[3]]
+
 const FALLBACK_GRAF: Graficos = {
   porAno: [
-    { ano: 2022, arrecadado: 49528949 },
-    { ano: 2023, arrecadado: 56794487 },
-    { ano: 2024, arrecadado: 57256951 },
-    { ano: 2025, arrecadado: 65110208 },
-    { ano: 2026, arrecadado: 42232040 },
+    { ano: 2022, iss: 46015133 },
+    { ano: 2023, iss: 53413442 },
+    { ano: 2024, iss: 56463649 },
+    { ano: 2025, iss: 74004379 },
+    { ano: 2026, iss: 43497076 },
   ],
-  faixas: [
-    { id: 1, label: 'Até R$ 100 mil', qt: 13453 },
-    { id: 2, label: 'R$ 100 a 300 mil', qt: 12893 },
-    { id: 3, label: 'R$ 300 a 500 mil', qt: 3765 },
-    { id: 4, label: 'R$ 500 mil a 1 mi', qt: 2181 },
-    { id: 5, label: 'Acima de R$ 1 mi', qt: 989 },
+  portes: [
+    { label: 'Microempresa (ME)', qt: 18573 },
+    { label: 'Pequeno Porte (EPP)', qt: 942 },
+    { label: 'Demais portes', qt: 1300 },
   ],
-  lancVsArrec: [
-    { ano: 2025, lancado: 69378705, arrecadado: 65110208 },
-    { ano: 2026, lancado: 74322224, arrecadado: 42232040 },
+  ativInat: { ativas: 18384, inativas: 18682 },
+  abVsEnc: [
+    { ano: 2019, aberturas: 1914, encerramentos: 594 },
+    { ano: 2020, aberturas: 2126, encerramentos: 896 },
+    { ano: 2021, aberturas: 3081, encerramentos: 929 },
+    { ano: 2022, aberturas: 2611, encerramentos: 919 },
+    { ano: 2023, aberturas: 2967, encerramentos: 683 },
+    { ano: 2024, aberturas: 2933, encerramentos: 2731 },
+    { ano: 2025, aberturas: 3211, encerramentos: 2864 },
+    { ano: 2026, aberturas: 484, encerramentos: 623 },
   ],
-  venalComposicao: { terreno: 2696442029, predial: 6135114896 },
-  exercicios: [
-    { ano: 2026, qt: 33281, venal: 9033211585, lancado: 74322224, arrecadado: 42232040, pct: 56.8 },
-    { ano: 2025, qt: 33065, venal: 8384415578, lancado: 69378705, arrecadado: 65110208, pct: 93.8 },
-    { ano: 2024, qt: 32072, venal: 7827236703, lancado: null, arrecadado: 57256951, pct: null },
-    { ano: 2023, qt: 30878, venal: 7223562103, lancado: null, arrecadado: 56794487, pct: null },
-    { ano: 2022, qt: 30281, venal: 6591459160, lancado: null, arrecadado: 49528949, pct: null },
+  segmentos: [
+    { nome: 'PRESTADOR DE SERVIÇOS', qt: 8020, pct: 53.7 },
+    { nome: 'COMERCIO', qt: 3110, pct: 20.8 },
+    { nome: 'GERAL', qt: 947, pct: 6.3 },
+    { nome: 'COMÉRCIO E PRESTAÇÃO DE SERVIÇOS', qt: 915, pct: 6.1 },
+    { nome: 'FEIRA', qt: 758, pct: 5.1 },
+    { nome: 'PUBLICIDADE', qt: 401, pct: 2.7 },
+    { nome: 'CONSERVATÓRIO MUSICAL', qt: 341, pct: 2.3 },
+    { nome: 'INDUSTRIA', qt: 196, pct: 1.3 },
   ],
 }
-const INSIGHTS_FALLBACK = [
-  'O cadastro imobiliário de 2026 tem 33.281 imóveis lançados, somando R$ 9,0 bi em valor venal.',
-  'IPTU lançado estimado de R$ 74,3 mi; arrecadado R$ 42,2 mi até agora (56,8% do lançado).',
-  '79,5% dos imóveis têm valor venal de até R$ 300 mil — base predominantemente residencial popular.',
+const INSIGHTS_CAD = [
+  'O cadastro mobiliário tem 37.066 empresas, sendo 18.384 ativas (49,6% da base).',
+  '484 empresas abertas em 2026 (-84,9% vs 2025).',
+  'ISS arrecadado de R$ 43,5 mi em 2026 — o principal tributo do cadastro mobiliário.',
 ]
 
-const FAIXA_CORES = ['#283e93', '#3f5bb5', '#7d8fce', '#aab8e3', '#e8962e']
+const PORTE_CORES = ['#283e93', '#5870c4', '#aab8e3', '#e8962e']
 
-// ===== Geometria: linha "IPTU Arrecadado por Ano" =====
 function geomLinha(d: PorAno[]) {
   const mi = (v: number) => v / 1e6
-  const vals = d.map(p => mi(p.arrecadado))
+  const vals = d.map(p => mi(p.iss))
   const hi = Math.ceil(Math.max(1, ...vals) / 10) * 10
   const lo = 0
   const xL = 34, xR = 290, yT = 20, yB = 112, span = hi - lo || 1
   const n = d.length
   const X = (i: number) => n <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (n - 1)
   const Y = (vMi: number) => yT + ((hi - vMi) / span) * (yB - yT)
-  const linha = d.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(mi(p.arrecadado)).toFixed(1)}`).join(' ')
+  const linha = d.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(mi(p.iss)).toFixed(1)}`).join(' ')
   const area = n ? `${linha} L${X(n - 1).toFixed(1)} ${yB} L${X(0).toFixed(1)} ${yB} Z` : ''
   const ticks = [hi, (hi + lo) / 2, lo].map(t => ({ v: Math.round(t), y: Y(t) }))
   const labels = d.map((p, i) => ({ ano: p.ano, x: X(i) }))
-  const dots = d.map((p, i) => ({ x: X(i), y: Y(mi(p.arrecadado)) }))
+  const dots = d.map((p, i) => ({ x: X(i), y: Y(mi(p.iss)) }))
   const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
   const hot = d.map((p, i) => ({
     x: X(i) - half, w: half * 2,
-    tip: { chart: 'linha' as const, title: String(p.ano), l1: `IPTU Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
+    tip: { chart: 'linha' as const, title: String(p.ano), l1: `ISS Arrecadado: ${fmtMi(p.iss)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.iss)) / 130 * 100).toFixed(1)}%` },
   }))
   return { linha, area, ticks, labels, dots, hot }
 }
 
-// ===== Geometria: barras agrupadas "Lançado × Arrecadado" por exercício =====
-function geomBar(d: LancArrec[]) {
+function geomBar(d: AbEnc[]) {
   const W = 1080, H = 380, top = 40, bottom = 300
-  const max = Math.max(1, ...d.flatMap(m => [m.lancado, m.arrecadado]))
+  const max = Math.max(1, ...d.flatMap(m => [m.aberturas, m.encerramentos]))
   const sc = (v: number) => (v / max) * (bottom - top - 10)
   const n = Math.max(1, d.length)
   const gw = W / n
   const bars = d.map((m, i) => {
     const cx = i * gw + gw / 2
-    const hL = sc(m.lancado), hA = sc(m.arrecadado)
+    const hA = sc(m.aberturas), hE = sc(m.encerramentos)
     return {
       cx, ano: m.ano,
-      lanc: { x: cx - 60, y: bottom - hL, h: hL },
-      arr: { x: cx + 8, y: bottom - hA, h: hA },
-      tip: { chart: 'bar' as const, title: String(m.ano), l1: `Lançado: ${fmtMi(m.lancado)}`, l1c: '#283e93', l2: `Arrecadado: ${fmtMi(m.arrecadado)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hL, hA)) / H * 100).toFixed(1)}%` },
+      ab: { x: cx - 60, y: bottom - hA, h: hA },
+      en: { x: cx + 8, y: bottom - hE, h: hE },
+      tip: { chart: 'bar' as const, title: String(m.ano), l1: `Aberturas: ${fmtInt(m.aberturas)}`, l1c: '#283e93', l2: `Encerramentos: ${fmtInt(m.encerramentos)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hA, hE)) / H * 100).toFixed(1)}%` },
     }
   })
   return { bars, W, H, bottom }
@@ -121,33 +126,35 @@ function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   return azul ? 'rgba(255,255,255,0.6)' : '#9098a8'
 }
 
-function buildQS(f: FiltrosImobiliario): string {
+function buildQS(f: FiltrosMobiliario, foco: string): string {
   const p = new URLSearchParams()
   if (f.ano) p.set('ano', String(f.ano))
-  if (f.faixa) p.set('faixa', String(f.faixa))
+  if (f.situacao) p.set('situacao', f.situacao)
+  if (foco === 'arrecadacao') p.set('foco', 'arrecadacao')
   const s = p.toString()
   return s ? `?${s}` : ''
 }
 
-export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobiliario }) {
+export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtros: FiltrosMobiliario; foco?: 'cadastro' | 'arrecadacao' }) {
+  const arrec = foco === 'arrecadacao'
   const [tip, setTip] = useState<Tip | null>(null)
-  const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
+  const [kpis, setKpis] = useState<KpiCard[]>(arrec ? KPIS_ARREC : KPIS_CAD)
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
 
-  const qs = buildQS(filtros)
+  const qs = buildQS(filtros, foco)
 
   useEffect(() => {
-    fetch(`/api/imobiliario/graficos${qs}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/mobiliario/graficos${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setGraf(d) }).catch(() => {})
   }, [qs])
   useEffect(() => {
-    fetch(`/api/imobiliario/kpis${qs}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/mobiliario/kpis${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.kpis?.length) setKpis(d.kpis) }).catch(() => {})
   }, [qs])
   useEffect(() => {
-    fetch(`/api/imobiliario/insights${qs}`).then(r => r.ok ? r.json() : null)
-      .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK)).catch(() => setInsights(INSIGHTS_FALLBACK))
+    fetch(`/api/mobiliario/insights${qs}`).then(r => r.ok ? r.json() : null)
+      .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_CAD)).catch(() => setInsights(INSIGHTS_CAD))
   }, [qs])
 
   const tipLinha = tip && tip.chart === 'linha' ? tip : null
@@ -155,21 +162,21 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
 
   const g = graf ?? FALLBACK_GRAF
   const gl = geomLinha(g.porAno)
-  const gb = geomBar(g.lancVsArrec)
+  const gb = geomBar(g.abVsEnc)
 
-  // Donut — imóveis por faixa de venal
-  const totFaixa = g.faixas.reduce((s, f) => s + f.qt, 0)
+  // Donut — empresas por porte (classificadas)
+  const totPorte = g.portes.reduce((s, p) => s + p.qt, 0)
   const donutC = 2 * Math.PI * 66
   let _off = 0
-  const donut = g.faixas.map((fx, i) => {
-    const len = totFaixa ? (fx.qt / totFaixa) * donutC : 0
-    const seg = { nome: fx.label, v: fx.qt, cor: FAIXA_CORES[i % FAIXA_CORES.length], len, off: -_off, pct: totFaixa ? (fx.qt / totFaixa) * 100 : 0 }
+  const donut = g.portes.map((p, i) => {
+    const len = totPorte ? (p.qt / totPorte) * donutC : 0
+    const seg = { nome: p.label, v: p.qt, cor: PORTE_CORES[i % PORTE_CORES.length], len, off: -_off, pct: totPorte ? (p.qt / totPorte) * 100 : 0 }
     _off += len
     return seg
   })
 
-  const vc = g.venalComposicao
-  const venalMax = Math.max(vc.terreno, vc.predial) || 1
+  const ai = g.ativInat
+  const totAI = Math.max(ai.ativas, ai.inativas) || 1
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -193,11 +200,11 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
   }
 
   const kpiIcons = [
-    <svg key="0" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>,
-    <svg key="1" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
-    <svg key="2" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 7h8M8 11h8M8 15h5" /></svg>,
-    <svg key="3" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><path d="M9.5 14a2.5 2.5 0 0 0 5 0c0-1.4-1-2-2.5-2.5S9.5 9.4 9.5 8a2.5 2.5 0 0 1 5 0M12 6v1.5M12 16.5V18" /></svg>,
-    <svg key="4" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 17l6-6 4 4 7-7" /><path d="M14 7h6v6" /></svg>,
+    <svg key="0" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-5h6v5" /></svg>,
+    <svg key="1" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 11l3 3 8-8" /><path d="M21 12a9 9 0 1 1-6.2-8.5" /></svg>,
+    <svg key="2" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 5v14M5 12h14" /></svg>,
+    <svg key="3" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 12h14" /></svg>,
+    <svg key="4" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
   ]
 
   return (
@@ -207,7 +214,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
         {kpis.map((k, i) => {
           const azul = i === 0
           return (
-            <div key={k.label} style={azul
+            <div key={k.label + i} style={azul
               ? { background: '#283e93', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 20px rgba(40,62,147,0.22)' }
               : { background: '#fff', borderRadius: 16, padding: '12px 14px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: azul ? 'rgba(255,255,255,0.88)' : '#1f2a44', lineHeight: 1.25, display: 'block' }}>{k.label}</span>
@@ -227,10 +234,10 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
       {/* ===== ROW 1 ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.68fr 1fr 1.32fr', gap: 18, marginTop: 20 }}>
 
-        {/* IPTU Arrecadado por Ano */}
+        {/* ISS Arrecadado por Ano */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>IPTU Arrecadado por Ano</span>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>ISS Arrecadado por Ano</span>
             <span style={reportBadge}>Anual</span>
           </div>
           <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
@@ -239,13 +246,13 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
             </div>
             <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
               <defs>
-                <linearGradient id="areaImob" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="areaIss" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#283e93" stopOpacity="0.28" />
                   <stop offset="100%" stopColor="#283e93" stopOpacity="0" />
                 </linearGradient>
               </defs>
               {gl.ticks.map((t, i) => (<text key={i} x="4" y={(t.y + 3).toFixed(1)} fontSize="6.5" fill="#aeb6c6" style={axisFont}>{t.v}</text>))}
-              <path d={gl.area} fill="url(#areaImob)" stroke="none" />
+              <path d={gl.area} fill="url(#areaIss)" stroke="none" />
               <path d={gl.linha} fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
               {gl.dots.map((p, i) => (<circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />))}
               {gl.labels.map((l, i) => (<text key={i} x={l.x.toFixed(1)} y="126" fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>))}
@@ -255,15 +262,15 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
           </div>
         </div>
 
-        {/* Insights de Imobiliário */}
+        {/* Insights */}
         <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
             </div>
-            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Imobiliário</span>
+            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>{arrec ? 'ISS' : 'Mobiliário'}</span>
           </div>
-          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de Imobiliário</div>
+          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>{arrec ? 'Insights de ISS' : 'Insights de Mobiliário'}</div>
           {insights === null ? (
             <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[0, 1, 2].map(i => (<div key={i} style={{ height: 9, borderRadius: 5, width: i === 1 ? '85%' : '95%', background: 'rgba(255,255,255,0.18)' }} />))}
@@ -280,24 +287,24 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
           )}
         </div>
 
-        {/* Composição do Valor Venal */}
+        {/* Composição do Cadastro */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Composição do Valor Venal</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Situação do Cadastro</span>
             <span style={dots}>···</span>
           </div>
           <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>VENAL PREDIAL</div>
-              <div style={{ height: 70, width: `${Math.max(8, 90 * vc.predial / venalMax).toFixed(1)}%`, borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtMoney(vc.predial)}</span>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>EMPRESAS ATIVAS</div>
+              <div style={{ height: 70, width: `${Math.max(8, 90 * ai.ativas / totAI).toFixed(1)}%`, borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtInt(ai.ativas)}</span>
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>VENAL TERRITORIAL</div>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>INATIVAS / CANCELADAS</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
-                <div style={{ height: 70, width: `${Math.max(8, 90 * vc.terreno / venalMax).toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtMoney(vc.terreno)}</span>
+                <div style={{ height: 70, width: `${Math.max(8, 90 * ai.inativas / totAI).toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtInt(ai.inativas)}</span>
               </div>
             </div>
           </div>
@@ -307,26 +314,26 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
       {/* ===== ROW 2 ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '2.75fr 1fr', gap: 18, marginTop: 18 }}>
 
-        {/* IPTU Lançado × Arrecadado por Exercício */}
+        {/* Aberturas × Encerramentos */}
         <div style={{ position: 'relative', background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>IPTU Lançado × Arrecadado</span>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Aberturas × Encerramentos</span>
             <div style={{ display: 'flex', gap: 22, fontSize: 12, color: '#5b6477' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>IPTU Lançado (est.)</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>IPTU Arrecadado</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Aberturas</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>Encerramentos</span>
             </div>
           </div>
           <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 16, cursor: 'pointer' }}>
             <svg viewBox="0 0 1080 380" width="100%" style={{ display: 'block' }}>
               <defs>
-                <linearGradient id="imbLanc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
-                <linearGradient id="imbArr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
+                <linearGradient id="mobAb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
+                <linearGradient id="mobEn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
               </defs>
               <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
               {gb.bars.map((b, i) => (
                 <g key={i}>
-                  <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width="52" height={b.lanc.h.toFixed(1)} rx="7" fill="url(#imbLanc)" />
-                  <rect x={b.arr.x.toFixed(1)} y={b.arr.y.toFixed(1)} width="52" height={b.arr.h.toFixed(1)} rx="7" fill="url(#imbArr)" />
+                  <rect x={b.ab.x.toFixed(1)} y={b.ab.y.toFixed(1)} width="52" height={b.ab.h.toFixed(1)} rx="7" fill="url(#mobAb)" />
+                  <rect x={b.en.x.toFixed(1)} y={b.en.y.toFixed(1)} width="52" height={b.en.h.toFixed(1)} rx="7" fill="url(#mobEn)" />
                   <text x={b.cx.toFixed(1)} y="326" fontSize="15" fill="#3a4256" style={axisFont} textAnchor="middle">{b.ano}</text>
                 </g>
               ))}
@@ -336,13 +343,13 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
           </div>
         </div>
 
-        {/* Imóveis por Faixa de Valor Venal */}
+        {/* Empresas por Porte */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Imóveis por Faixa de Venal</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Empresas por Porte</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtInt(totFaixa)} imóveis</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtInt(totPorte)} classificadas</div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
             <svg viewBox="0 0 200 200" width="210" height="210">
               <g transform="rotate(-90 100 100)">
@@ -364,29 +371,26 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
         </div>
       </div>
 
-      {/* ===== Tabela: Exercícios de IPTU ===== */}
+      {/* ===== Tabela: Empresas por Segmento ===== */}
       <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Exercícios de IPTU</span>
+        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Empresas por Segmento</span>
         <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Exercício', 'Imóveis', 'Valor Venal', 'IPTU Lançado (est.)', 'IPTU Arrecadado', '% Arrec.'].map((h, i) => (
+                {['Segmento', 'Empresas', '% das Classificadas'].map((h, i) => (
                   <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {g.exercicios.map((row, ri) => {
+              {g.segmentos.map((row, ri) => {
                 const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
                 return (
-                  <tr key={row.ano}>
-                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.ano}</td>
+                  <tr key={row.nome}>
+                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.nome}</td>
                     <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtInt(row.qt)}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.venal)}</td>
-                    <td style={{ background: cellBg, color: row.lancado == null ? '#9098a8' : '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.lancado == null ? '—' : fmtReais(row.lancado)}</td>
-                    <td style={{ background: cellBg, color: '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.arrecadado)}</td>
-                    <td style={{ background: cellBg, color: row.pct == null ? '#9098a8' : '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{row.pct == null ? '—' : fmtPct(row.pct)}</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(row.pct)}</td>
                   </tr>
                 )
               })}
