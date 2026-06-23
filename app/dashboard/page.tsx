@@ -94,9 +94,9 @@ export default function DashboardPage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
             <span style={{ padding: '9px 20px', borderRadius: 24, background: '#283e93', color: '#ffffff', fontSize: 14, fontWeight: 500, boxShadow: '0 6px 14px rgba(40,62,147,0.35)' }}>Orçamento</span>
-            <span style={navTab}>Contribuinte</span>
+            <Link href="/contribuinte" style={navTab}>Contribuinte</Link>
             <Link href="/imobiliario" style={navTab}>Imobiliário</Link>
-            <span style={navTab}>Mobiliário</span>
+            <Link href="/mobiliario" style={navTab}>Mobiliário</Link>
             <span style={navTab}>Arrecada Mais</span>
             <Link href="/chat" style={navTab}>Chat</Link>
           </div>

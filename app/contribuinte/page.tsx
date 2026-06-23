@@ -3,56 +3,33 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import PainelImobiliario, { type FiltrosImobiliario } from './PainelImobiliario'
-import PainelItbi, { type FiltrosItbiUI } from './PainelItbi'
-import PainelMobiliario, { type FiltrosMobiliario } from '../mobiliario/PainelMobiliario'
-import { FAIXAS_VENAL } from '@/lib/imobiliario-filtros'
+import PainelContribuinte, { type FiltrosContribuinteUI } from './PainelContribuinte'
+import { PESSOAS, type PessoaOpt } from '@/lib/contribuinte-filtros'
 
-type Tributo = 'iptu' | 'itbi' | 'iss'
-interface NaturezaOpt { id: string; label: string }
-
-export default function ImobiliarioPage() {
+export default function ContribuintePage() {
   const router = useRouter()
   const [saudacao, setSaudacao] = useState('Bom dia')
-  const [tributo, setTributo] = useState<Tributo>('iptu')
 
-  // IPTU
-  const [optsIptu, setOptsIptu] = useState<{ anos: number[] }>({ anos: [] })
-  const [pAno, setPAno] = useState<number | ''>('')
-  const [pFaixa, setPFaixa] = useState<number | ''>('')
-
-  // ITBI
-  const [optsItbi, setOptsItbi] = useState<{ anos: number[]; naturezas: NaturezaOpt[] }>({ anos: [], naturezas: [] })
-  const [iAno, setIAno] = useState<number | ''>('')
-  const [iNat, setINat] = useState<string>('')
-
-  // ISS
-  const [optsIss, setOptsIss] = useState<{ anos: number[] }>({ anos: [] })
-  const [sAno, setSAno] = useState<number | ''>('')
+  const [opts, setOpts] = useState<{ anos: number[]; pessoas: PessoaOpt[] }>({ anos: [], pessoas: PESSOAS })
+  const [rAno, setRAno] = useState<number | ''>('')
+  const [rPessoa, setRPessoa] = useState<'' | 'F' | 'J'>('')
 
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
-    const v = new URLSearchParams(window.location.search).get('v')
-    if (v === 'iptu' || v === 'itbi' || v === 'iss') setTributo(v)
   }, [])
 
   useEffect(() => {
-    fetch('/api/imobiliario/filtros').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && !d.error) { setOptsIptu({ anos: d.anos ?? [] }); if (d.anos?.length) setPAno(d.anos[0]) }
-    }).catch(() => {})
-    fetch('/api/itbi/filtros').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && !d.error) { setOptsItbi({ anos: d.anos ?? [], naturezas: d.naturezas ?? [] }); if (d.anos?.length) setIAno(d.anos[0]) }
-    }).catch(() => {})
-    fetch('/api/mobiliario/filtros').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && !d.error) { setOptsIss({ anos: d.anos ?? [] }); if (d.anos?.length) setSAno(d.anos[0]) }
-    }).catch(() => {})
+    fetch('/api/contribuinte/filtros')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && !d.error) {
+          setOpts({ anos: d.anos ?? [], pessoas: d.pessoas ?? PESSOAS })
+          if (d.anos?.length) setRAno(d.anos[0])
+        }
+      })
+      .catch(() => {})
   }, [])
-
-  function selecionar(op: Tributo) {
-    setTributo(op)
-    window.history.replaceState(null, '', `?v=${op}`)
-  }
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -66,20 +43,12 @@ export default function ImobiliarioPage() {
   const selectPill: React.CSSProperties = {
     borderRadius: 22, padding: '9px 30px 9px 14px', fontSize: 13, fontWeight: 600, color: '#283e93',
     backgroundColor: '#fff', border: '1.5px solid #e3e9f5', boxShadow: '0 4px 12px rgba(40,80,180,0.04)',
-    fontFamily: 'inherit', cursor: 'pointer', maxWidth: 240,
+    fontFamily: 'inherit', cursor: 'pointer', maxWidth: 220,
     appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
     backgroundRepeat: 'no-repeat', backgroundPosition: 'right 11px center', backgroundImage: chevron('%23283e93'),
   }
 
-  const filtrosIptu: FiltrosImobiliario = { ano: pAno, faixa: pFaixa }
-  const filtrosItbi: FiltrosItbiUI = { ano: iAno, natureza: iNat }
-  const filtrosIss: FiltrosMobiliario = { ano: sAno, situacao: '' }
-
-  const TRIBUTOS: { id: Tributo; label: string }[] = [
-    { id: 'iptu', label: 'IPTU' },
-    { id: 'itbi', label: 'ITBI' },
-    { id: 'iss', label: 'ISS' },
-  ]
+  const filtros: FiltrosContribuinteUI = { ano: rAno, pessoa: rPessoa }
 
   return (
     <div style={{ minHeight: '100vh', background: '#eef2f9', padding: '26px 14px', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>
@@ -93,8 +62,8 @@ export default function ImobiliarioPage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
             <Link href="/dashboard" style={navTab}>Orçamento</Link>
-            <Link href="/contribuinte" style={navTab}>Contribuinte</Link>
-            <span style={navAtivo}>Imobiliário</span>
+            <span style={navAtivo}>Contribuinte</span>
+            <Link href="/imobiliario" style={navTab}>Imobiliário</Link>
             <Link href="/mobiliario" style={navTab}>Mobiliário</Link>
             <span style={navTab}>Arrecada Mais</span>
             <Link href="/chat" style={navTab}>Chat</Link>
@@ -114,65 +83,23 @@ export default function ImobiliarioPage() {
           </div>
         </div>
 
-        {/* ===== GREETING + TOGGLE ===== */}
+        {/* ===== GREETING ROW ===== */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 4px 0' }}>
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
             {saudacao}, <span style={{ color: '#7d8fce' }}>Roberta!</span>
           </h1>
-          <div role="radiogroup" aria-label="Tributo" style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
-            {TRIBUTOS.map(t => {
-              const ativo = tributo === t.id
-              return (
-                <button
-                  key={t.id}
-                  role="radio"
-                  aria-checked={ativo}
-                  onClick={() => selecionar(t.id)}
-                  style={{
-                    padding: '10px 26px', borderRadius: 24, border: 'none', cursor: 'pointer',
-                    fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontSize: 14,
-                    fontWeight: ativo ? 600 : 500,
-                    background: ativo ? '#283e93' : 'transparent', color: ativo ? '#fff' : '#5b6477',
-                    boxShadow: ativo ? '0 6px 14px rgba(40,62,147,0.35)' : 'none', transition: 'background .15s, color .15s',
-                  }}
-                >
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
         </div>
 
-        {/* ===== TOOLBAR (filtros por tributo) ===== */}
+        {/* ===== TOOLBAR (filtros) ===== */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 0', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            {tributo === 'iptu' && (
-              <>
-                <select aria-label="Exercício" value={pAno} onChange={e => setPAno(Number(e.target.value))} style={selectPill}>
-                  {optsIptu.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-                </select>
-                <select aria-label="Faixa de Valor Venal" value={pFaixa} onChange={e => setPFaixa(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
-                  <option value="">Faixa: Todas</option>
-                  {FAIXAS_VENAL.map(fx => <option key={fx.id} value={fx.id}>{fx.label}</option>)}
-                </select>
-              </>
-            )}
-            {tributo === 'itbi' && (
-              <>
-                <select aria-label="Exercício" value={iAno} onChange={e => setIAno(Number(e.target.value))} style={selectPill}>
-                  {optsItbi.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-                </select>
-                <select aria-label="Natureza da transação" value={iNat} onChange={e => setINat(e.target.value)} style={selectPill}>
-                  <option value="">Natureza: Todas</option>
-                  {optsItbi.naturezas.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
-                </select>
-              </>
-            )}
-            {tributo === 'iss' && (
-              <select aria-label="Exercício" value={sAno} onChange={e => setSAno(Number(e.target.value))} style={selectPill}>
-                {optsIss.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-              </select>
-            )}
+            <select aria-label="Exercício" value={rAno} onChange={e => setRAno(Number(e.target.value))} style={selectPill}>
+              {opts.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+            </select>
+            <select aria-label="Tipo de pessoa" value={rPessoa} onChange={e => setRPessoa(e.target.value as '' | 'F' | 'J')} style={selectPill}>
+              <option value="">Pessoa: Todas</option>
+              {opts.pessoas.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
@@ -188,9 +115,7 @@ export default function ImobiliarioPage() {
         </div>
 
         {/* ===== PAINEL ===== */}
-        {tributo === 'iptu' && <PainelImobiliario filtros={filtrosIptu} />}
-        {tributo === 'itbi' && <PainelItbi filtros={filtrosItbi} />}
-        {tributo === 'iss' && <PainelMobiliario filtros={filtrosIss} foco="arrecadacao" />}
+        <PainelContribuinte filtros={filtros} />
 
       </div>
     </div>

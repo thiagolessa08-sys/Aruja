@@ -62,7 +62,7 @@ export default function MobiliarioPage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
             <Link href="/dashboard" style={navTab}>Orçamento</Link>
-            <span style={navTab}>Contribuinte</span>
+            <Link href="/contribuinte" style={navTab}>Contribuinte</Link>
             <Link href="/imobiliario" style={navTab}>Imobiliário</Link>
             <span style={navAtivo}>Mobiliário</span>
             <span style={navTab}>Arrecada Mais</span>
