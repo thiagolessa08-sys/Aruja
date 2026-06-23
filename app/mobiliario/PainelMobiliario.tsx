@@ -107,9 +107,8 @@ function geomGauge(pct: number) {
   const ang = Math.PI - (p / 100) * Math.PI
   const ex = (cx + r * Math.cos(ang)).toFixed(1)
   const ey = (cy - r * Math.sin(ang)).toFixed(1)
-  const laf = p > 50 ? 1 : 0
   const bgPath = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`
-  const fillPath = p < 0.5 ? '' : `M ${cx - r} ${cy} A ${r} ${r} 0 ${laf} 1 ${ex} ${ey}`
+  const fillPath = p < 0.5 ? '' : `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${ex} ${ey}`
   const nLen = 56
   const nx = (cx + nLen * Math.cos(ang)).toFixed(1)
   const ny = (cy - nLen * Math.sin(ang)).toFixed(1)
