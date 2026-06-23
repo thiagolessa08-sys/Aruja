@@ -75,7 +75,7 @@ const NAT_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#aab8e3', '#e896
 
 // ===== Linha dupla: ITBI Arrecadado + Valor Movimentado (escala secundária) =====
 function geomLinhaDupla(porAno: PorAno[], exercicios: Exercicio[]) {
-  const xL = 38, xR = 590, yT = 22, yB = 140, n = porAno.length
+  const xL = 38, xR = 590, yT = 26, yB = 205, n = porAno.length
   if (!n) return null
   const X = (i: number) => n <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (n - 1)
 
@@ -111,11 +111,11 @@ function geomLinhaDupla(porAno: PorAno[], exercicios: Exercicio[]) {
         chart: 'linha' as const, title: String(p.ano),
         l1: `ITBI Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93',
         l2: `Valor Movimentado: ${fmtMi(mv * 1e6)}`, l2c: '#e8962e',
-        left: `${(X(i) / 630 * 100).toFixed(1)}%`, top: `${(Math.min(YA(p.arrecadado / 1e6), YM(mv)) / 160 * 100).toFixed(1)}%`,
+        left: `${(X(i) / 630 * 100).toFixed(1)}%`, top: `${(Math.min(YA(p.arrecadado / 1e6), YM(mv)) / 230 * 100).toFixed(1)}%`,
       },
     }
   })
-  return { linhaA, areaA, linhaM, dotsA, dotsM, ticksA, ticksM, labels, hot, W: 630, H: 160, yB, xL, xR }
+  return { linhaA, areaA, linhaM, dotsA, dotsM, ticksA, ticksM, labels, hot, W: 630, H: 230, yB, xL, xR }
 }
 
 // ===== Scatter/bolha: transmissões × ticket × arrecadado =====
@@ -253,7 +253,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1.2fr', gap: 18, marginTop: 20 }}>
 
         {/* LINHA DUPLA: ITBI Arrecadado + Valor Movimentado */}
-        <div style={card}>
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>ITBI Arrecadado vs Mercado</span>
             <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
@@ -262,8 +262,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
             </div>
           </div>
           {ld ? (
-            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
-              <svg viewBox={`0 0 ${ld.W} ${ld.H}`} width="100%" style={{ display: 'block' }}>
+            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
+              <svg viewBox={`0 0 ${ld.W} ${ld.H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
                 <defs>
                   <linearGradient id="areaItbiA" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#283e93" stopOpacity="0.22" />

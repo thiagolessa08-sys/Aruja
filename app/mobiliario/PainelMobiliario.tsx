@@ -78,16 +78,17 @@ const INSIGHTS_CAD = [
 
 // ===== Barras verticais: ISS por Ano =====
 function geomBarISS(d: PorAno[]) {
-  const W = 900, H = 240, top = 20, bottom = 190
+  const W = 900, H = 300, top = 30, bottom = 252
+  const span = bottom - top - 8
   const max = Math.max(1, ...d.map(p => p.iss))
   const n = Math.max(1, d.length)
   const gw = W / n
-  const bw = Math.min(64, gw * 0.5)
+  const bw = Math.min(72, gw * 0.52)
   const bars = d.map((p, i) => {
     const cx = i * gw + gw / 2
-    const h = ((p.iss / max) * (bottom - top - 8))
+    const h = ((p.iss / max) * span)
     return {
-      cx, ano: p.ano, x: cx - bw / 2, y: bottom - h, h,
+      cx, ano: p.ano, iss: p.iss, x: cx - bw / 2, y: bottom - h, h,
       tip: {
         chart: 'bar' as const, title: String(p.ano),
         l1: `ISS Arrecadado: ${fmtMi(p.iss)}`, l1c: '#283e93',
@@ -96,7 +97,7 @@ function geomBarISS(d: PorAno[]) {
     }
   })
   const tickVals = [max, max / 2, 0]
-  const ticks = tickVals.map(v => ({ v: Math.round(v / 1e6), y: bottom - ((v / max) * (bottom - top - 8)) }))
+  const ticks = tickVals.map(v => ({ v: Math.round(v / 1e6), y: bottom - ((v / max) * span) }))
   return { bars, ticks, W, H, bottom, bw }
 }
 
@@ -118,9 +119,9 @@ function geomGauge(pct: number) {
 // ===== Lollipop: saldo aberturas − encerramentos =====
 function geomLollipop(d: AbEnc[]) {
   const saldos = d.map(x => ({ ano: x.ano, saldo: x.aberturas - x.encerramentos, ab: x.aberturas, enc: x.encerramentos }))
-  const W = 900, H = 300, mid = 150
+  const W = 900, H = 330, mid = 162
   const maxAbs = Math.max(1, ...saldos.map(s => Math.abs(s.saldo)))
-  const scale = (v: number) => (Math.abs(v) / maxAbs) * (mid - 30)
+  const scale = (v: number) => (Math.abs(v) / maxAbs) * (mid - 44)
   const n = Math.max(1, saldos.length)
   const gw = W / n
   const pts = saldos.map((s, i) => {
@@ -247,13 +248,13 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
       <div style={{ display: 'grid', gridTemplateColumns: '1.68fr 1fr 1.32fr', gap: 18, marginTop: 20 }}>
 
         {/* BARRAS VERTICAIS: ISS Arrecadado por Ano */}
-        <div style={card}>
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>ISS Arrecadado por Ano</span>
             <span style={reportBadge}>Anual</span>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
-            <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" style={{ display: 'block' }}>
+          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
+            <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
               <defs>
                 <linearGradient id="issBar" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#283e93" />
@@ -270,8 +271,8 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
               {gb.bars.map((b, i) => (
                 <g key={i}>
                   <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="7" fill="url(#issBar)" />
-                  <text x={b.cx.toFixed(1)} y={String(gb.H - 4)} fontSize="11" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
-                  <text x={b.cx.toFixed(1)} y={(b.y - 6).toFixed(1)} fontSize="9" fill="#283e93" fontWeight="600" textAnchor="middle" style={axisFont}>{fmtMi(b.ano)}</text>
+                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="12" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
+                  <text x={b.cx.toFixed(1)} y={(b.y - 7).toFixed(1)} fontSize="11" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtMi(b.iss)}</text>
                 </g>
               ))}
               {gb.bars.map((b, i) => (
@@ -314,7 +315,7 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
             <span style={dots}>···</span>
           </div>
           <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>% empresas ativas na base</div>
-          <div style={{ position: 'relative', marginTop: 4 }}>
+          <div style={{ position: 'relative', marginTop: 4, maxWidth: 250, marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
             <svg viewBox="0 0 200 130" width="100%" style={{ display: 'block' }}>
               <path d={gg.bgPath} fill="none" stroke="#e9edf8" strokeWidth="18" strokeLinecap="round" />
               {gg.fillPath ? (
@@ -350,7 +351,7 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
       <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
 
         {/* LOLLIPOP: Saldo de Empresas (aberturas − encerramentos) */}
-        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
+        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Saldo Empresarial</span>
@@ -361,32 +362,26 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#d64545', display: 'inline-block' }}></span>Negativo</span>
             </div>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
-            <svg viewBox={`0 0 ${lp.W} ${lp.H}`} width="100%" style={{ display: 'block' }}>
+          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
+            <svg viewBox={`0 0 ${lp.W} ${lp.H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
               {/* Linha zero */}
               <line x1="0" y1={lp.mid} x2={String(lp.W)} y2={lp.mid} stroke="#e3e8f1" strokeWidth="1.5" strokeDasharray="4 3" />
-              <text x="4" y={lp.mid - 4} fontSize="9" fill="#9098a8" style={axisFont}>0</text>
+              <text x="4" y={lp.mid - 5} fontSize="10" fill="#9098a8" style={axisFont}>0</text>
               {lp.pts.map((p, i) => (
                 <g key={i} onMouseEnter={() => setTip(p.tip)}>
                   {/* Linha (bastão) */}
                   <line x1={p.x1.toFixed(1)} y1={String(lp.mid)} x2={p.x2.toFixed(1)} y2={p.cy.toFixed(1)}
                     stroke={p.pos ? '#1fa463' : '#d64545'} strokeWidth="2.5" strokeLinecap="round" />
                   {/* Bola */}
-                  <circle cx={p.cx.toFixed(1)} cy={p.cy.toFixed(1)} r="9"
+                  <circle cx={p.cx.toFixed(1)} cy={p.cy.toFixed(1)} r="7"
                     fill={p.pos ? '#1fa463' : '#d64545'} stroke="#fff" strokeWidth="2" />
-                  {/* Valor dentro da bola (apenas se couber) */}
-                  {Math.abs(p.saldo) < 1000 ? (
-                    <text x={p.cx.toFixed(1)} y={(p.cy + 3).toFixed(1)} fontSize="7" fill="#fff" textAnchor="middle" fontWeight="700" style={axisFont}>
-                      {p.saldo >= 0 ? '+' : ''}{fmtInt(p.saldo)}
-                    </text>
-                  ) : null}
-                  {/* Rótulo valor acima/abaixo */}
-                  <text x={p.cx.toFixed(1)} y={p.pos ? (p.cy - 13).toFixed(1) : (p.cy + 20).toFixed(1)}
-                    fontSize="9" fill={p.pos ? '#1fa463' : '#d64545'} textAnchor="middle" fontWeight="700" style={axisFont}>
+                  {/* Rótulo valor acima/abaixo da bola */}
+                  <text x={p.cx.toFixed(1)} y={p.pos ? (p.cy - 13).toFixed(1) : (p.cy + 21).toFixed(1)}
+                    fontSize="11" fill={p.pos ? '#1fa463' : '#d64545'} textAnchor="middle" fontWeight="700" style={axisFont}>
                     {p.saldo >= 0 ? '+' : ''}{fmtInt(p.saldo)}
                   </text>
                   {/* Ano */}
-                  <text x={p.cx.toFixed(1)} y={String(lp.H - 4)} fontSize="10" fill="#3a4256" textAnchor="middle" style={axisFont}>{p.ano}</text>
+                  <text x={p.cx.toFixed(1)} y={String(lp.H - 6)} fontSize="11" fill="#3a4256" textAnchor="middle" style={axisFont}>{p.ano}</text>
                 </g>
               ))}
             </svg>
