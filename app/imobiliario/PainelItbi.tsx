@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 
 export interface FiltrosItbiUI { ano: number | ''; natureza: string }
 
-interface Tip { chart: 'linha' | 'bar'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
+interface Tip { chart: 'linha' | 'scatter'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string; l3?: string }
 
 interface PorAno { ano: number; arrecadado: number }
 interface Transm { ano: number; qt: number }
@@ -28,7 +28,6 @@ const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFraction
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
-// ===== Fallbacks (valores reais validados no IQ) =====
 const KPIS_FALLBACK: KpiCard[] = [
   { label: 'ITBI Arrecadado', value: 'R$ 9,22 mi', subLabel: 'Ano Anterior', subValue: 'R$ 26,01 mi', pct: '-64,56%', dir: 'down' },
   { label: 'Transmissões', value: '528', subLabel: 'Ano Anterior', subValue: '1.430', pct: '-63,08%', dir: 'down' },
@@ -74,45 +73,78 @@ const INSIGHTS_FALLBACK = [
 
 const NAT_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#aab8e3', '#e8962e', '#c0612a']
 
-// ===== Geometria: linha "ITBI Arrecadado por Ano" =====
-function geomLinha(d: PorAno[]) {
-  const mi = (v: number) => v / 1e6
-  const vals = d.map(p => mi(p.arrecadado))
-  const hi = Math.ceil(Math.max(1, ...vals) / 5) * 5
-  const lo = 0
-  const xL = 34, xR = 290, yT = 20, yB = 112, span = hi - lo || 1
-  const n = d.length
+// ===== Linha dupla: ITBI Arrecadado + Valor Movimentado (escala secundária) =====
+function geomLinhaDupla(porAno: PorAno[], exercicios: Exercicio[]) {
+  const xL = 38, xR = 590, yT = 22, yB = 140, n = porAno.length
+  if (!n) return null
   const X = (i: number) => n <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (n - 1)
-  const Y = (vMi: number) => yT + ((hi - vMi) / span) * (yB - yT)
-  const linha = d.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(mi(p.arrecadado)).toFixed(1)}`).join(' ')
-  const area = n ? `${linha} L${X(n - 1).toFixed(1)} ${yB} L${X(0).toFixed(1)} ${yB} Z` : ''
-  const ticks = [hi, (hi + lo) / 2, lo].map(t => ({ v: Math.round(t), y: Y(t) }))
-  const labels = d.map((p, i) => ({ ano: p.ano, x: X(i) }))
-  const dots = d.map((p, i) => ({ x: X(i), y: Y(mi(p.arrecadado)) }))
-  const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
-  const hot = d.map((p, i) => ({
-    x: X(i) - half, w: half * 2,
-    tip: { chart: 'linha' as const, title: String(p.ano), l1: `ITBI Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
-  }))
-  return { linha, area, ticks, labels, dots, hot }
-}
 
-// ===== Geometria: barras simples "Transmissões por Ano" =====
-function geomBar(d: Transm[]) {
-  const W = 1080, H = 380, top = 40, bottom = 300
-  const max = Math.max(1, ...d.map(m => m.qt))
-  const sc = (v: number) => (v / max) * (bottom - top - 10)
-  const n = Math.max(1, d.length)
-  const gw = W / n
-  const bars = d.map((m, i) => {
-    const cx = i * gw + gw / 2
-    const h = sc(m.qt)
+  // Escala arrecadado (eixo esquerdo)
+  const arrVals = porAno.map(p => p.arrecadado / 1e6)
+  const hiA = Math.ceil(Math.max(1, ...arrVals) / 5) * 5
+  const YA = (v: number) => yT + ((hiA - v) / (hiA || 1)) * (yB - yT)
+
+  // Escala movimentado (eixo direito) — mesmos pontos temporais
+  const movByAno = new Map(exercicios.map(e => [e.ano, e.movimentado / 1e6]))
+  const movVals = porAno.map(p => movByAno.get(p.ano) ?? 0)
+  const hiM = Math.ceil(Math.max(1, ...movVals) / 50) * 50
+  const YM = (v: number) => yT + ((hiM - v) / (hiM || 1)) * (yB - yT)
+
+  const linhaA = porAno.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${YA(p.arrecadado / 1e6).toFixed(1)}`).join(' ')
+  const areaA = `${linhaA} L${X(n - 1).toFixed(1)} ${yB} L${X(0).toFixed(1)} ${yB} Z`
+  const linhaM = porAno.map((p, i) => {
+    const mv = movByAno.get(p.ano) ?? 0
+    return `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${YM(mv).toFixed(1)}`
+  }).join(' ')
+
+  const dotsA = porAno.map((p, i) => ({ x: X(i), y: YA(p.arrecadado / 1e6) }))
+  const dotsM = porAno.map((p, i) => ({ x: X(i), y: YM(movByAno.get(p.ano) ?? 0) }))
+  const ticksA = [hiA, hiA / 2, 0].map(t => ({ v: Math.round(t), y: YA(t) }))
+  const ticksM = [hiM, hiM / 2, 0].map(t => ({ v: Math.round(t), y: YM(t) }))
+  const labels = porAno.map((p, i) => ({ ano: p.ano, x: X(i) }))
+  const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 60
+  const hot = porAno.map((p, i) => {
+    const mv = movByAno.get(p.ano) ?? 0
     return {
-      cx, ano: m.ano, x: cx - 34, y: bottom - h, h,
-      tip: { chart: 'bar' as const, title: String(m.ano), l1: `Transmissões: ${fmtInt(m.qt)}`, l1c: '#283e93', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - h) / H * 100).toFixed(1)}%` },
+      x: X(i) - half, w: half * 2,
+      tip: {
+        chart: 'linha' as const, title: String(p.ano),
+        l1: `ITBI Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93',
+        l2: `Valor Movimentado: ${fmtMi(mv * 1e6)}`, l2c: '#e8962e',
+        left: `${(X(i) / 630 * 100).toFixed(1)}%`, top: `${(Math.min(YA(p.arrecadado / 1e6), YM(mv)) / 160 * 100).toFixed(1)}%`,
+      },
     }
   })
-  return { bars, W, H, bottom }
+  return { linhaA, areaA, linhaM, dotsA, dotsM, ticksA, ticksM, labels, hot, W: 630, H: 160, yB, xL, xR }
+}
+
+// ===== Scatter/bolha: transmissões × ticket × arrecadado =====
+function geomScatter(exercicios: Exercicio[]) {
+  const validos = exercicios.filter(e => e.transmissoes > 0 && e.ticket > 0)
+  if (!validos.length) return null
+  const xL = 50, xR = 560, yT = 20, yB = 220
+  const maxT = Math.max(...validos.map(e => e.transmissoes))
+  const maxK = Math.max(...validos.map(e => e.ticket))
+  const maxA = Math.max(1, ...validos.map(e => e.arrecadado))
+  const minA = Math.min(...validos.map(e => e.arrecadado))
+  const X = (t: number) => xL + (t / maxT) * (xR - xL)
+  const Y = (k: number) => yT + ((maxK - k) / maxK) * (yB - yT)
+  const R = (a: number) => 8 + ((a - minA) / (maxA - minA || 1)) * 18
+  const ticksX = [0, Math.round(maxT / 2), maxT].map(v => ({ v, x: X(v) }))
+  const ticksY = [0, Math.round(maxK / 2), maxK].map(v => ({ v: (v / 1000).toFixed(0) + 'k', y: Y(v) }))
+  const pts = validos.map(e => ({
+    ano: e.ano, x: X(e.transmissoes), y: Y(e.ticket), r: R(e.arrecadado),
+    arrec: e.arrecadado, ticket: e.ticket, transm: e.transmissoes,
+    tip: {
+      chart: 'scatter' as const, title: String(e.ano),
+      l1: `Transmissões: ${fmtInt(e.transmissoes)}`, l1c: '#283e93',
+      l2: `Ticket Médio: ${fmtMoney(e.ticket)}`, l2c: '#5870c4',
+      l3: e.arrecadado ? `ITBI Arrecadado: ${fmtMi(e.arrecadado)}` : undefined,
+      left: `${(X(e.transmissoes) / 600 * 100).toFixed(1)}%`,
+      top: `${(Y(e.ticket) / 240 * 100).toFixed(1)}%`,
+    },
+  }))
+  return { pts, ticksX, ticksY, W: 600, H: 240, xL, yT, yB, xR }
 }
 
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
@@ -150,26 +182,20 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK)).catch(() => setInsights(INSIGHTS_FALLBACK))
   }, [qs])
 
-  const tipLinha = tip && tip.chart === 'linha' ? tip : null
-  const tipBar = tip && tip.chart === 'bar' ? tip : null
-
   const g = graf ?? FALLBACK_GRAF
-  const gl = geomLinha(g.porAno)
-  const gb = geomBar(g.transmissoes)
+  const ld = geomLinhaDupla(g.porAno, g.exercicios)
+  const sc = geomScatter(g.exercicios)
 
-  // Donut — natureza da transação
+  // Natureza — barras horizontais ranqueadas
   const totNat = g.naturezas.reduce((s, n) => s + n.qt, 0)
-  const donutC = 2 * Math.PI * 66
-  let _off = 0
-  const donut = g.naturezas.map((nt, i) => {
-    const len = totNat ? (nt.qt / totNat) * donutC : 0
-    const seg = { nome: nt.label, v: nt.qt, cor: NAT_CORES[i % NAT_CORES.length], len, off: -_off, pct: totNat ? (nt.qt / totNat) * 100 : 0 }
-    _off += len
-    return seg
-  })
+  const maxNat = Math.max(1, ...g.naturezas.map(n => n.qt))
 
+  // Financiamento — donut
   const fc = g.financiamento
-  const finMax = Math.max(fc.financiado, fc.naoFinanciado) || 1
+  const totFin = (fc.financiado + fc.naoFinanciado) || 1
+  const donutC = 2 * Math.PI * 52
+  const pctNF = fc.naoFinanciado / totFin
+  const lenNF = pctNF * donutC
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -183,11 +209,10 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 5 }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l1c }}></span>{t.l1}
         </div>
-        {t.l2 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
-          </div>
-        ) : null}
+        {t.l2 ? <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
+        </div> : null}
+        {t.l3 ? <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>{t.l3}</div> : null}
       </div>
     )
   }
@@ -225,37 +250,60 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       </div>
 
       {/* ===== ROW 1 ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.68fr 1fr 1.32fr', gap: 18, marginTop: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1.2fr', gap: 18, marginTop: 20 }}>
 
-        {/* ITBI Arrecadado por Ano */}
+        {/* LINHA DUPLA: ITBI Arrecadado + Valor Movimentado */}
         <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>ITBI Arrecadado por Ano</span>
-            <span style={reportBadge}>Anual</span>
-          </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
-            <div style={{ position: 'absolute', left: 30, top: -2, display: 'flex', gap: 10, zIndex: 2 }}>
-              <span style={{ background: '#283e93', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>Arrecadado</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>ITBI Arrecadado vs Mercado</span>
+            <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 18, height: 3, background: '#283e93', display: 'inline-block', borderRadius: 2 }}></span>Arrecadado</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 18, height: 3, background: '#e8962e', display: 'inline-block', borderRadius: 2 }}></span>Movimentado</span>
             </div>
-            <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="areaItbi" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#283e93" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#283e93" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {gl.ticks.map((t, i) => (<text key={i} x="4" y={(t.y + 3).toFixed(1)} fontSize="6.5" fill="#aeb6c6" style={axisFont}>{t.v}</text>))}
-              <path d={gl.area} fill="url(#areaItbi)" stroke="none" />
-              <path d={gl.linha} fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              {gl.dots.map((p, i) => (<circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />))}
-              {gl.labels.map((l, i) => (<text key={i} x={l.x.toFixed(1)} y="126" fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>))}
-              {gl.hot.map((r, i) => (<rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height="120" fill="transparent" pointerEvents="all" />))}
-            </svg>
-            {tipLinha ? <Tooltip t={tipLinha} /> : null}
+          </div>
+          {ld ? (
+            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
+              <svg viewBox={`0 0 ${ld.W} ${ld.H}`} width="100%" style={{ display: 'block' }}>
+                <defs>
+                  <linearGradient id="areaItbiA" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#283e93" stopOpacity="0.22" />
+                    <stop offset="100%" stopColor="#283e93" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                {/* Grid lines */}
+                {ld.ticksA.map((t, i) => (
+                  <g key={i}>
+                    <line x1={ld.xL} y1={t.y.toFixed(1)} x2={ld.xR} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
+                    <text x="4" y={(t.y + 3).toFixed(1)} fontSize="7" fill="#aeb6c6" style={axisFont}>{t.v}</text>
+                  </g>
+                ))}
+                {/* Eixo direito (movimentado) */}
+                {ld.ticksM.map((t, i) => (
+                  <text key={i} x={String(ld.W - 2)} y={(t.y + 3).toFixed(1)} fontSize="7" fill="#e8962e" textAnchor="end" style={axisFont}>{t.v}</text>
+                ))}
+                {/* Área e linha arrecadado */}
+                <path d={ld.areaA} fill="url(#areaItbiA)" />
+                <path d={ld.linhaA} fill="none" stroke="#283e93" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                {ld.dotsA.map((p, i) => <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />)}
+                {/* Linha movimentado (tracejada, laranja) */}
+                <path d={ld.linhaM} fill="none" stroke="#e8962e" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" strokeLinejoin="round" />
+                {ld.dotsM.map((p, i) => <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#e8962e" stroke="#fff" strokeWidth="1.5" />)}
+                {/* Labels eixo X */}
+                {ld.labels.map((l, i) => <text key={i} x={l.x.toFixed(1)} y={String(ld.H - 4)} fontSize="7.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>)}
+                {/* Hit areas */}
+                {ld.hot.map((r, i) => <rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height={String(ld.H)} fill="transparent" pointerEvents="all" />)}
+              </svg>
+              {tip?.chart === 'linha' ? <Tooltip t={tip} /> : null}
+            </div>
+          ) : (
+            <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9098a8', fontSize: 13 }}>Sem dados</div>
+          )}
+          <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 4, textAlign: 'right' }}>
+            Eixo esq.: ITBI arrecadado (R$ mi) · Eixo dir.: valor movimentado (R$ mi)
           </div>
         </div>
 
-        {/* Insights de ITBI */}
+        {/* Insights */}
         <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -280,88 +328,122 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           )}
         </div>
 
-        {/* Composição do Financiamento */}
+        {/* Barras horizontais ranqueadas: Natureza da Transação */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Financiamento da Aquisição</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Natureza da Transação</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>NÃO FINANCIADO</div>
-              <div style={{ height: 70, width: `${Math.max(8, 90 * fc.naoFinanciado / finMax).toFixed(1)}%`, borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtMoney(fc.naoFinanciado)}</span>
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>FINANCIADO</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
-                <div style={{ height: 70, width: `${Math.max(8, 90 * fc.financiado / finMax).toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtMoney(fc.financiado)}</span>
-              </div>
-            </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtInt(totNat)} transações</div>
+          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+            {g.naturezas.map((nt, i) => {
+              const w = (nt.qt / maxNat) * 100
+              const pct = totNat ? (nt.qt / totNat) * 100 : 0
+              return (
+                <div key={nt.id}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: '#3a4256', lineHeight: 1.2 }}>{nt.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#1f2a44', flex: 'none', marginLeft: 6 }}>
+                      {fmtInt(nt.qt)} <span style={{ color: '#9098a8', fontWeight: 400 }}>({fmtPct(pct)})</span>
+                    </span>
+                  </div>
+                  <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: NAT_CORES[i % NAT_CORES.length], borderRadius: 5 }} />
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
 
       {/* ===== ROW 2 ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2.75fr 1fr', gap: 18, marginTop: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr', gap: 18, marginTop: 18 }}>
 
-        {/* Transmissões por Ano */}
-        <div style={{ position: 'relative', background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
+        {/* SCATTER: Transmissões × Ticket Médio (tamanho = ITBI arrecadado) */}
+        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Transmissões por Ano</span>
-            <div style={{ display: 'flex', gap: 22, fontSize: 12, color: '#5b6477' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Nº de transmissões</span>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Mercado Imobiliário por Exercício</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+                Eixo X: nº de transmissões · Eixo Y: ticket médio · Tamanho: ITBI arrecadado
+              </div>
             </div>
+            <span style={reportBadge}>Scatter</span>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 16, cursor: 'pointer' }}>
-            <svg viewBox="0 0 1080 380" width="100%" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="itbiBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
-              </defs>
-              <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-              {gb.bars.map((b, i) => (
-                <g key={i}>
-                  <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width="68" height={b.h.toFixed(1)} rx="7" fill="url(#itbiBar)" />
-                  <text x={b.cx.toFixed(1)} y="326" fontSize="15" fill="#3a4256" style={axisFont} textAnchor="middle">{b.ano}</text>
-                </g>
-              ))}
-              {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - 60).toFixed(1)} y="40" width="120" height="260" fill="transparent" pointerEvents="all" />))}
-            </svg>
-            {tipBar ? <Tooltip t={tipBar} /> : null}
-          </div>
+          {sc ? (
+            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
+              <svg viewBox={`0 0 ${sc.W} ${sc.H}`} width="100%" style={{ display: 'block' }}>
+                <defs>
+                  <radialGradient id="bubbleGrad" cx="35%" cy="35%" r="65%">
+                    <stop offset="0%" stopColor="#5870c4" stopOpacity="0.9" />
+                    <stop offset="100%" stopColor="#283e93" stopOpacity="0.7" />
+                  </radialGradient>
+                </defs>
+                {/* Grid */}
+                {sc.ticksY.map((t, i) => (
+                  <g key={i}>
+                    <line x1={sc.xL} y1={t.y.toFixed(1)} x2={sc.xR} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
+                    <text x="4" y={(t.y + 3).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v}</text>
+                  </g>
+                ))}
+                <line x1={sc.xL} y1={sc.yT} x2={sc.xL} y2={sc.yB} stroke="#e3e8f1" strokeWidth="1" />
+                <line x1={sc.xL} y1={sc.yB} x2={sc.xR} y2={sc.yB} stroke="#e3e8f1" strokeWidth="1" />
+                {sc.ticksX.map((t, i) => (
+                  <text key={i} x={t.x.toFixed(1)} y={String(sc.H - 4)} fontSize="8" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{fmtInt(t.v)}</text>
+                ))}
+                {/* Bolhas */}
+                {sc.pts.map((p, i) => (
+                  <g key={i} onMouseEnter={() => setTip(p.tip)} style={{ cursor: 'pointer' }}>
+                    <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill="url(#bubbleGrad)" stroke="#fff" strokeWidth="2" />
+                    <text x={p.x.toFixed(1)} y={(p.y - p.r - 4).toFixed(1)} fontSize="8.5" fill="#283e93" textAnchor="middle" fontWeight="600" style={axisFont}>{p.ano}</text>
+                  </g>
+                ))}
+              </svg>
+              {tip?.chart === 'scatter' ? <Tooltip t={tip} /> : null}
+            </div>
+          ) : (
+            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9098a8' }}>Sem dados</div>
+          )}
         </div>
 
-        {/* Natureza da Transação */}
+        {/* DONUT: Financiamento */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Natureza da Transação</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Forma de Aquisição</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtInt(totNat)} transações</div>
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
-            <svg viewBox="0 0 200 200" width="210" height="210">
+          <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>% do valor movimentado</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, position: 'relative' }}>
+            <svg viewBox="0 0 200 200" width="190" height="190">
               <g transform="rotate(-90 100 100)">
-                {donut.map((s, i) => (
-                  <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
-                ))}
+                <circle cx="100" cy="100" r="52" fill="none" stroke="#e8962e" strokeWidth="28"
+                  strokeDasharray={`${donutC.toFixed(1)} 0`} />
+                <circle cx="100" cy="100" r="52" fill="none" stroke="#283e93" strokeWidth="28"
+                  strokeDasharray={`${lenNF.toFixed(1)} ${(donutC - lenNF).toFixed(1)}`} />
               </g>
+              <text x="100" y="92" fontSize="17" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>
+                {fmtPct(pctNF * 100)}
+              </text>
+              <text x="100" y="110" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>não financiado</text>
             </svg>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 16 }}>
-            {donut.map((s, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+            {[
+              { cor: '#283e93', label: 'Não Financiado', v: fc.naoFinanciado },
+              { cor: '#e8962e', label: 'Financiado', v: fc.financiado },
+            ].map(s => (
+              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ width: 12, height: 12, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.label}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtMoney(s.v)}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ===== Tabela: Exercícios de ITBI ===== */}
+      {/* ===== Tabela ===== */}
       <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
         <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Exercícios de ITBI</span>
         <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
@@ -379,9 +461,9 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 return (
                   <tr key={row.ano}>
                     <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.ano}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtInt(row.transmissoes)}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.movimentado)}</td>
-                    <td style={{ background: cellBg, color: row.arrecadado ? '#c0612a' : '#9098a8', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.arrecadado ? fmtReais(row.arrecadado) : '—'}</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtInt(row.transmissoes)}</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.movimentado)}</td>
+                    <td style={{ background: cellBg, color: row.arrecadado ? '#c0612a' : '#9098a8', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.arrecadado ? fmtReais(row.arrecadado) : '—'}</td>
                     <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtReais(row.ticket)}</td>
                   </tr>
                 )

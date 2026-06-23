@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 
 export interface FiltrosMobiliario { ano: number | ''; situacao: string }
 
-interface Tip { chart: 'linha' | 'bar'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
+interface Tip { chart: 'bar' | 'lollipop'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
 
 interface PorAno { ano: number; iss: number }
 interface AbEnc { ano: number; aberturas: number; encerramentos: number }
@@ -26,7 +26,6 @@ const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFraction
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
-// ===== Fallbacks (valores reais validados no IQ) =====
 const KPIS_CAD: KpiCard[] = [
   { label: 'Empresas Cadastradas', value: '37.066', subLabel: 'Ativas', subValue: '18.384', pct: '49,6%', dir: 'up' },
   { label: 'Empresas Ativas', value: '18.384', subLabel: 'Inativas', subValue: '18.682', pct: '49,6%', dir: 'down' },
@@ -77,47 +76,72 @@ const INSIGHTS_CAD = [
   'ISS arrecadado de R$ 43,5 mi em 2026 — o principal tributo do cadastro mobiliário.',
 ]
 
-const PORTE_CORES = ['#283e93', '#5870c4', '#aab8e3', '#e8962e']
-
-function geomLinha(d: PorAno[]) {
-  const mi = (v: number) => v / 1e6
-  const vals = d.map(p => mi(p.iss))
-  const hi = Math.ceil(Math.max(1, ...vals) / 10) * 10
-  const lo = 0
-  const xL = 34, xR = 290, yT = 20, yB = 112, span = hi - lo || 1
-  const n = d.length
-  const X = (i: number) => n <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (n - 1)
-  const Y = (vMi: number) => yT + ((hi - vMi) / span) * (yB - yT)
-  const linha = d.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(mi(p.iss)).toFixed(1)}`).join(' ')
-  const area = n ? `${linha} L${X(n - 1).toFixed(1)} ${yB} L${X(0).toFixed(1)} ${yB} Z` : ''
-  const ticks = [hi, (hi + lo) / 2, lo].map(t => ({ v: Math.round(t), y: Y(t) }))
-  const labels = d.map((p, i) => ({ ano: p.ano, x: X(i) }))
-  const dots = d.map((p, i) => ({ x: X(i), y: Y(mi(p.iss)) }))
-  const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
-  const hot = d.map((p, i) => ({
-    x: X(i) - half, w: half * 2,
-    tip: { chart: 'linha' as const, title: String(p.ano), l1: `ISS Arrecadado: ${fmtMi(p.iss)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.iss)) / 130 * 100).toFixed(1)}%` },
-  }))
-  return { linha, area, ticks, labels, dots, hot }
-}
-
-function geomBar(d: AbEnc[]) {
-  const W = 1080, H = 380, top = 40, bottom = 300
-  const max = Math.max(1, ...d.flatMap(m => [m.aberturas, m.encerramentos]))
-  const sc = (v: number) => (v / max) * (bottom - top - 10)
+// ===== Barras verticais: ISS por Ano =====
+function geomBarISS(d: PorAno[]) {
+  const W = 900, H = 240, top = 20, bottom = 190
+  const max = Math.max(1, ...d.map(p => p.iss))
   const n = Math.max(1, d.length)
   const gw = W / n
-  const bars = d.map((m, i) => {
+  const bw = Math.min(64, gw * 0.5)
+  const bars = d.map((p, i) => {
     const cx = i * gw + gw / 2
-    const hA = sc(m.aberturas), hE = sc(m.encerramentos)
+    const h = ((p.iss / max) * (bottom - top - 8))
     return {
-      cx, ano: m.ano,
-      ab: { x: cx - 60, y: bottom - hA, h: hA },
-      en: { x: cx + 8, y: bottom - hE, h: hE },
-      tip: { chart: 'bar' as const, title: String(m.ano), l1: `Aberturas: ${fmtInt(m.aberturas)}`, l1c: '#283e93', l2: `Encerramentos: ${fmtInt(m.encerramentos)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hA, hE)) / H * 100).toFixed(1)}%` },
+      cx, ano: p.ano, x: cx - bw / 2, y: bottom - h, h,
+      tip: {
+        chart: 'bar' as const, title: String(p.ano),
+        l1: `ISS Arrecadado: ${fmtMi(p.iss)}`, l1c: '#283e93',
+        left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - h) / H * 100).toFixed(1)}%`,
+      },
     }
   })
-  return { bars, W, H, bottom }
+  const tickVals = [max, max / 2, 0]
+  const ticks = tickVals.map(v => ({ v: Math.round(v / 1e6), y: bottom - ((v / max) * (bottom - top - 8)) }))
+  return { bars, ticks, W, H, bottom, bw }
+}
+
+// ===== Gauge semicircular: % empresas ativas =====
+function geomGauge(pct: number) {
+  const p = Math.max(0, Math.min(99.9, pct))
+  const cx = 100, cy = 108, r = 74
+  const ang = Math.PI - (p / 100) * Math.PI
+  const ex = (cx + r * Math.cos(ang)).toFixed(1)
+  const ey = (cy - r * Math.sin(ang)).toFixed(1)
+  const laf = p > 50 ? 1 : 0
+  const bgPath = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`
+  const fillPath = p < 0.5 ? '' : `M ${cx - r} ${cy} A ${r} ${r} 0 ${laf} 1 ${ex} ${ey}`
+  const nLen = 56
+  const nx = (cx + nLen * Math.cos(ang)).toFixed(1)
+  const ny = (cy - nLen * Math.sin(ang)).toFixed(1)
+  return { bgPath, fillPath, p, cx, cy, nx, ny }
+}
+
+// ===== Lollipop: saldo aberturas − encerramentos =====
+function geomLollipop(d: AbEnc[]) {
+  const saldos = d.map(x => ({ ano: x.ano, saldo: x.aberturas - x.encerramentos, ab: x.aberturas, enc: x.encerramentos }))
+  const W = 900, H = 300, mid = 150
+  const maxAbs = Math.max(1, ...saldos.map(s => Math.abs(s.saldo)))
+  const scale = (v: number) => (Math.abs(v) / maxAbs) * (mid - 30)
+  const n = Math.max(1, saldos.length)
+  const gw = W / n
+  const pts = saldos.map((s, i) => {
+    const cx = i * gw + gw / 2
+    const len = scale(s.saldo)
+    const pos = s.saldo >= 0
+    return {
+      cx, ano: s.ano, saldo: s.saldo, pos,
+      x1: cx, y1: mid,
+      x2: cx, y2: pos ? mid - len : mid + len,
+      cy: pos ? mid - len : mid + len,
+      tip: {
+        chart: 'lollipop' as const, title: String(s.ano),
+        l1: `Saldo: ${s.saldo >= 0 ? '+' : ''}${fmtInt(s.saldo)}`, l1c: s.saldo >= 0 ? '#1fa463' : '#d64545',
+        l2: `Aberturas: ${fmtInt(s.ab)}`, l2c: '#283e93',
+        left: `${(cx / W * 100).toFixed(1)}%`, top: `${(Math.min(mid, pos ? mid - len : mid + len) / H * 100).toFixed(1)}%`,
+      },
+    }
+  })
+  return { pts, W, H, mid }
 }
 
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
@@ -157,26 +181,17 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
       .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_CAD)).catch(() => setInsights(INSIGHTS_CAD))
   }, [qs])
 
-  const tipLinha = tip && tip.chart === 'linha' ? tip : null
-  const tipBar = tip && tip.chart === 'bar' ? tip : null
-
   const g = graf ?? FALLBACK_GRAF
-  const gl = geomLinha(g.porAno)
-  const gb = geomBar(g.abVsEnc)
-
-  // Donut — empresas por porte (classificadas)
-  const totPorte = g.portes.reduce((s, p) => s + p.qt, 0)
-  const donutC = 2 * Math.PI * 66
-  let _off = 0
-  const donut = g.portes.map((p, i) => {
-    const len = totPorte ? (p.qt / totPorte) * donutC : 0
-    const seg = { nome: p.label, v: p.qt, cor: PORTE_CORES[i % PORTE_CORES.length], len, off: -_off, pct: totPorte ? (p.qt / totPorte) * 100 : 0 }
-    _off += len
-    return seg
-  })
-
+  const gb = geomBarISS(g.porAno)
+  const lp = geomLollipop(g.abVsEnc)
   const ai = g.ativInat
-  const totAI = Math.max(ai.ativas, ai.inativas) || 1
+  const totAI = (ai.ativas + ai.inativas) || 1
+  const pctAtivas = (ai.ativas / totAI) * 100
+  const gg = geomGauge(pctAtivas)
+
+  // Segmentos: barras horizontais ranqueadas
+  const maxSeg = Math.max(1, ...g.segmentos.map(s => s.qt))
+  const SEG_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#aab8e3', '#c5d0ee', '#e8962e']
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -190,11 +205,9 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 5 }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l1c }}></span>{t.l1}
         </div>
-        {t.l2 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
-          </div>
-        ) : null}
+        {t.l2 ? <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
+        </div> : null}
       </div>
     )
   }
@@ -234,31 +247,39 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
       {/* ===== ROW 1 ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.68fr 1fr 1.32fr', gap: 18, marginTop: 20 }}>
 
-        {/* ISS Arrecadado por Ano */}
+        {/* BARRAS VERTICAIS: ISS Arrecadado por Ano */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>ISS Arrecadado por Ano</span>
             <span style={reportBadge}>Anual</span>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
-            <div style={{ position: 'absolute', left: 30, top: -2, display: 'flex', gap: 10, zIndex: 2 }}>
-              <span style={{ background: '#283e93', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>Arrecadado</span>
-            </div>
-            <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
+          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
+            <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" style={{ display: 'block' }}>
               <defs>
-                <linearGradient id="areaIss" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#283e93" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#283e93" stopOpacity="0" />
+                <linearGradient id="issBar" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#283e93" />
+                  <stop offset="100%" stopColor="#7d8fce" />
                 </linearGradient>
               </defs>
-              {gl.ticks.map((t, i) => (<text key={i} x="4" y={(t.y + 3).toFixed(1)} fontSize="6.5" fill="#aeb6c6" style={axisFont}>{t.v}</text>))}
-              <path d={gl.area} fill="url(#areaIss)" stroke="none" />
-              <path d={gl.linha} fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              {gl.dots.map((p, i) => (<circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />))}
-              {gl.labels.map((l, i) => (<text key={i} x={l.x.toFixed(1)} y="126" fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>))}
-              {gl.hot.map((r, i) => (<rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height="120" fill="transparent" pointerEvents="all" />))}
+              {gb.ticks.map((t, i) => (
+                <g key={i}>
+                  <line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
+                  <text x="4" y={(t.y - 3).toFixed(1)} fontSize="9" fill="#aeb6c6" style={axisFont}>{t.v} mi</text>
+                </g>
+              ))}
+              <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+              {gb.bars.map((b, i) => (
+                <g key={i}>
+                  <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="7" fill="url(#issBar)" />
+                  <text x={b.cx.toFixed(1)} y={String(gb.H - 4)} fontSize="11" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
+                  <text x={b.cx.toFixed(1)} y={(b.y - 6).toFixed(1)} fontSize="9" fill="#283e93" fontWeight="600" textAnchor="middle" style={axisFont}>{fmtMi(b.ano)}</text>
+                </g>
+              ))}
+              {gb.bars.map((b, i) => (
+                <rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />
+              ))}
             </svg>
-            {tipLinha ? <Tooltip t={tipLinha} /> : null}
+            {tip?.chart === 'bar' ? <Tooltip t={tip} /> : null}
           </div>
         </div>
 
@@ -287,115 +308,117 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
           )}
         </div>
 
-        {/* Composição do Cadastro */}
+        {/* GAUGE: Saúde do Cadastro (% empresas ativas) */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Situação do Cadastro</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Saúde do Cadastro</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>EMPRESAS ATIVAS</div>
-              <div style={{ height: 70, width: `${Math.max(8, 90 * ai.ativas / totAI).toFixed(1)}%`, borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtInt(ai.ativas)}</span>
-              </div>
+          <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>% empresas ativas na base</div>
+          <div style={{ position: 'relative', marginTop: 4 }}>
+            <svg viewBox="0 0 200 130" width="100%" style={{ display: 'block' }}>
+              <path d={gg.bgPath} fill="none" stroke="#e9edf8" strokeWidth="18" strokeLinecap="round" />
+              {gg.fillPath ? (
+                <path d={gg.fillPath} fill="none"
+                  stroke={gg.p >= 60 ? '#1fa463' : gg.p >= 40 ? '#e8962e' : '#d64545'}
+                  strokeWidth="18" strokeLinecap="round" />
+              ) : null}
+              {/* Ticks 0% e 100% */}
+              <text x="16" y="112" fontSize="7" fill="#aeb6c6" textAnchor="middle" style={axisFont}>0%</text>
+              <text x="184" y="112" fontSize="7" fill="#aeb6c6" textAnchor="middle" style={axisFont}>100%</text>
+              <line x1={String(gg.cx)} y1={String(gg.cy)} x2={gg.nx} y2={gg.ny} stroke="#283e93" strokeWidth="2.5" strokeLinecap="round" />
+              <circle cx={String(gg.cx)} cy={String(gg.cy)} r="5" fill="#283e93" />
+              <text x={String(gg.cx)} y={String(gg.cy + 20)} fontSize="18" fontWeight="700" fill="#1f2a44" textAnchor="middle" style={axisFont}>
+                {fmtPct(gg.p)}
+              </text>
+            </svg>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 4 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#1fa463' }}>{fmtInt(ai.ativas)}</div>
+              <div style={{ fontSize: 10, color: '#9098a8' }}>Ativas</div>
             </div>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>INATIVAS / CANCELADAS</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
-                <div style={{ height: 70, width: `${Math.max(8, 90 * ai.inativas / totAI).toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtInt(ai.inativas)}</span>
-              </div>
+            <div style={{ width: 1, background: '#e3e8f1' }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#d64545' }}>{fmtInt(ai.inativas)}</div>
+              <div style={{ fontSize: 10, color: '#9098a8' }}>Inativas</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* ===== ROW 2 ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2.75fr 1fr', gap: 18, marginTop: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
 
-        {/* Aberturas × Encerramentos */}
-        <div style={{ position: 'relative', background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
+        {/* LOLLIPOP: Saldo de Empresas (aberturas − encerramentos) */}
+        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Aberturas × Encerramentos</span>
-            <div style={{ display: 'flex', gap: 22, fontSize: 12, color: '#5b6477' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Aberturas</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>Encerramentos</span>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Saldo Empresarial</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Aberturas − Encerramentos por ano</div>
+            </div>
+            <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#1fa463', display: 'inline-block' }}></span>Positivo</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#d64545', display: 'inline-block' }}></span>Negativo</span>
             </div>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 16, cursor: 'pointer' }}>
-            <svg viewBox="0 0 1080 380" width="100%" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="mobAb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
-                <linearGradient id="mobEn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
-              </defs>
-              <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-              {gb.bars.map((b, i) => (
-                <g key={i}>
-                  <rect x={b.ab.x.toFixed(1)} y={b.ab.y.toFixed(1)} width="52" height={b.ab.h.toFixed(1)} rx="7" fill="url(#mobAb)" />
-                  <rect x={b.en.x.toFixed(1)} y={b.en.y.toFixed(1)} width="52" height={b.en.h.toFixed(1)} rx="7" fill="url(#mobEn)" />
-                  <text x={b.cx.toFixed(1)} y="326" fontSize="15" fill="#3a4256" style={axisFont} textAnchor="middle">{b.ano}</text>
+          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
+            <svg viewBox={`0 0 ${lp.W} ${lp.H}`} width="100%" style={{ display: 'block' }}>
+              {/* Linha zero */}
+              <line x1="0" y1={lp.mid} x2={String(lp.W)} y2={lp.mid} stroke="#e3e8f1" strokeWidth="1.5" strokeDasharray="4 3" />
+              <text x="4" y={lp.mid - 4} fontSize="9" fill="#9098a8" style={axisFont}>0</text>
+              {lp.pts.map((p, i) => (
+                <g key={i} onMouseEnter={() => setTip(p.tip)}>
+                  {/* Linha (bastão) */}
+                  <line x1={p.x1.toFixed(1)} y1={String(lp.mid)} x2={p.x2.toFixed(1)} y2={p.cy.toFixed(1)}
+                    stroke={p.pos ? '#1fa463' : '#d64545'} strokeWidth="2.5" strokeLinecap="round" />
+                  {/* Bola */}
+                  <circle cx={p.cx.toFixed(1)} cy={p.cy.toFixed(1)} r="9"
+                    fill={p.pos ? '#1fa463' : '#d64545'} stroke="#fff" strokeWidth="2" />
+                  {/* Valor dentro da bola (apenas se couber) */}
+                  {Math.abs(p.saldo) < 1000 ? (
+                    <text x={p.cx.toFixed(1)} y={(p.cy + 3).toFixed(1)} fontSize="7" fill="#fff" textAnchor="middle" fontWeight="700" style={axisFont}>
+                      {p.saldo >= 0 ? '+' : ''}{fmtInt(p.saldo)}
+                    </text>
+                  ) : null}
+                  {/* Rótulo valor acima/abaixo */}
+                  <text x={p.cx.toFixed(1)} y={p.pos ? (p.cy - 13).toFixed(1) : (p.cy + 20).toFixed(1)}
+                    fontSize="9" fill={p.pos ? '#1fa463' : '#d64545'} textAnchor="middle" fontWeight="700" style={axisFont}>
+                    {p.saldo >= 0 ? '+' : ''}{fmtInt(p.saldo)}
+                  </text>
+                  {/* Ano */}
+                  <text x={p.cx.toFixed(1)} y={String(lp.H - 4)} fontSize="10" fill="#3a4256" textAnchor="middle" style={axisFont}>{p.ano}</text>
                 </g>
               ))}
-              {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - 80).toFixed(1)} y="40" width="160" height="260" fill="transparent" pointerEvents="all" />))}
             </svg>
-            {tipBar ? <Tooltip t={tipBar} /> : null}
+            {tip?.chart === 'lollipop' ? <Tooltip t={tip} /> : null}
           </div>
         </div>
 
-        {/* Empresas por Porte */}
+        {/* Barras horizontais ranqueadas: Empresas por Segmento */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Empresas por Porte</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Empresas por Segmento</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtInt(totPorte)} classificadas</div>
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
-            <svg viewBox="0 0 200 200" width="210" height="210">
-              <g transform="rotate(-90 100 100)">
-                {donut.map((s, i) => (
-                  <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
-                ))}
-              </g>
-            </svg>
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {g.segmentos.map((seg, i) => {
+              const w = (seg.qt / maxSeg) * 100
+              return (
+                <div key={seg.nome}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: 10, color: '#3a4256', lineHeight: 1.2, flex: 1, paddingRight: 6 }}>{seg.nome}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>
+                      {fmtInt(seg.qt)} <span style={{ color: '#9098a8', fontWeight: 400 }}>({fmtPct(seg.pct)})</span>
+                    </span>
+                  </div>
+                  <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: SEG_CORES[i % SEG_CORES.length], borderRadius: 5 }} />
+                  </div>
+                </div>
+              )
+            })}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 16 }}>
-            {donut.map((s, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ===== Tabela: Empresas por Segmento ===== */}
-      <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Empresas por Segmento</span>
-        <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Segmento', 'Empresas', '% das Classificadas'].map((h, i) => (
-                  <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {g.segmentos.map((row, ri) => {
-                const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
-                return (
-                  <tr key={row.nome}>
-                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.nome}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtInt(row.qt)}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(row.pct)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
         </div>
       </div>
     </>

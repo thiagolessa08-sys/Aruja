@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 
 export interface FiltrosImobiliario { ano: number | ''; faixa: number | '' }
 
-interface Tip { chart: 'linha' | 'bar'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
+interface Tip { chart: 'linha' | 'hbar'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
 
 interface PorAno { ano: number; arrecadado: number }
 interface LancArrec { ano: number; lancado: number; arrecadado: number }
@@ -17,7 +17,6 @@ interface Graficos {
   venalComposicao: { terreno: number; predial: number }
   exercicios: Exercicio[]
 }
-
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
@@ -28,7 +27,6 @@ const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFraction
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
-// ===== Fallbacks (valores reais validados no IQ — exibidos enquanto a API carrega) =====
 const KPIS_FALLBACK: KpiCard[] = [
   { label: 'Imóveis Lançados', value: '33.281', subLabel: 'Ano Anterior', subValue: '33.065', pct: '0,65%', dir: 'up' },
   { label: 'Valor Venal Total', value: '9,03 bi', subLabel: 'Ano Anterior', subValue: '8,38 bi', pct: '7,74%', dir: 'up' },
@@ -95,24 +93,46 @@ function geomLinha(d: PorAno[]) {
   return { linha, area, ticks, labels, dots, hot }
 }
 
-// ===== Geometria: barras agrupadas "Lançado × Arrecadado" por exercício =====
-function geomBar(d: LancArrec[]) {
-  const W = 1080, H = 380, top = 40, bottom = 300
-  const max = Math.max(1, ...d.flatMap(m => [m.lancado, m.arrecadado]))
-  const sc = (v: number) => (v / max) * (bottom - top - 10)
-  const n = Math.max(1, d.length)
-  const gw = W / n
-  const bars = d.map((m, i) => {
-    const cx = i * gw + gw / 2
-    const hL = sc(m.lancado), hA = sc(m.arrecadado)
+// ===== Geometria: GAUGE semicircular de eficiência =====
+function geomGauge(pct: number | null) {
+  const p = Math.max(0, Math.min(99.9, pct ?? 0))
+  const cx = 100, cy = 108, r = 74
+  const ang = Math.PI - (p / 100) * Math.PI
+  const ex = (cx + r * Math.cos(ang)).toFixed(1)
+  const ey = (cy - r * Math.sin(ang)).toFixed(1)
+  const laf = p > 50 ? 1 : 0
+  const bgPath = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`
+  const fillPath = p < 0.5 ? '' : `M ${cx - r} ${cy} A ${r} ${r} 0 ${laf} 1 ${ex} ${ey}`
+  // Agulha
+  const nLen = 56
+  const nx = (cx + nLen * Math.cos(ang)).toFixed(1)
+  const ny = (cy - nLen * Math.sin(ang)).toFixed(1)
+  // Ticks nos 0%, 25%, 50%, 75%, 100%
+  const tickPcts = [0, 25, 50, 75, 100]
+  const ticks = tickPcts.map(tp => {
+    const ta = Math.PI - (tp / 100) * Math.PI
+    const ri = r - 18, ro = r + 8
     return {
-      cx, ano: m.ano,
-      lanc: { x: cx - 60, y: bottom - hL, h: hL },
-      arr: { x: cx + 8, y: bottom - hA, h: hA },
-      tip: { chart: 'bar' as const, title: String(m.ano), l1: `Lançado: ${fmtMi(m.lancado)}`, l1c: '#283e93', l2: `Arrecadado: ${fmtMi(m.arrecadado)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hL, hA)) / H * 100).toFixed(1)}%` },
+      x1: (cx + ri * Math.cos(ta)).toFixed(1), y1: (cy - ri * Math.sin(ta)).toFixed(1),
+      x2: (cx + ro * Math.cos(ta)).toFixed(1), y2: (cy - ro * Math.sin(ta)).toFixed(1),
+      lx: (cx + (ro + 12) * Math.cos(ta)).toFixed(1), ly: (cy - (ro + 12) * Math.sin(ta)).toFixed(1),
+      label: tp === 0 ? '0%' : tp === 100 ? '100%' : tp + '%',
     }
   })
-  return { bars, W, H, bottom }
+  return { bgPath, fillPath, p, cx, cy, nx, ny, ticks }
+}
+
+// ===== Barras horizontais: Lançado × Arrecadado por exercício =====
+function geomHBar(d: LancArrec[]) {
+  const maxV = Math.max(1, ...d.flatMap(x => [x.lancado || 0, x.arrecadado]))
+  return d.map(x => ({
+    ano: x.ano,
+    lancado: x.lancado,
+    arrecadado: x.arrecadado,
+    wL: x.lancado ? (x.lancado / maxV) * 100 : null,
+    wA: (x.arrecadado / maxV) * 100,
+    pct: x.lancado ? (x.arrecadado / x.lancado) * 100 : null,
+  }))
 }
 
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
@@ -151,25 +171,18 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
   }, [qs])
 
   const tipLinha = tip && tip.chart === 'linha' ? tip : null
-  const tipBar = tip && tip.chart === 'bar' ? tip : null
 
   const g = graf ?? FALLBACK_GRAF
   const gl = geomLinha(g.porAno)
-  const gb = geomBar(g.lancVsArrec)
-
-  // Donut — imóveis por faixa de venal
+  const hbars = geomHBar(g.lancVsArrec)
+  const maxFaixa = Math.max(1, ...g.faixas.map(f => f.qt))
   const totFaixa = g.faixas.reduce((s, f) => s + f.qt, 0)
-  const donutC = 2 * Math.PI * 66
-  let _off = 0
-  const donut = g.faixas.map((fx, i) => {
-    const len = totFaixa ? (fx.qt / totFaixa) * donutC : 0
-    const seg = { nome: fx.label, v: fx.qt, cor: FAIXA_CORES[i % FAIXA_CORES.length], len, off: -_off, pct: totFaixa ? (fx.qt / totFaixa) * 100 : 0 }
-    _off += len
-    return seg
-  })
 
-  const vc = g.venalComposicao
-  const venalMax = Math.max(vc.terreno, vc.predial) || 1
+  // Gauge: pct do exercício mais recente com lancado disponível
+  const exComLanc = g.exercicios.find(e => e.pct != null)
+  const gaugePct = exComLanc?.pct ?? null
+  const gaugeAno = exComLanc?.ano ?? null
+  const gg = geomGauge(gaugePct)
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -183,11 +196,9 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 5 }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l1c }}></span>{t.l1}
         </div>
-        {t.l2 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
-          </div>
-        ) : null}
+        {t.l2 ? <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
+        </div> : null}
       </div>
     )
   }
@@ -227,7 +238,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
       {/* ===== ROW 1 ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.68fr 1fr 1.32fr', gap: 18, marginTop: 20 }}>
 
-        {/* IPTU Arrecadado por Ano */}
+        {/* Linha: IPTU Arrecadado por Ano */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>IPTU Arrecadado por Ano</span>
@@ -255,7 +266,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
           </div>
         </div>
 
-        {/* Insights de Imobiliário */}
+        {/* Insights */}
         <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -280,35 +291,56 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
           )}
         </div>
 
-        {/* Composição do Valor Venal */}
+        {/* GAUGE: Eficiência de Arrecadação */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Composição do Valor Venal</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Eficiência de Arrecadação</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>VENAL PREDIAL</div>
-              <div style={{ height: 70, width: `${Math.max(8, 90 * vc.predial / venalMax).toFixed(1)}%`, borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtMoney(vc.predial)}</span>
+          <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+            {gaugeAno ? `% do IPTU lançado arrecadado em ${gaugeAno}` : 'arrecadado ÷ lançado'}
+          </div>
+          <div style={{ position: 'relative', marginTop: 4 }}>
+            <svg viewBox="0 0 200 130" width="100%" style={{ display: 'block' }}>
+              {/* Fundo do gauge */}
+              <path d={gg.bgPath} fill="none" stroke="#e9edf8" strokeWidth="18" strokeLinecap="round" />
+              {/* Preenchimento colorido */}
+              {gg.fillPath ? (
+                <path d={gg.fillPath} fill="none"
+                  stroke={gg.p >= 80 ? '#1fa463' : gg.p >= 50 ? '#e8962e' : '#d64545'}
+                  strokeWidth="18" strokeLinecap="round" />
+              ) : null}
+              {/* Ticks */}
+              {gg.ticks.filter((_, i) => i !== 2).map((t, i) => (
+                <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke="#aeb6c6" strokeWidth="1.5" />
+              ))}
+              {/* Labels ticks extremos */}
+              <text x={gg.ticks[0].lx} y={gg.ticks[0].ly} fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>0%</text>
+              <text x={gg.ticks[4].lx} y={gg.ticks[4].ly} fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>100%</text>
+              {/* Agulha */}
+              <line x1={String(gg.cx)} y1={String(gg.cy)} x2={gg.nx} y2={gg.ny} stroke="#283e93" strokeWidth="2.5" strokeLinecap="round" />
+              <circle cx={String(gg.cx)} cy={String(gg.cy)} r="5" fill="#283e93" />
+              {/* Percentual central */}
+              <text x={String(gg.cx)} y={String(gg.cy + 20)} fontSize="18" fontWeight="700" fill="#1f2a44" textAnchor="middle" style={axisFont}>
+                {gaugePct != null ? fmtPct(gg.p) : '—'}
+              </text>
+            </svg>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 6 }}>
+            {[{ cor: '#1fa463', label: '≥ 80%' }, { cor: '#e8962e', label: '50–79%' }, { cor: '#d64545', label: '< 50%' }].map(({ cor, label }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: '#9098a8' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: cor, flex: 'none' }} />{label}
               </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>VENAL TERRITORIAL</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
-                <div style={{ height: 70, width: `${Math.max(8, 90 * vc.terreno / venalMax).toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtMoney(vc.terreno)}</span>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
 
       {/* ===== ROW 2 ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2.75fr 1fr', gap: 18, marginTop: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr', gap: 18, marginTop: 18 }}>
 
-        {/* IPTU Lançado × Arrecadado por Exercício */}
-        <div style={{ position: 'relative', background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
+        {/* Barras horizontais: Lançado × Arrecadado por Exercício */}
+        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>IPTU Lançado × Arrecadado</span>
             <div style={{ display: 'flex', gap: 22, fontSize: 12, color: '#5b6477' }}>
@@ -316,50 +348,67 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
               <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>IPTU Arrecadado</span>
             </div>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 16, cursor: 'pointer' }}>
-            <svg viewBox="0 0 1080 380" width="100%" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="imbLanc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
-                <linearGradient id="imbArr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
-              </defs>
-              <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-              {gb.bars.map((b, i) => (
-                <g key={i}>
-                  <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width="52" height={b.lanc.h.toFixed(1)} rx="7" fill="url(#imbLanc)" />
-                  <rect x={b.arr.x.toFixed(1)} y={b.arr.y.toFixed(1)} width="52" height={b.arr.h.toFixed(1)} rx="7" fill="url(#imbArr)" />
-                  <text x={b.cx.toFixed(1)} y="326" fontSize="15" fill="#3a4256" style={axisFont} textAnchor="middle">{b.ano}</text>
-                </g>
-              ))}
-              {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - 80).toFixed(1)} y="40" width="160" height="260" fill="transparent" pointerEvents="all" />))}
-            </svg>
-            {tipBar ? <Tooltip t={tipBar} /> : null}
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 22 }}>
+            {hbars.map(row => (
+              <div key={row.ano}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#283e93' }}>{row.ano}</span>
+                  {row.pct != null && (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: row.pct >= 80 ? '#1fa463' : row.pct >= 50 ? '#e8962e' : '#d64545', background: row.pct >= 80 ? '#e9f8f0' : row.pct >= 50 ? '#fef3e2' : '#feecec', borderRadius: 10, padding: '2px 9px' }}>
+                      {fmtPct(row.pct)} arrecadado
+                    </span>
+                  )}
+                </div>
+                {row.wL != null && (
+                  <div style={{ marginBottom: 5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, color: '#9098a8', width: 80, flex: 'none' }}>Lançado</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>{fmtMoney(row.lancado ?? 0)}</span>
+                    </div>
+                    <div style={{ height: 20, borderRadius: 6, background: '#e9edf8', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${row.wL.toFixed(1)}%`, background: 'linear-gradient(90deg,#283e93,#7d8fce)', borderRadius: 6 }} />
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                    <span style={{ fontSize: 11, color: '#9098a8', width: 80, flex: 'none' }}>Arrecadado</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#c0612a' }}>{fmtMoney(row.arrecadado)}</span>
+                  </div>
+                  <div style={{ height: 20, borderRadius: 6, background: '#e9edf8', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${row.wA.toFixed(1)}%`, background: 'linear-gradient(90deg,#e8962e,#f5c47d)', borderRadius: 6 }} />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Imóveis por Faixa de Valor Venal */}
+        {/* Barras horizontais ranqueadas: Imóveis por Faixa de Venal */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Imóveis por Faixa de Venal</span>
             <span style={dots}>···</span>
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtInt(totFaixa)} imóveis</div>
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
-            <svg viewBox="0 0 200 200" width="210" height="210">
-              <g transform="rotate(-90 100 100)">
-                {donut.map((s, i) => (
-                  <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
-                ))}
-              </g>
-            </svg>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 16 }}>
-            {donut.map((s, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
-              </div>
-            ))}
+          <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {g.faixas.map((fx, i) => {
+              const w = (fx.qt / maxFaixa) * 100
+              const pct = totFaixa ? (fx.qt / totFaixa) * 100 : 0
+              return (
+                <div key={fx.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 11, color: '#3a4256', lineHeight: 1.3 }}>{fx.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#1f2a44', flex: 'none', marginLeft: 8 }}>
+                      {fmtInt(fx.qt)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(pct)})</span>
+                    </span>
+                  </div>
+                  <div style={{ height: 16, borderRadius: 6, background: '#e9edf8', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: FAIXA_CORES[i], borderRadius: 6, transition: 'width .4s' }} />
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
