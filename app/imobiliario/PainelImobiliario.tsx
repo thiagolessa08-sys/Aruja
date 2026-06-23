@@ -76,7 +76,7 @@ function geomLinha(d: PorAno[]) {
   const vals = d.map(p => mi(p.arrecadado))
   const hi = Math.ceil(Math.max(1, ...vals) / 10) * 10
   const lo = 0
-  const xL = 34, xR = 290, yT = 20, yB = 112, span = hi - lo || 1
+  const xL = 34, xR = 290, yT = 14, yB = 84, span = hi - lo || 1
   const n = d.length
   const X = (i: number) => n <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (n - 1)
   const Y = (vMi: number) => yT + ((hi - vMi) / span) * (yB - yT)
@@ -88,7 +88,7 @@ function geomLinha(d: PorAno[]) {
   const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
   const hot = d.map((p, i) => ({
     x: X(i) - half, w: half * 2,
-    tip: { chart: 'linha' as const, title: String(p.ano), l1: `IPTU Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
+    tip: { chart: 'linha' as const, title: String(p.ano), l1: `IPTU Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 100 * 100).toFixed(1)}%` },
   }))
   return { linha, area, ticks, labels, dots, hot }
 }
@@ -247,7 +247,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
             <div style={{ position: 'absolute', left: 30, top: -2, display: 'flex', gap: 10, zIndex: 2 }}>
               <span style={{ background: '#283e93', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>Arrecadado</span>
             </div>
-            <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
+            <svg viewBox="0 0 300 100" width="100%" style={{ display: 'block' }}>
               <defs>
                 <linearGradient id="areaImob" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#283e93" stopOpacity="0.28" />
@@ -258,8 +258,8 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
               <path d={gl.area} fill="url(#areaImob)" stroke="none" />
               <path d={gl.linha} fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
               {gl.dots.map((p, i) => (<circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />))}
-              {gl.labels.map((l, i) => (<text key={i} x={l.x.toFixed(1)} y="126" fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>))}
-              {gl.hot.map((r, i) => (<rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height="120" fill="transparent" pointerEvents="all" />))}
+              {gl.labels.map((l, i) => (<text key={i} x={l.x.toFixed(1)} y="97" fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>))}
+              {gl.hot.map((r, i) => (<rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height="92" fill="transparent" pointerEvents="all" />))}
             </svg>
             {tipLinha ? <Tooltip t={tipLinha} /> : null}
           </div>
@@ -299,7 +299,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
           <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
             {gaugeAno ? `% do IPTU lançado arrecadado em ${gaugeAno}` : 'arrecadado ÷ lançado'}
           </div>
-          <div style={{ position: 'relative', marginTop: 4 }}>
+          <div style={{ position: 'relative', marginTop: 4, maxWidth: 215, marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
             <svg viewBox="0 0 200 130" width="100%" style={{ display: 'block' }}>
               {/* Fundo do gauge */}
               <path d={gg.bgPath} fill="none" stroke="#e9edf8" strokeWidth="18" strokeLinecap="round" />
