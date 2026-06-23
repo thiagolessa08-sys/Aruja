@@ -339,12 +339,12 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
             <span style={dots}>···</span>
           </div>
           <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>{fmtInt(g.situacao.reduce((s, x) => s + x.n, 0))} contribuintes</div>
-          <div style={{ display: 'flex', height: 26, borderRadius: 8, overflow: 'hidden', marginTop: 18, background: '#eef1f7' }}>
+          <div style={{ display: 'flex', height: 56, borderRadius: 12, overflow: 'hidden', marginTop: 26, background: '#eef1f7' }}>
             {g.situacao.map(s => (
               <div key={s.label} title={`${s.label}: ${fmtPct(s.pct)}`} style={{ width: `${s.pct.toFixed(2)}%`, background: SIT_CORES[s.label] ?? '#c5ccdb' }} />
             ))}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 28 }}>
             {g.situacao.map(s => (
               <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <span style={{ width: 11, height: 11, borderRadius: 3, background: SIT_CORES[s.label] ?? '#c5ccdb', flex: 'none' }}></span>
