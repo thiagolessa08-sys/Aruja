@@ -309,10 +309,6 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
                   stroke={gg.p >= 80 ? '#1fa463' : gg.p >= 50 ? '#e8962e' : '#d64545'}
                   strokeWidth="18" strokeLinecap="round" />
               ) : null}
-              {/* Ticks */}
-              {gg.ticks.filter((_, i) => i !== 2).map((t, i) => (
-                <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke="#aeb6c6" strokeWidth="1.5" />
-              ))}
               {/* Labels ticks extremos */}
               <text x={gg.ticks[0].lx} y={gg.ticks[0].ly} fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>0%</text>
               <text x={gg.ticks[4].lx} y={gg.ticks[4].ly} fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>100%</text>
