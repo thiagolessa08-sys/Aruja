@@ -241,13 +241,13 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
                 <linearGradient id="tbLanc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
                 <linearGradient id="tbArr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
               </defs>
-              {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 3).toFixed(1)} fontSize="9" fill="#aeb6c6" style={axisFont}>{t.v} mi</text></g>))}
+              {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 4).toFixed(1)} fontSize="17" fill="#aeb6c6" style={axisFont}>{t.v} mi</text></g>))}
               <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
               {gb.bars.map((b, i) => (
                 <g key={i}>
                   <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.lanc.h.toFixed(1)} rx="4" fill="url(#tbLanc)" />
                   <rect x={b.arr.x.toFixed(1)} y={b.arr.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.arr.h.toFixed(1)} rx="4" fill="url(#tbArr)" />
-                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="12" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
+                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="20" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
                 </g>
               ))}
               {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - gb.bw - 6).toFixed(1)} y="0" width={(gb.bw * 2 + 12).toFixed(1)} height={String(gb.H - 22)} fill="transparent" pointerEvents="all" />))}
@@ -319,11 +319,11 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
           <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
             <svg viewBox="0 0 300 100" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
               <defs><linearGradient id="tbInad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d64545" stopOpacity="0.28" /><stop offset="100%" stopColor="#d64545" stopOpacity="0" /></linearGradient></defs>
-              {ga.ticks.map((t, i) => (<text key={i} x="4" y={(t.y + 3).toFixed(1)} fontSize="6.5" fill="#aeb6c6" style={axisFont}>{t.v}</text>))}
+              {ga.ticks.map((t, i) => (<text key={i} x="4" y={(t.y + 2).toFixed(1)} fontSize="5" fill="#aeb6c6" style={axisFont}>{t.v}</text>))}
               <path d={ga.area} fill="url(#tbInad)" />
               <path d={ga.linha} fill="none" stroke="#d64545" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
               {ga.dots.map((p, i) => (<circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#d64545" stroke="#fff" strokeWidth="2" />))}
-              {ga.labels.map((l, i) => (<text key={i} x={l.x.toFixed(1)} y="97" fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>))}
+              {ga.labels.map((l, i) => (<text key={i} x={l.x.toFixed(1)} y="96" fontSize="5.2" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>))}
               {ga.hot.map((r, i) => (<rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height="92" fill="transparent" pointerEvents="all" />))}
             </svg>
             {tip?.chart === 'area' ? <Tooltip t={tip} /> : null}

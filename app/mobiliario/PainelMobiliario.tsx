@@ -264,15 +264,15 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
               {gb.ticks.map((t, i) => (
                 <g key={i}>
                   <line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
-                  <text x="4" y={(t.y - 3).toFixed(1)} fontSize="9" fill="#aeb6c6" style={axisFont}>{t.v} mi</text>
+                  <text x="4" y={(t.y - 4).toFixed(1)} fontSize="16" fill="#aeb6c6" style={axisFont}>{t.v} mi</text>
                 </g>
               ))}
               <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
               {gb.bars.map((b, i) => (
                 <g key={i}>
                   <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="7" fill="url(#issBar)" />
-                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="12" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
-                  <text x={b.cx.toFixed(1)} y={(b.y - 7).toFixed(1)} fontSize="11" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtMi(b.iss)}</text>
+                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="19" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
+                  <text x={b.cx.toFixed(1)} y={(b.y - 8).toFixed(1)} fontSize="16" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtMi(b.iss)}</text>
                 </g>
               ))}
               {gb.bars.map((b, i) => (

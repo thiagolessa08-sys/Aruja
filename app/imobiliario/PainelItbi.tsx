@@ -274,12 +274,12 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 {ld.ticksA.map((t, i) => (
                   <g key={i}>
                     <line x1={ld.xL} y1={t.y.toFixed(1)} x2={ld.xR} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
-                    <text x="4" y={(t.y + 3).toFixed(1)} fontSize="7" fill="#aeb6c6" style={axisFont}>{t.v}</text>
+                    <text x="4" y={(t.y + 3).toFixed(1)} fontSize="10" fill="#aeb6c6" style={axisFont}>{t.v}</text>
                   </g>
                 ))}
                 {/* Eixo direito (movimentado) */}
                 {ld.ticksM.map((t, i) => (
-                  <text key={i} x={String(ld.W - 2)} y={(t.y + 3).toFixed(1)} fontSize="7" fill="#e8962e" textAnchor="end" style={axisFont}>{t.v}</text>
+                  <text key={i} x={String(ld.W - 2)} y={(t.y + 3).toFixed(1)} fontSize="10" fill="#e8962e" textAnchor="end" style={axisFont}>{t.v}</text>
                 ))}
                 {/* Área e linha arrecadado */}
                 <path d={ld.areaA} fill="url(#areaItbiA)" />
@@ -289,7 +289,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 <path d={ld.linhaM} fill="none" stroke="#e8962e" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" strokeLinejoin="round" />
                 {ld.dotsM.map((p, i) => <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#e8962e" stroke="#fff" strokeWidth="1.5" />)}
                 {/* Labels eixo X */}
-                {ld.labels.map((l, i) => <text key={i} x={l.x.toFixed(1)} y={String(ld.H - 4)} fontSize="7.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>)}
+                {ld.labels.map((l, i) => <text key={i} x={l.x.toFixed(1)} y={String(ld.H - 4)} fontSize="12" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>)}
                 {/* Hit areas */}
                 {ld.hot.map((r, i) => <rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height={String(ld.H)} fill="transparent" pointerEvents="all" />)}
               </svg>
@@ -384,19 +384,19 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 {sc.ticksY.map((t, i) => (
                   <g key={i}>
                     <line x1={sc.xL} y1={t.y.toFixed(1)} x2={sc.xR} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
-                    <text x="4" y={(t.y + 3).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v}</text>
+                    <text x="4" y={(t.y + 3).toFixed(1)} fontSize="7" fill="#aeb6c6" style={axisFont}>{t.v}</text>
                   </g>
                 ))}
                 <line x1={sc.xL} y1={sc.yT} x2={sc.xL} y2={sc.yB} stroke="#e3e8f1" strokeWidth="1" />
                 <line x1={sc.xL} y1={sc.yB} x2={sc.xR} y2={sc.yB} stroke="#e3e8f1" strokeWidth="1" />
                 {sc.ticksX.map((t, i) => (
-                  <text key={i} x={t.x.toFixed(1)} y={String(sc.H - 4)} fontSize="8" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{fmtInt(t.v)}</text>
+                  <text key={i} x={t.x.toFixed(1)} y={String(sc.H - 4)} fontSize="7" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{fmtInt(t.v)}</text>
                 ))}
                 {/* Bolhas */}
                 {sc.pts.map((p, i) => (
                   <g key={i} onMouseEnter={() => setTip(p.tip)} style={{ cursor: 'pointer' }}>
                     <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill="url(#bubbleGrad)" stroke="#fff" strokeWidth="2" />
-                    <text x={p.x.toFixed(1)} y={(p.y - p.r - 4).toFixed(1)} fontSize="8.5" fill="#283e93" textAnchor="middle" fontWeight="600" style={axisFont}>{p.ano}</text>
+                    <text x={p.x.toFixed(1)} y={(p.y - p.r - 4).toFixed(1)} fontSize="7.5" fill="#283e93" textAnchor="middle" fontWeight="600" style={axisFont}>{p.ano}</text>
                   </g>
                 ))}
               </svg>
