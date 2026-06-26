@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    const [anoRows, sitRows, devRows] = await Promise.all([
+    const [anoRows, sitRows, devRows, vincRows] = await Promise.all([
       agentQuery(`
         SELECT YEAR(dt_inscr) AS ano, ic_pessoa AS p, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte
@@ -25,6 +25,12 @@ export async function GET(req: NextRequest) {
         SELECT ds_setor_devedor AS setor, COUNT(DISTINCT cd_contr) AS n
         FROM ${SCHEMA}.tb_dsod_devedor_contribuinte
         GROUP BY ds_setor_devedor`, 100),
+      // Vínculos: flags 0/1 em tb_dsod_contribuinte_pessoa (SUM = nº de contribuintes).
+      agentQuery(`
+        SELECT SUM(ic_pessoa_contribuinte_mobiliario) AS mob, SUM(ic_pessoa_proprietario) AS prop,
+          SUM(ic_pessoa_itbi) AS itbi, SUM(ic_pessoa_socio) AS socio,
+          SUM(ic_tomador_servico) AS tomador, SUM(ic_pessoa_responsavel_tributario) AS resp
+        FROM ${SCHEMA}.tb_dsod_contribuinte_pessoa`, 10),
     ])
 
     // Novos por ano (PF × PJ) — últimos anos
@@ -77,11 +83,37 @@ export async function GET(req: NextRequest) {
       .map(d => ({ setor: d.setor, label: SETOR_LABEL[d.setor] ?? d.setor, n: d.n }))
       .sort((a, b) => b.n - a.n)
 
+    // Vínculos do contribuinte (flags 0/1)
+    const v = vincRows.rows[0] ?? []
+    const num = (x: unknown) => Number(x) || 0
+    const vinculos = [
+      { label: 'Mobiliário (empresa)', n: num(v[0]) },
+      { label: 'Proprietário de imóvel', n: num(v[1]) },
+      { label: 'Transmissão (ITBI)', n: num(v[2]) },
+      { label: 'Sócio', n: num(v[3]) },
+      { label: 'Tomador de serviço', n: num(v[4]) },
+      { label: 'Responsável tributário', n: num(v[5]) },
+    ].filter(x => x.n > 0).sort((a, b) => b.n - a.n)
+
+    // Score de adimplência: em cobrança acumulada × adimplente
+    const totalBase = pfTotal + pjTotal
+    const emCobranca = devRows.rows
+      .filter(r => String(r[0] ?? '').trim() === 'CobrancaAcumulada')
+      .reduce((a, r) => a + (Number(r[1]) || 0), 0)
+    const score = {
+      adimplente: Math.max(0, totalBase - emCobranca),
+      emCobranca,
+      total: totalBase,
+      pctAdimplente: totalBase ? ((totalBase - emCobranca) / totalBase) * 100 : 0,
+    }
+
     return NextResponse.json({
       novosPorAno,
       pfpj: { f: pfTotal, j: pjTotal },
       situacao,
       devedores,
+      vinculos,
+      score,
       evolucao,
       pessoaFiltro: f.pessoa || null,
     })

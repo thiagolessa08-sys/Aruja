@@ -10,11 +10,15 @@ interface NovoAno { ano: number; pf: number; pj: number }
 interface Setor { setor: string; label: string; n: number }
 interface SitItem { label: string; n: number; pct: number }
 interface Evol { ano: number; novos: number; pf: number; pj: number; pctPj: number }
+interface Vinculo { label: string; n: number }
+interface Score { adimplente: number; emCobranca: number; total: number; pctAdimplente: number }
 interface Graficos {
   novosPorAno: NovoAno[]
   pfpj: { f: number; j: number }
   situacao: SitItem[]
   devedores: Setor[]
+  vinculos: Vinculo[]
+  score: Score
   evolucao: Evol[]
 }
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
@@ -65,6 +69,15 @@ const FALLBACK_GRAF: Graficos = {
     { ano: 2022, novos: 12702, pf: 7029, pj: 5673, pctPj: 44.7 },
     { ano: 2021, novos: 5167, pf: 3400, pj: 1767, pctPj: 34.2 },
   ],
+  vinculos: [
+    { label: 'Mobiliário (empresa)', n: 35924 },
+    { label: 'Sócio', n: 29817 },
+    { label: 'Proprietário de imóvel', n: 19053 },
+    { label: 'Transmissão (ITBI)', n: 14211 },
+    { label: 'Tomador de serviço', n: 2741 },
+    { label: 'Responsável tributário', n: 452 },
+  ],
+  score: { adimplente: 116762, emCobranca: 64343, total: 181105, pctAdimplente: 64.5 },
 }
 const INSIGHTS_FALLBACK = [
   'A base reúne 181.105 contribuintes — 129.898 PF (71,7%) e 50.894 PJ (28,1%).',
@@ -353,6 +366,73 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ===== ROW 3: Vínculos + Score de Adimplência ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
+        {/* Vínculos */}
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <div>
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Vínculos do Contribuinte</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>papéis do contribuinte na base (um contribuinte pode ter vários)</div>
+            </div>
+            <span style={dots}>···</span>
+          </div>
+          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+            {(() => { const mx = Math.max(1, ...g.vinculos.map(v => v.n)); return g.vinculos.map((v, i) => (
+              <div key={v.label}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: '#3a4256' }}>{v.label}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(v.n)}</span>
+                </div>
+                <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(v.n / mx * 100).toFixed(1)}%`, background: SETOR_CORES[i % SETOR_CORES.length], borderRadius: 5 }} />
+                </div>
+              </div>
+            )) })()}
+          </div>
+        </div>
+
+        {/* Score de Adimplência */}
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Score de Adimplência</span>
+            <span style={dots}>···</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#9098a8', marginTop: 4 }}>contribuintes sem cobrança × em cobrança acumulada</div>
+          {(() => {
+            const sc = g.score
+            const dc = 2 * Math.PI * 56
+            const lenAd = sc.total ? (sc.adimplente / sc.total) * dc : 0
+            return (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                  <svg viewBox="0 0 200 200" width="160" height="160">
+                    <g transform="rotate(-90 100 100)">
+                      <circle cx="100" cy="100" r="56" fill="none" stroke="#e8962e" strokeWidth="26" strokeDasharray={`${dc.toFixed(1)} 0`} />
+                      <circle cx="100" cy="100" r="56" fill="none" stroke="#1fa463" strokeWidth="26" strokeDasharray={`${lenAd.toFixed(1)} ${(dc - lenAd).toFixed(1)}`} />
+                    </g>
+                    <text x="100" y="96" fontSize="24" fontWeight="700" fill="#1fa463" textAnchor="middle" style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>{fmtPct(sc.pctAdimplente)}</text>
+                    <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>adimplentes</text>
+                  </svg>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <span style={{ width: 11, height: 11, borderRadius: 3, background: '#1fa463', flex: 'none' }}></span>
+                    <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>Sem cobrança</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(sc.adimplente)}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e', flex: 'none' }}></span>
+                    <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>Em cobrança acumulada</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(sc.emCobranca)}</span>
+                  </div>
+                </div>
+              </>
+            )
+          })()}
         </div>
       </div>
 
