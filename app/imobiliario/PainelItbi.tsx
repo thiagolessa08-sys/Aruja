@@ -33,7 +33,7 @@ const KPIS_FALLBACK: KpiCard[] = [
   { label: 'Transmissões', value: '528', subLabel: 'Ano Anterior', subValue: '1.430', pct: '-63,08%', dir: 'down' },
   { label: 'Valor Movimentado', value: 'R$ 132,02 mi', subLabel: 'Ano Anterior', subValue: 'R$ 342,97 mi', pct: '-61,51%', dir: 'down' },
   { label: 'Ticket Médio', value: 'R$ 250,0 mil', subLabel: 'Ano Anterior', subValue: 'R$ 239,8 mil', pct: '4,25%', dir: 'up' },
-  { label: 'Não Financiado', value: '83,2%', subLabel: 'do movimentado', subValue: 'R$ 614,93 mi', pct: '-4,12%', dir: 'down' },
+  { label: 'Inadimplência', value: 'R$ 414,2 mil', subLabel: 'Ano Anterior', subValue: 'R$ 7,40 mi', pct: '-94,40%', dir: 'down' },
 ]
 const FALLBACK_GRAF: Graficos = {
   porAno: [

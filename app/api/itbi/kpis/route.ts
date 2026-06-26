@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
 import { lerFiltros, classificaNatureza } from '@/lib/itbi-filtros'
+import { serieTributo } from '@/lib/tributo-engine'
 
 const SCHEMA = 'pref_aruja_sp'
-const RE_ITBI = /INTER VIVOS/i
 
 interface Kpi {
   label: string
@@ -40,19 +40,14 @@ export async function GET(req: NextRequest) {
     const semNat = !f.natureza
     const matchNat = (nat: string) => semNat || classificaNatureza(nat) === f.natureza
 
-    const [itbi, receita] = await Promise.all([
+    const [itbi, serie] = await Promise.all([
       agentQuery(`
         SELECT YEAR(dt_transacao) AS ano, ds_natureza_transacao AS nat, COUNT(*) AS n,
           SUM(vl_venal) AS venal, SUM(vl_parte_financiada) AS fin, SUM(vl_parte_nao_financiada) AS naofin
         FROM ${SCHEMA}.tb_dsod_itbi
         GROUP BY YEAR(dt_transacao), ds_natureza_transacao`, 3000),
-      agentQuery(`
-        SELECT d.NO_ANO AS ano, nr.DS_ALINEA_RECEITA AS alinea, SUM(r.VL_ARRECADACAO_RECEITA) AS arrec
-        FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA r
-        JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON r.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
-        JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON r.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE d.NO_ANO BETWEEN 2018 AND 2030
-        GROUP BY d.NO_ANO, nr.DS_ALINEA_RECEITA`, 2000),
+      // Arrecadado/inadimplência REAIS pelo motor de parcelas (cd_tributo ITBI).
+      serieTributo('itbi'),
     ])
 
     const trans = new Map<number, number>()
@@ -68,24 +63,19 @@ export async function GET(req: NextRequest) {
       naofin.set(ano, (naofin.get(ano) ?? 0) + (Number(r[5]) || 0))
     }
 
-    const arr = new Map<number, number>()
-    for (const r of receita.rows) {
-      if (!RE_ITBI.test(String(r[1] ?? ''))) continue
-      const ano = Number(r[0]); arr.set(ano, (arr.get(ano) ?? 0) + (Number(r[2]) || 0))
-    }
+    const arr = new Map<number, number>(serie.map(s => [s.ano, s.arrecadado]))
+    const inad = new Map<number, number>(serie.map(s => [s.ano, s.saldo]))
+    const serieMax = serie.length ? serie[serie.length - 1].ano : 0
 
-    const anoMax = Math.max(...Array.from(trans.keys()), ...Array.from(arr.keys()), 0)
+    const anoMax = Math.max(...Array.from(trans.keys()), serieMax, 0)
     const anoAtual = f.ano || anoMax
     const anoAnt = anoAtual - 1
 
     const tA = trans.get(anoAtual) ?? 0, tP = trans.get(anoAnt) ?? 0
     const vA = venal.get(anoAtual) ?? 0, vP = venal.get(anoAnt) ?? 0
     const arA = arr.get(anoAtual) ?? 0, arP = arr.get(anoAnt) ?? 0
+    const inA = inad.get(anoAtual) ?? 0, inP = inad.get(anoAnt) ?? 0
     const ticketA = tA ? vA / tA : 0, ticketP = tP ? vP / tP : 0
-    const movA = (fin.get(anoAtual) ?? 0) + (naofin.get(anoAtual) ?? 0)
-    const movP = (fin.get(anoAnt) ?? 0) + (naofin.get(anoAnt) ?? 0)
-    const nfPctA = movA ? ((naofin.get(anoAtual) ?? 0) / movA) * 100 : 0
-    const nfPctP = movP ? ((naofin.get(anoAnt) ?? 0) / movP) * 100 : 0
 
     const kpis: Kpi[] = [
       semNat
@@ -94,7 +84,9 @@ export async function GET(req: NextRequest) {
       { label: 'Transmissões', value: fmtInt(tA), subLabel: 'Ano Anterior', subValue: fmtInt(tP), ...variacao(tA, tP) },
       { label: 'Valor Movimentado', value: fmtMoney(vA), subLabel: 'Ano Anterior', subValue: fmtMoney(vP), ...variacao(vA, vP) },
       { label: 'Ticket Médio', value: fmtMoney(ticketA), subLabel: 'Ano Anterior', subValue: fmtMoney(ticketP), ...variacao(ticketA, ticketP) },
-      { label: 'Não Financiado', value: fmtPct1(nfPctA), subLabel: 'do movimentado', subValue: fmtMoney(naofin.get(anoAtual) ?? 0), ...variacao(nfPctA, nfPctP) },
+      semNat
+        ? { label: 'Inadimplência', value: fmtMoney(inA), subLabel: 'Ano Anterior', subValue: fmtMoney(inP), ...variacao(inA, inP) }
+        : { label: 'Inadimplência', value: '—', subLabel: 'não filtrável por natureza', subValue: '—', pct: '', dir: 'flat' },
     ]
 
     return NextResponse.json({ kpis, referencia: { ano: anoAtual } })
