@@ -85,11 +85,13 @@ export default function ImobiliarioPage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
             <Link href="/dashboard" style={navTab}>Orçamento</Link>
-            <Link href="/contribuinte" style={navTab}>Contribuinte</Link>
+            <Link href="/contribuinte" style={navTab}>Contribuintes</Link>
             <span style={navAtivo}>Imobiliário</span>
             <Link href="/mobiliario" style={navTab}>Mobiliário</Link>
-            <span style={navTab}>Arrecada Mais</span>
-            <Link href="/chat" style={navTab}>Chat</Link>
+            <Link href="/outros-tributos" style={navTab}>Outros Tributos</Link>
+            <Link href="/divida-ativa" style={navTab}>Dívida Ativa</Link>
+            <Link href="/cobranca" style={navTab}>Cobrança</Link>
+            <Link href="/reforma-tributaria" style={navTab}>Reforma Tributária</Link>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

@@ -93,12 +93,14 @@ export default function DashboardPage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
-            <span style={{ padding: '9px 20px', borderRadius: 24, background: '#283e93', color: '#ffffff', fontSize: 14, fontWeight: 500, boxShadow: '0 6px 14px rgba(40,62,147,0.35)' }}>Orçamento</span>
-            <Link href="/contribuinte" style={navTab}>Contribuinte</Link>
+            <span style={{ padding: '9px 17px', borderRadius: 24, background: '#283e93', color: '#ffffff', fontSize: 13.5, fontWeight: 500, boxShadow: '0 6px 14px rgba(40,62,147,0.35)', whiteSpace: 'nowrap' }}>Orçamento</span>
+            <Link href="/contribuinte" style={navTab}>Contribuintes</Link>
             <Link href="/imobiliario" style={navTab}>Imobiliário</Link>
             <Link href="/mobiliario" style={navTab}>Mobiliário</Link>
-            <span style={navTab}>Arrecada Mais</span>
-            <Link href="/chat" style={navTab}>Chat</Link>
+            <Link href="/outros-tributos" style={navTab}>Outros Tributos</Link>
+            <Link href="/divida-ativa" style={navTab}>Dívida Ativa</Link>
+            <Link href="/cobranca" style={navTab}>Cobrança</Link>
+            <Link href="/reforma-tributaria" style={navTab}>Reforma Tributária</Link>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
