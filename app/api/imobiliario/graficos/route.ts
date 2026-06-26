@@ -58,11 +58,11 @@ export async function GET(req: NextRequest) {
     const anosLinha = Array.from(iptuArr.keys()).filter(a => a <= anoAtual).sort((a, b) => a - b).slice(-6)
     const porAno = anosLinha.map(ano => ({ ano, arrecadado: iptuArr.get(ano) ?? 0 }))
 
-    // Barras — Lançado × Arrecadado real (motor)
+    // Barras — Lançado × Arrecadado real (motor) — últimos 3 exercícios
     const lancVsArrec = serie
       .filter(s => s.ano <= anoAtual && s.lancado > 0)
       .sort((a, b) => a.ano - b.ano)
-      .slice(-6)
+      .slice(-3)
       .map(s => ({ ano: s.ano, lancado: s.lancado, arrecadado: s.arrecadado }))
 
     // Composição do valor venal (terreno × predial) no exercício corrente

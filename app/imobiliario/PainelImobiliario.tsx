@@ -50,7 +50,6 @@ const FALLBACK_GRAF: Graficos = {
     { id: 5, label: 'Acima de R$ 1 mi', qt: 989 },
   ],
   lancVsArrec: [
-    { ano: 2023, lancado: 107514760, arrecadado: 63093816 },
     { ano: 2024, lancado: 114568930, arrecadado: 65877143 },
     { ano: 2025, lancado: 124373967, arrecadado: 69477696 },
     { ano: 2026, lancado: 134812306, arrecadado: 54326354 },
