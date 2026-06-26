@@ -68,7 +68,7 @@ export default function DashboardPage() {
     router.push('/login')
   }
 
-  const navTab: React.CSSProperties = { padding: '9px 18px', borderRadius: 24, color: '#5b6477', fontSize: 14, fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }
+  const navTab: React.CSSProperties = { padding: '9px 14px', borderRadius: 24, color: '#5b6477', fontSize: 13.5, fontWeight: 500, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }
   const toolPill: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }
   const chevron = (cor: string) => `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${cor}' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`
   const selectBase: React.CSSProperties = {
@@ -92,8 +92,8 @@ export default function DashboardPage() {
             <img src="/logo-aruja.png" alt="Prefeitura Municipal de Arujá" style={{ height: 46, width: 'auto', display: 'block' }} />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
-            <span style={{ padding: '9px 17px', borderRadius: 24, background: '#283e93', color: '#ffffff', fontSize: 13.5, fontWeight: 500, boxShadow: '0 6px 14px rgba(40,62,147,0.35)', whiteSpace: 'nowrap' }}>Orçamento</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
+            <span style={{ padding: '9px 16px', borderRadius: 24, background: '#283e93', color: '#ffffff', fontSize: 13.5, fontWeight: 500, boxShadow: '0 6px 14px rgba(40,62,147,0.35)', whiteSpace: 'nowrap' }}>Orçamento</span>
             <Link href="/contribuinte" style={navTab}>Contribuintes</Link>
             <Link href="/imobiliario" style={navTab}>Imobiliário</Link>
             <Link href="/mobiliario" style={navTab}>Mobiliário</Link>
@@ -101,6 +101,7 @@ export default function DashboardPage() {
             <Link href="/divida-ativa" style={navTab}>Dívida Ativa</Link>
             <Link href="/cobranca" style={navTab}>Cobrança</Link>
             <Link href="/reforma-tributaria" style={navTab}>Reforma Tributária</Link>
+            <Link href="/chat" style={navTab}>Chat</Link>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
