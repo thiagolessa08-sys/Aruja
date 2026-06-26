@@ -19,7 +19,7 @@ const num = (v: unknown) => Number(v) || 0
 // "outros" = todos os códigos que NÃO são cobertos por abas dedicadas.
 function whereTributo(grupo: GrupoTributo): string {
   if (grupo === 'outros') {
-    return `g.cd_tributo NOT IN (${EXCL}) AND g.cd_tributo > 0`
+    return `g.cd_tributo NOT IN (${EXCL})`
   }
   const cods = codigosDoGrupo(grupo)
   return `g.cd_tributo IN (${cods.join(',')})`
@@ -72,8 +72,8 @@ export interface RankTributo {
 export async function rankingTributos(somenteOutros = true, ano?: number): Promise<RankTributo[]> {
   const filtroAno = ano ? `AND g.no_exercicio_lancamento = ${ano}` : ''
   const filtroGrupo = somenteOutros
-    ? `g.cd_tributo NOT IN (${EXCL}) AND g.cd_tributo > 0`
-    : `g.cd_tributo NOT IN (${CODIGOS_EXCLUIDOS.join(',')}) AND g.cd_tributo > 0`
+    ? `g.cd_tributo NOT IN (${EXCL})`
+    : `g.cd_tributo NOT IN (${CODIGOS_EXCLUIDOS.join(',')})`
 
   const r = await agentQuery(`
     SELECT g.cd_tributo AS cd, t.ds_tributo AS nome,
