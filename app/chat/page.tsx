@@ -84,16 +84,16 @@ const CSS = `
 }
 .kc-nav-logo { height: 46px; width: auto; display: block; }
 .kc-tabs {
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 3px; flex-wrap: wrap; justify-content: center;
   background: #f4f7fc; border-radius: 30px; padding: 5px;
 }
 .kc-tab {
-  padding: 9px 18px; border-radius: 24px; color: #5b6477;
-  font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none;
-  border: 0; background: transparent; font-family: inherit;
+  padding: 9px 14px; border-radius: 24px; color: #5b6477;
+  font-size: 13.5px; font-weight: 500; cursor: pointer; text-decoration: none;
+  border: 0; background: transparent; font-family: inherit; white-space: nowrap;
 }
 .kc-tab.active {
-  padding: 9px 20px; background: #283e93; color: #fff;
+  padding: 9px 16px; background: #283e93; color: #fff;
   box-shadow: 0 6px 14px rgba(40,62,147,0.35);
 }
 .kc-icons { display: flex; align-items: center; gap: 14px; }
@@ -899,10 +899,13 @@ export default function ChatPage() {
 
           <div className="kc-tabs">
             <Link href="/dashboard" className="kc-tab">Orçamento</Link>
-            <span className="kc-tab">Contribuinte</span>
+            <Link href="/contribuinte" className="kc-tab">Contribuintes</Link>
             <Link href="/imobiliario" className="kc-tab">Imobiliário</Link>
-            <span className="kc-tab">Mobiliário</span>
-            <span className="kc-tab">Arrecada Mais</span>
+            <Link href="/mobiliario" className="kc-tab">Mobiliário</Link>
+            <Link href="/outros-tributos" className="kc-tab">Outros Tributos</Link>
+            <Link href="/divida-ativa" className="kc-tab">Dívida Ativa</Link>
+            <Link href="/cobranca" className="kc-tab">Cobrança</Link>
+            <Link href="/reforma-tributaria" className="kc-tab">Reforma Tributária</Link>
             <span className="kc-tab active">Chat</span>
           </div>
 
