@@ -415,7 +415,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           </div>
           <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>% do valor movimentado</div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, position: 'relative' }}>
-            <svg viewBox="0 0 200 200" width="190" height="190">
+            <svg viewBox="0 0 200 200" width="210" height="210" style={{ maxWidth: '100%' }}>
               <g transform="rotate(-90 100 100)">
                 <circle cx="100" cy="100" r="52" fill="none" stroke="#e8962e" strokeWidth="28"
                   strokeDasharray={`${donutC.toFixed(1)} 0`} />

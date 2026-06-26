@@ -290,7 +290,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
           </div>
           <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>distribuição da base</div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, position: 'relative' }}>
-            <svg viewBox="0 0 200 200" width="180" height="180">
+            <svg viewBox="0 0 200 200" width="210" height="210" style={{ maxWidth: '100%' }}>
               <g transform="rotate(-90 100 100)">
                 <circle cx="100" cy="100" r="56" fill="none" stroke="#7d8fce" strokeWidth="28" strokeDasharray={`${donutC.toFixed(1)} 0`} />
                 <circle cx="100" cy="100" r="56" fill="none" stroke="#283e93" strokeWidth="28" strokeDasharray={`${lenF.toFixed(1)} ${(donutC - lenF).toFixed(1)}`} />
@@ -409,7 +409,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
             return (
               <>
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-                  <svg viewBox="0 0 200 200" width="160" height="160">
+                  <svg viewBox="0 0 200 200" width="200" height="200" style={{ maxWidth: '100%' }}>
                     <g transform="rotate(-90 100 100)">
                       <circle cx="100" cy="100" r="56" fill="none" stroke="#e8962e" strokeWidth="26" strokeDasharray={`${dc.toFixed(1)} 0`} />
                       <circle cx="100" cy="100" r="56" fill="none" stroke="#1fa463" strokeWidth="26" strokeDasharray={`${lenAd.toFixed(1)} ${(dc - lenAd).toFixed(1)}`} />

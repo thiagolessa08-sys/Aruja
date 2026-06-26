@@ -190,7 +190,7 @@ export default function PainelDivida() {
             <span style={dots}>···</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-            <svg viewBox="0 0 200 200" width="160" height="160">
+            <svg viewBox="0 0 200 200" width="210" height="210" style={{ maxWidth: '100%' }}>
               <g transform="rotate(-90 100 100)">
                 {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="26" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
               </g>

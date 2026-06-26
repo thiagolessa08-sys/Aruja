@@ -337,7 +337,7 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
             <span style={dots}>···</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14 }}>
-            <svg viewBox="0 0 200 200" width="150" height="150" style={{ flex: 'none' }}>
+            <svg viewBox="0 0 200 200" width="185" height="185" style={{ flex: 'none', maxWidth: '52%' }}>
               <g transform="rotate(-90 100 100)">
                 {donut.map((s2, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s2.cor} strokeWidth="26" strokeDasharray={`${s2.len.toFixed(1)} ${(donutC - s2.len).toFixed(1)}`} strokeDashoffset={s2.off.toFixed(1)} />))}
               </g>
