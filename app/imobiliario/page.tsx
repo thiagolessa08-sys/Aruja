@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PainelImobiliario, { type FiltrosImobiliario } from './PainelImobiliario'
 import PainelItbi, { type FiltrosItbiUI } from './PainelItbi'
-import PainelMobiliario, { type FiltrosMobiliario } from '../mobiliario/PainelMobiliario'
+import PainelTributo from '../tributo/PainelTributo'
 import { FAIXAS_VENAL } from '@/lib/imobiliario-filtros'
 
-type Tributo = 'iptu' | 'itbi' | 'iss'
+type Tributo = 'iptu' | 'itbi' | 'isscc'
 interface NaturezaOpt { id: string; label: string }
 
 export default function ImobiliarioPage() {
@@ -26,15 +26,11 @@ export default function ImobiliarioPage() {
   const [iAno, setIAno] = useState<number | ''>('')
   const [iNat, setINat] = useState<string>('')
 
-  // ISS
-  const [optsIss, setOptsIss] = useState<{ anos: number[] }>({ anos: [] })
-  const [sAno, setSAno] = useState<number | ''>('')
-
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
     const v = new URLSearchParams(window.location.search).get('v')
-    if (v === 'iptu' || v === 'itbi' || v === 'iss') setTributo(v)
+    if (v === 'iptu' || v === 'itbi' || v === 'isscc') setTributo(v)
   }, [])
 
   useEffect(() => {
@@ -43,9 +39,6 @@ export default function ImobiliarioPage() {
     }).catch(() => {})
     fetch('/api/itbi/filtros').then(r => r.ok ? r.json() : null).then(d => {
       if (d && !d.error) { setOptsItbi({ anos: d.anos ?? [], naturezas: d.naturezas ?? [] }); if (d.anos?.length) setIAno(d.anos[0]) }
-    }).catch(() => {})
-    fetch('/api/mobiliario/filtros').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && !d.error) { setOptsIss({ anos: d.anos ?? [] }); if (d.anos?.length) setSAno(d.anos[0]) }
     }).catch(() => {})
   }, [])
 
@@ -73,12 +66,11 @@ export default function ImobiliarioPage() {
 
   const filtrosIptu: FiltrosImobiliario = { ano: pAno, faixa: pFaixa }
   const filtrosItbi: FiltrosItbiUI = { ano: iAno, natureza: iNat }
-  const filtrosIss: FiltrosMobiliario = { ano: sAno, situacao: '' }
 
   const TRIBUTOS: { id: Tributo; label: string }[] = [
     { id: 'iptu', label: 'IPTU' },
     { id: 'itbi', label: 'ITBI' },
-    { id: 'iss', label: 'ISS' },
+    { id: 'isscc', label: 'ISSCC' },
   ]
 
   return (
@@ -168,10 +160,8 @@ export default function ImobiliarioPage() {
                 </select>
               </>
             )}
-            {tributo === 'iss' && (
-              <select aria-label="Exercício" value={sAno} onChange={e => setSAno(Number(e.target.value))} style={selectPill}>
-                {optsIss.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-              </select>
+            {tributo === 'isscc' && (
+              <div style={{ ...selectPill, cursor: 'default', color: '#5b6477', maxWidth: 'none' }}>ISS Construção Civil · todos os exercícios</div>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -190,7 +180,7 @@ export default function ImobiliarioPage() {
         {/* ===== PAINEL ===== */}
         {tributo === 'iptu' && <PainelImobiliario filtros={filtrosIptu} />}
         {tributo === 'itbi' && <PainelItbi filtros={filtrosItbi} />}
-        {tributo === 'iss' && <PainelMobiliario filtros={filtrosIss} foco="arrecadacao" />}
+        {tributo === 'isscc' && <PainelTributo grupo="isscc" titulo="ISS Construção Civil" />}
 
       </div>
     </div>
