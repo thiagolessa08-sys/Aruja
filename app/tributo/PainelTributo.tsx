@@ -100,6 +100,28 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
       .then(d => { if (d && !d.error && Array.isArray(d.serie)) setSerie(d.serie) }).catch(() => {})
   }, [grupo])
 
+  const carregando = serie === null
+  if (carregando) {
+    return (
+      <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
+          {[0, 1, 2, 3, 4].map(i => (
+            <div key={i} style={{ background: i === 0 ? '#283e93' : '#fff', borderRadius: 16, padding: '12px 14px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)', height: 92 }}>
+              <div style={{ height: 10, width: '60%', borderRadius: 5, background: i === 0 ? 'rgba(255,255,255,0.25)' : '#eef1f7' }} />
+              <div style={{ height: 18, width: '45%', borderRadius: 5, background: i === 0 ? 'rgba(255,255,255,0.35)' : '#e3e8f1', marginTop: 16 }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 20, background: '#fff', borderRadius: 22, padding: '46px 24px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)', textAlign: 'center', color: '#5b6477' }}>
+          <div style={{ width: 38, height: 38, border: '3px solid #e3e8f1', borderTopColor: '#283e93', borderRadius: '50%', margin: '0 auto', animation: 'pt-spin 0.9s linear infinite' }} />
+          <div style={{ marginTop: 14, fontSize: 14, fontWeight: 600, color: '#1f2a44' }}>Carregando dados de {titulo}…</div>
+          <div style={{ marginTop: 4, fontSize: 12 }}>consultando o motor de arrecadação (pode levar alguns segundos na primeira carga)</div>
+          <style>{`@keyframes pt-spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+      </>
+    )
+  }
+
   const s = serie ?? []
   const ult = s[s.length - 1]
   const ant = s[s.length - 2]

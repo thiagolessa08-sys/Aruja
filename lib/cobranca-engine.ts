@@ -1,5 +1,6 @@
 import { agentQuery } from '@/lib/agent'
 import { rankingTributos } from '@/lib/tributo-engine'
+import { cached, TTL_15MIN } from '@/lib/cache'
 
 const SCHEMA = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
@@ -17,6 +18,10 @@ export interface ResumoCobranca {
 }
 
 export async function resumoCobranca(ano = 2025): Promise<ResumoCobranca> {
+  return cached(`cobranca:${ano}`, TTL_15MIN, () => resumoCobrancaRaw(ano))
+}
+
+async function resumoCobrancaRaw(ano: number): Promise<ResumoCobranca> {
   const [rank, canaisR, anoR] = await Promise.all([
     rankingTributos(false, ano),
     agentQuery(`

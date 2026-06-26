@@ -1,5 +1,6 @@
 import { agentQuery } from '@/lib/agent'
 import { GrupoTributo, codigosDoGrupo, CODIGOS_CORE, CODIGOS_EXCLUIDOS } from '@/lib/tributos'
+import { cached, TTL_15MIN } from '@/lib/cache'
 
 const SCHEMA = 'pref_aruja_sp'
 const EXCL = [...CODIGOS_CORE, ...CODIGOS_EXCLUIDOS].join(',')
@@ -30,6 +31,10 @@ function whereTributo(grupo: GrupoTributo): string {
  * Motor: tb_dsod_parcela_posicao (vl_lancto/vl_pagto/vl_saldo) → parcelas → guias.
  */
 export async function serieTributo(grupo: GrupoTributo, anoMin = 2018, anoMax = new Date().getFullYear()): Promise<SerieExercicio[]> {
+  return cached(`serie:${grupo}:${anoMin}:${anoMax}`, TTL_15MIN, () => serieTributoRaw(grupo, anoMin, anoMax))
+}
+
+async function serieTributoRaw(grupo: GrupoTributo, anoMin: number, anoMax: number): Promise<SerieExercicio[]> {
   const r = await agentQuery(`
     SELECT g.no_exercicio_lancamento AS ex,
            SUM(pp.vl_lancto) AS lancado,
@@ -70,6 +75,10 @@ export interface RankTributo {
 }
 
 export async function rankingTributos(somenteOutros = true, ano?: number): Promise<RankTributo[]> {
+  return cached(`rank:${somenteOutros}:${ano ?? 'all'}`, TTL_15MIN, () => rankingTributosRaw(somenteOutros, ano))
+}
+
+async function rankingTributosRaw(somenteOutros: boolean, ano?: number): Promise<RankTributo[]> {
   const filtroAno = ano ? `AND g.no_exercicio_lancamento = ${ano}` : ''
   const filtroGrupo = somenteOutros
     ? `g.cd_tributo NOT IN (${EXCL})`

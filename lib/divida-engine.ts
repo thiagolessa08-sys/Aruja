@@ -1,4 +1,5 @@
 import { agentQuery } from '@/lib/agent'
+import { cached, TTL_15MIN } from '@/lib/cache'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -22,6 +23,10 @@ export interface ResumoDivida {
 const num = (v: unknown) => Number(v) || 0
 
 export async function resumoDivida(): Promise<ResumoDivida> {
+  return cached('divida:resumo', TTL_15MIN, resumoDividaRaw)
+}
+
+async function resumoDividaRaw(): Promise<ResumoDivida> {
   // Uma passada: situação × tributo × exercício. Agregações feitas em JS.
   const r = await agentQuery(`
     SELECT p.ds_situacao AS sit, t.ds_tributo AS nome, g.no_exercicio_lancamento AS ex,
