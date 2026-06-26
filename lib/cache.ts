@@ -20,4 +20,5 @@ export function invalidate(prefix?: string) {
   for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k)
 }
 
-export const TTL_15MIN = 15 * 60 * 1000
+export const CACHE_TTL = 60 * 60 * 1000 // 1h — posições agregadas mudam devagar
+export const TTL_15MIN = CACHE_TTL // alias retrocompatível
