@@ -30,17 +30,17 @@ const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits:
 const KPIS_FALLBACK: KpiCard[] = [
   { label: 'Imóveis Lançados', value: '33.281', subLabel: 'Ano Anterior', subValue: '33.065', pct: '0,65%', dir: 'up' },
   { label: 'Valor Venal Total', value: '9,03 bi', subLabel: 'Ano Anterior', subValue: '8,38 bi', pct: '7,74%', dir: 'up' },
-  { label: 'IPTU Lançado (est.)', value: '74,32 mi', subLabel: 'Ano Anterior', subValue: '69,38 mi', pct: '7,12%', dir: 'up' },
-  { label: 'IPTU Arrecadado', value: '42,23 mi', subLabel: 'Ano Anterior', subValue: '65,11 mi', pct: '-35,14%', dir: 'down' },
-  { label: 'Arrecadação IPTU', value: '56,8%', subLabel: 'do Lançado', subValue: '74,32 mi', pct: '-39,46%', dir: 'down' },
+  { label: 'IPTU Lançado', value: '134,81 mi', subLabel: 'Ano Anterior', subValue: '124,37 mi', pct: '8,39%', dir: 'up' },
+  { label: 'IPTU Arrecadado', value: '54,33 mi', subLabel: 'Ano Anterior', subValue: '69,48 mi', pct: '-21,81%', dir: 'down' },
+  { label: 'Inadimplência', value: '41,11 mi', subLabel: 'do Lançado', subValue: '30,5%', pct: '30,5%', dir: 'down' },
 ]
 const FALLBACK_GRAF: Graficos = {
   porAno: [
-    { ano: 2022, arrecadado: 49528949 },
-    { ano: 2023, arrecadado: 56794487 },
-    { ano: 2024, arrecadado: 57256951 },
-    { ano: 2025, arrecadado: 65110208 },
-    { ano: 2026, arrecadado: 42232040 },
+    { ano: 2022, arrecadado: 56993408 },
+    { ano: 2023, arrecadado: 63093816 },
+    { ano: 2024, arrecadado: 65877143 },
+    { ano: 2025, arrecadado: 69477696 },
+    { ano: 2026, arrecadado: 54326354 },
   ],
   faixas: [
     { id: 1, label: 'Até R$ 100 mil', qt: 13453 },
@@ -50,21 +50,23 @@ const FALLBACK_GRAF: Graficos = {
     { id: 5, label: 'Acima de R$ 1 mi', qt: 989 },
   ],
   lancVsArrec: [
-    { ano: 2025, lancado: 69378705, arrecadado: 65110208 },
-    { ano: 2026, lancado: 74322224, arrecadado: 42232040 },
+    { ano: 2023, lancado: 107514760, arrecadado: 63093816 },
+    { ano: 2024, lancado: 114568930, arrecadado: 65877143 },
+    { ano: 2025, lancado: 124373967, arrecadado: 69477696 },
+    { ano: 2026, lancado: 134812306, arrecadado: 54326354 },
   ],
   venalComposicao: { terreno: 2696442029, predial: 6135114896 },
   exercicios: [
-    { ano: 2026, qt: 33281, venal: 9033211585, lancado: 74322224, arrecadado: 42232040, pct: 56.8 },
-    { ano: 2025, qt: 33065, venal: 8384415578, lancado: 69378705, arrecadado: 65110208, pct: 93.8 },
-    { ano: 2024, qt: 32072, venal: 7827236703, lancado: null, arrecadado: 57256951, pct: null },
-    { ano: 2023, qt: 30878, venal: 7223562103, lancado: null, arrecadado: 56794487, pct: null },
-    { ano: 2022, qt: 30281, venal: 6591459160, lancado: null, arrecadado: 49528949, pct: null },
+    { ano: 2026, qt: 33281, venal: 9033211585, lancado: 134812306, arrecadado: 54326354, pct: 40.3 },
+    { ano: 2025, qt: 33065, venal: 8384415578, lancado: 124373967, arrecadado: 69477696, pct: 55.9 },
+    { ano: 2024, qt: 32072, venal: 7827236703, lancado: 114568930, arrecadado: 65877143, pct: 57.5 },
+    { ano: 2023, qt: 30878, venal: 7223562103, lancado: 107514760, arrecadado: 63093816, pct: 58.7 },
+    { ano: 2022, qt: 30281, venal: 6591459160, lancado: 99947458, arrecadado: 56993408, pct: 57.0 },
   ],
 }
 const INSIGHTS_FALLBACK = [
   'O cadastro imobiliário de 2026 tem 33.281 imóveis lançados, somando R$ 9,0 bi em valor venal.',
-  'IPTU lançado estimado de R$ 74,3 mi; arrecadado R$ 42,2 mi até agora (56,8% do lançado).',
+  'IPTU lançado de R$ 134,8 mi; arrecadado R$ 54,3 mi (40,3% do lançado) e R$ 41,1 mi de inadimplência.',
   '79,5% dos imóveis têm valor venal de até R$ 300 mil — base predominantemente residencial popular.',
 ]
 
@@ -339,7 +341,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>IPTU Lançado × Arrecadado</span>
             <div style={{ display: 'flex', gap: 22, fontSize: 12, color: '#5b6477' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>IPTU Lançado (est.)</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>IPTU Lançado</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>IPTU Arrecadado</span>
             </div>
           </div>
@@ -415,7 +417,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Exercício', 'Imóveis', 'Valor Venal', 'IPTU Lançado (est.)', 'IPTU Arrecadado', '% Arrec.'].map((h, i) => (
+                {['Exercício', 'Imóveis', 'Valor Venal', 'IPTU Lançado', 'IPTU Arrecadado', '% Arrec.'].map((h, i) => (
                   <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
                 ))}
               </tr>

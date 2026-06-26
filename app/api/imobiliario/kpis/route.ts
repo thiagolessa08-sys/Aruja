@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
 import { lerFiltros, faixaWhere } from '@/lib/imobiliario-filtros'
+import { serieTributo } from '@/lib/tributo-engine'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -13,8 +14,6 @@ interface Kpi {
   pct: string
   dir: 'up' | 'down' | 'flat'
 }
-
-const RE_IPTU = /PREDIAL E TERRITORIAL URBANA/i
 
 function fmtMoney(v: number): string {
   if (Math.abs(v) >= 1e9) return (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
@@ -41,72 +40,62 @@ export async function GET(req: NextRequest) {
     const f = lerFiltros(req.nextUrl.searchParams)
     const fw = faixaWhere(f.faixa)
 
-    const [cadastro, receita] = await Promise.all([
-      // Cadastro de IPTU por exercício (lançamento). Lançado estimado = venal × alíquota.
+    const [cadastro, serie] = await Promise.all([
+      // Cadastro de IPTU por exercício (imóveis + valor venal — filtrável por faixa).
       agentQuery(`
         SELECT no_exercicio_lancamento AS ano,
           COUNT(*) AS qt,
-          SUM(vl_venal_imovel) AS venal,
-          SUM(vl_venal_imovel * vl_aliquota) AS lancado
+          SUM(vl_venal_imovel) AS venal
         FROM ${SCHEMA}.tb_dsod_imovel_urbano_lanc
         WHERE no_exercicio_lancamento BETWEEN 2018 AND 2030${fw}
         GROUP BY no_exercicio_lancamento`, 50),
-      // IPTU arrecadado por ano (receita). Filtra a alínea no JS.
-      agentQuery(`
-        SELECT d.NO_ANO AS ano, nr.DS_ALINEA_RECEITA AS alinea,
-          SUM(r.VL_ARRECADACAO_RECEITA) AS arrec
-        FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA r
-        JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON r.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
-        JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON r.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE d.NO_ANO BETWEEN 2018 AND 2030
-        GROUP BY d.NO_ANO, nr.DS_ALINEA_RECEITA`, 2000),
+      // Lançado/arrecadado/inadimplência REAIS pelo motor de parcelas (cd_tributo IPTU).
+      serieTributo('iptu'),
     ])
 
     const qt = new Map<number, number>()
     const venal = new Map<number, number>()
-    const lancado = new Map<number, number>()
     let anoMax = 0
     for (const r of cadastro.rows) {
       const ano = Number(r[0])
       if (!ano || ano < 1990) continue
       qt.set(ano, Number(r[1]) || 0)
       venal.set(ano, Number(r[2]) || 0)
-      lancado.set(ano, Number(r[3]) || 0)
       if (ano > anoMax) anoMax = ano
     }
 
-    const iptuArr = new Map<number, number>()
-    for (const r of receita.rows) {
-      if (!RE_IPTU.test(String(r[1] ?? ''))) continue
-      const ano = Number(r[0])
-      iptuArr.set(ano, (iptuArr.get(ano) ?? 0) + (Number(r[2]) || 0))
-    }
+    const serieAno = new Map(serie.map(s => [s.ano, s]))
+    const serieMax = serie.length ? serie[serie.length - 1].ano : 0
+    anoMax = Math.max(anoMax, serieMax)
 
     const anoAtual = f.ano || anoMax
     const anoAnt = anoAtual - 1
 
     const qtA = qt.get(anoAtual) ?? 0, qtP = qt.get(anoAnt) ?? 0
     const vnA = venal.get(anoAtual) ?? 0, vnP = venal.get(anoAnt) ?? 0
-    const lcA = lancado.get(anoAtual) ?? 0, lcP = lancado.get(anoAnt) ?? 0
-    const arA = iptuArr.get(anoAtual) ?? 0, arP = iptuArr.get(anoAnt) ?? 0
-    const pctA = lcA ? (arA / lcA) * 100 : 0
-    const pctP = lcP ? (arP / lcP) * 100 : 0
+    const sA = serieAno.get(anoAtual), sP = serieAno.get(anoAnt)
+    const lcA = sA?.lancado ?? 0, lcP = sP?.lancado ?? 0
+    const arA = sA?.arrecadado ?? 0, arP = sP?.arrecadado ?? 0
+    const inA = sA?.saldo ?? 0
+    const pctInad = lcA ? (inA / lcA) * 100 : 0
 
-    // A receita (IPTU arrecadado) não é decomponível por faixa de venal — com filtro de
-    // faixa ativo, os KPIs de arrecadação ficariam inconsistentes, então exibimos "—".
+    // Lançado/arrecadado/inadimplência vêm do motor de parcelas — não decomponíveis por
+    // faixa de venal. Com filtro de faixa ativo, exibimos "—".
     const semFaixa = !faixaWhere(f.faixa)
     const branco = { value: '—', subLabel: 'não filtrável por faixa', subValue: '—', pct: '', dir: 'flat' as const }
 
     const kpis: Kpi[] = [
       { label: 'Imóveis Lançados', value: fmtInt(qtA), subLabel: 'Ano Anterior', subValue: fmtInt(qtP), ...variacao(qtA, qtP) },
       { label: 'Valor Venal Total', value: fmtMoney(vnA), subLabel: 'Ano Anterior', subValue: fmtMoney(vnP), ...variacao(vnA, vnP) },
-      { label: 'IPTU Lançado (est.)', value: fmtMoney(lcA), subLabel: 'Ano Anterior', subValue: fmtMoney(lcP), ...variacao(lcA, lcP) },
+      semFaixa
+        ? { label: 'IPTU Lançado', value: fmtMoney(lcA), subLabel: 'Ano Anterior', subValue: fmtMoney(lcP), ...variacao(lcA, lcP) }
+        : { label: 'IPTU Lançado', ...branco },
       semFaixa
         ? { label: 'IPTU Arrecadado', value: fmtMoney(arA), subLabel: 'Ano Anterior', subValue: fmtMoney(arP), ...variacao(arA, arP) }
         : { label: 'IPTU Arrecadado', ...branco },
       semFaixa
-        ? { label: 'Arrecadação IPTU', value: fmtPct1(pctA), subLabel: 'do Lançado', subValue: fmtMoney(lcA), ...variacao(pctA, pctP) }
-        : { label: 'Arrecadação IPTU', ...branco },
+        ? { label: 'Inadimplência', value: fmtMoney(inA), subLabel: 'do Lançado', subValue: fmtPct1(pctInad), pct: fmtPct1(pctInad), dir: 'down' }
+        : { label: 'Inadimplência', ...branco },
     ]
 
     return NextResponse.json({ kpis, referencia: { ano: anoAtual } })
