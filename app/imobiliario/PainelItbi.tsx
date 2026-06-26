@@ -408,18 +408,19 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         </div>
 
         {/* DONUT: Financiamento */}
-        <div style={card}>
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Forma de Aquisição</span>
             <span style={dots}>···</span>
           </div>
           <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>% do valor movimentado</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, position: 'relative' }}>
-            <svg viewBox="0 0 200 200" width="210" height="210" style={{ maxWidth: '100%' }}>
+            <svg viewBox="0 0 200 200" width="250" height="250" style={{ maxWidth: '100%' }}>
               <g transform="rotate(-90 100 100)">
-                <circle cx="100" cy="100" r="52" fill="none" stroke="#e8962e" strokeWidth="28"
+                <circle cx="100" cy="100" r="52" fill="none" stroke="#e8962e" strokeWidth="30"
                   strokeDasharray={`${donutC.toFixed(1)} 0`} />
-                <circle cx="100" cy="100" r="52" fill="none" stroke="#283e93" strokeWidth="28"
+                <circle cx="100" cy="100" r="52" fill="none" stroke="#283e93" strokeWidth="30"
                   strokeDasharray={`${lenNF.toFixed(1)} ${(donutC - lenNF).toFixed(1)}`} />
               </g>
               <text x="100" y="92" fontSize="17" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>
@@ -428,7 +429,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
               <text x="100" y="110" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>não financiado</text>
             </svg>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 18 }}>
             {[
               { cor: '#283e93', label: 'Não Financiado', v: fc.naoFinanciado },
               { cor: '#e8962e', label: 'Financiado', v: fc.financiado },
@@ -439,6 +440,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtMoney(s.v)}</span>
               </div>
             ))}
+          </div>
           </div>
         </div>
       </div>

@@ -283,23 +283,24 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
         </div>
 
         {/* DONUT: PF × PJ */}
-        <div style={card}>
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Pessoa Física × Jurídica</span>
             <span style={dots}>···</span>
           </div>
           <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>distribuição da base</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, position: 'relative' }}>
-            <svg viewBox="0 0 200 200" width="210" height="210" style={{ maxWidth: '100%' }}>
+            <svg viewBox="0 0 200 200" width="250" height="250" style={{ maxWidth: '100%' }}>
               <g transform="rotate(-90 100 100)">
-                <circle cx="100" cy="100" r="56" fill="none" stroke="#7d8fce" strokeWidth="28" strokeDasharray={`${donutC.toFixed(1)} 0`} />
-                <circle cx="100" cy="100" r="56" fill="none" stroke="#283e93" strokeWidth="28" strokeDasharray={`${lenF.toFixed(1)} ${(donutC - lenF).toFixed(1)}`} />
+                <circle cx="100" cy="100" r="56" fill="none" stroke="#7d8fce" strokeWidth="30" strokeDasharray={`${donutC.toFixed(1)} 0`} />
+                <circle cx="100" cy="100" r="56" fill="none" stroke="#283e93" strokeWidth="30" strokeDasharray={`${lenF.toFixed(1)} ${(donutC - lenF).toFixed(1)}`} />
               </g>
               <text x="100" y="94" fontSize="22" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtPct(pctF)}</text>
               <text x="100" y="112" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>são PF</text>
             </svg>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 18 }}>
             {[
               { cor: '#283e93', label: 'Pessoa Física', v: g.pfpj.f },
               { cor: '#7d8fce', label: 'Pessoa Jurídica', v: g.pfpj.j },
@@ -310,6 +311,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.v / totPfPj * 100)})</span></span>
               </div>
             ))}
+          </div>
           </div>
         </div>
       </div>
@@ -396,7 +398,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
         </div>
 
         {/* Score de Adimplência */}
-        <div style={card}>
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Score de Adimplência</span>
             <span style={dots}>···</span>
@@ -407,18 +409,18 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
             const dc = 2 * Math.PI * 56
             const lenAd = sc.total ? (sc.adimplente / sc.total) * dc : 0
             return (
-              <>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-                  <svg viewBox="0 0 200 200" width="200" height="200" style={{ maxWidth: '100%' }}>
+                  <svg viewBox="0 0 200 200" width="240" height="240" style={{ maxWidth: '100%' }}>
                     <g transform="rotate(-90 100 100)">
-                      <circle cx="100" cy="100" r="56" fill="none" stroke="#e8962e" strokeWidth="26" strokeDasharray={`${dc.toFixed(1)} 0`} />
-                      <circle cx="100" cy="100" r="56" fill="none" stroke="#1fa463" strokeWidth="26" strokeDasharray={`${lenAd.toFixed(1)} ${(dc - lenAd).toFixed(1)}`} />
+                      <circle cx="100" cy="100" r="56" fill="none" stroke="#e8962e" strokeWidth="30" strokeDasharray={`${dc.toFixed(1)} 0`} />
+                      <circle cx="100" cy="100" r="56" fill="none" stroke="#1fa463" strokeWidth="30" strokeDasharray={`${lenAd.toFixed(1)} ${(dc - lenAd).toFixed(1)}`} />
                     </g>
                     <text x="100" y="96" fontSize="24" fontWeight="700" fill="#1fa463" textAnchor="middle" style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>{fmtPct(sc.pctAdimplente)}</text>
                     <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>adimplentes</text>
                   </svg>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 18 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                     <span style={{ width: 11, height: 11, borderRadius: 3, background: '#1fa463', flex: 'none' }}></span>
                     <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>Sem cobrança</span>
@@ -430,7 +432,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(sc.emCobranca)}</span>
                   </div>
                 </div>
-              </>
+              </div>
             )
           })()}
         </div>

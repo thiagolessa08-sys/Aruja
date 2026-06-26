@@ -184,21 +184,22 @@ export default function PainelDivida() {
         </div>
 
         {/* Donut composição */}
-        <div style={card}>
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Administrativa × Judicial</span>
             <span style={dots}>···</span>
           </div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-            <svg viewBox="0 0 200 200" width="210" height="210" style={{ maxWidth: '100%' }}>
+            <svg viewBox="0 0 200 200" width="250" height="250" style={{ maxWidth: '100%' }}>
               <g transform="rotate(-90 100 100)">
-                {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="26" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
+                {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
               </g>
               <text x="100" y="96" fontSize="16" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtMoney(g.total)}</text>
               <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>total</text>
             </svg>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 18 }}>
             {donut.map((s, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
@@ -206,6 +207,7 @@ export default function PainelDivida() {
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtPct(s.pct)}</span>
               </div>
             ))}
+          </div>
           </div>
         </div>
       </div>

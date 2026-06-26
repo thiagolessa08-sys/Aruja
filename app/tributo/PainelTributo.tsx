@@ -331,13 +331,13 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
         </div>
 
         {/* Donut composição do exercício */}
-        <div style={card}>
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Composição do Lançado {ano}</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14 }}>
-            <svg viewBox="0 0 200 200" width="185" height="185" style={{ flex: 'none', maxWidth: '52%' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20, marginTop: 14 }}>
+            <svg viewBox="0 0 200 200" width="220" height="220" style={{ flex: 'none', maxWidth: '54%' }}>
               <g transform="rotate(-90 100 100)">
                 {donut.map((s2, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s2.cor} strokeWidth="26" strokeDasharray={`${s2.len.toFixed(1)} ${(donutC - s2.len).toFixed(1)}`} strokeDashoffset={s2.off.toFixed(1)} />))}
               </g>
