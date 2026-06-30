@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import AreaSerie from '../_components/AreaSerie'
 
 // Painel genérico movido pelo motor de tributos (/api/tributo/serie?grupo=).
 // Reutilizado por ISSCC, TFE, TFHS e Outros Tributos.
@@ -316,17 +317,14 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Inadimplência por Exercício</span>
             <span style={reportBadge}>Saldo devedor</span>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
-            <svg viewBox="0 0 300 100" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
-              <defs><linearGradient id="tbInad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d64545" stopOpacity="0.28" /><stop offset="100%" stopColor="#d64545" stopOpacity="0" /></linearGradient></defs>
-              {ga.ticks.map((t, i) => (<text key={i} x="4" y={(t.y + 1.5).toFixed(1)} fontSize="4" fill="#aeb6c6" style={axisFont}>{t.v}</text>))}
-              <path d={ga.area} fill="url(#tbInad)" />
-              <path d={ga.linha} fill="none" stroke="#d64545" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              {ga.dots.map((p, i) => (<circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="2.4" fill="#d64545" stroke="#fff" strokeWidth="1.3" />))}
-              {ga.labels.map((l, i) => (<text key={i} x={l.x.toFixed(1)} y="96" fontSize="4.2" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>))}
-              {ga.hot.map((r, i) => (<rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height="92" fill="transparent" pointerEvents="all" />))}
-            </svg>
-            {tip?.chart === 'area' ? <Tooltip t={tip} /> : null}
+          <div style={{ flex: 1, minHeight: 200, marginTop: 14 }}>
+            <AreaSerie
+              data={s.map(x => ({ ano: x.ano, valor: x.saldo }))}
+              cor="#d64545"
+              nome="Inadimplência"
+              fmtValor={fmtMi}
+              fmtEixoY={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+            />
           </div>
         </div>
 
