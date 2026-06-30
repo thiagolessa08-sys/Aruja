@@ -237,7 +237,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
               {gs.ticks.map((t, i) => (
                 <g key={i}>
                   <line x1="0" y1={t.y.toFixed(1)} x2={String(gs.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
-                  <text x="2" y={(t.y - 3).toFixed(1)} fontSize="9" fill="#aeb6c6" style={axisFont}>{t.v}k</text>
+                  <text x="2" y={(t.y - 4).toFixed(1)} fontSize="14" fill="#aeb6c6" style={axisFont}>{t.v}k</text>
                 </g>
               ))}
               <line x1="0" y1={gs.bottom} x2={String(gs.W)} y2={gs.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
@@ -245,8 +245,8 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                 <g key={i}>
                   <rect x={b.x.toFixed(1)} y={b.pf.y.toFixed(1)} width={gs.bw.toFixed(1)} height={b.pf.h.toFixed(1)} fill="url(#ctbPf)" />
                   <rect x={b.x.toFixed(1)} y={b.pj.y.toFixed(1)} width={gs.bw.toFixed(1)} height={b.pj.h.toFixed(1)} rx="3" fill="url(#ctbPj)" />
-                  <text x={b.cx.toFixed(1)} y={String(gs.H - 6)} fontSize="12" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
-                  <text x={b.cx.toFixed(1)} y={(b.topY - 6).toFixed(1)} fontSize="10" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtInt(b.tot)}</text>
+                  <text x={b.cx.toFixed(1)} y={String(gs.H - 6)} fontSize="17" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
+                  <text x={b.cx.toFixed(1)} y={(b.topY - 7).toFixed(1)} fontSize="15" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtInt(b.tot)}</text>
                 </g>
               ))}
               {gs.bars.map((b, i) => (
