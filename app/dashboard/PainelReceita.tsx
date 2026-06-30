@@ -314,21 +314,28 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
             <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação por Categoria / Origem</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS CORRENTES</div>
-              <div style={{ height: 70, width: '90%', borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtM(g.categoria.correntes)}</span>
+          {(() => {
+            const maxCat = Math.max(g.categoria.correntes, g.categoria.capital) || 1
+            const wCorr = Math.max(8, 90 * g.categoria.correntes / maxCat)
+            const wCap = Math.max(8, 90 * g.categoria.capital / maxCat)
+            return (
+              <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS CORRENTES</div>
+                  <div style={{ height: 70, width: `${wCorr.toFixed(1)}%`, borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtM(g.categoria.correntes)}</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS DE CAPITAL</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
+                    <div style={{ height: 70, width: `${wCap.toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtM(g.categoria.capital)}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS DE CAPITAL</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
-                <div style={{ height: 70, width: `${Math.max(3, 90 * g.categoria.capital / (g.categoria.correntes || 1)).toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtM(g.categoria.capital)}</span>
-              </div>
-            </div>
-          </div>
+            )
+          })()}
         </div>
       </div>
 
