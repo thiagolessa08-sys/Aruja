@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import AreaSerie from '../_components/AreaSerie'
 
 interface Tip {
   chart: 'report' | 'arrec'
@@ -269,33 +270,14 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Arrecadação por Ano</span>
             <span style={reportBadge}>Anual</span>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
-            <div style={{ position: 'absolute', left: 30, top: -2, display: 'flex', gap: 10, zIndex: 2 }}>
-              <span style={{ background: '#283e93', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 14, padding: '4px 11px' }}>Arrecadado</span>
-            </div>
-            <svg viewBox="0 0 300 130" width="100%" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="areaArrec" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#283e93" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#283e93" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {gl.ticks.map((t, i) => (
-                <text key={i} x="4" y={(t.y + 3).toFixed(1)} fontSize="6.5" fill="#aeb6c6" style={axisFont}>{t.v}</text>
-              ))}
-              <path d={gl.area} fill="url(#areaArrec)" stroke="none" />
-              <path d={gl.linha} fill="none" stroke="#283e93" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              {gl.dots.map((p, i) => (
-                <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />
-              ))}
-              {gl.labels.map((l, i) => (
-                <text key={i} x={l.x.toFixed(1)} y="126" fontSize="6.5" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>
-              ))}
-              {gl.hot.map((r, i) => (
-                <rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height="120" fill="transparent" pointerEvents="all" />
-              ))}
-            </svg>
-            {tipReport ? <Tooltip t={tipReport} /> : null}
+          <div style={{ marginTop: 16, height: 240 }}>
+            <AreaSerie
+              data={g.porAno.map(p => ({ ano: p.ano, valor: p.arrecadado }))}
+              cor="#283e93"
+              nome="Arrecadado"
+              fmtValor={fmtMi}
+              fmtEixoY={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+            />
           </div>
         </div>
 
