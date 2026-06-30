@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import LinhaDuplaSerie from '../_components/LinhaDuplaSerie'
 
 export interface FiltrosItbiUI { ano: number | ''; natureza: string }
 
@@ -261,39 +262,15 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 18, height: 3, background: '#e8962e', display: 'inline-block', borderRadius: 2 }}></span>Movimentado</span>
             </div>
           </div>
-          {ld ? (
-            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
-              <svg viewBox={`0 0 ${ld.W} ${ld.H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
-                <defs>
-                  <linearGradient id="areaItbiA" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#283e93" stopOpacity="0.22" />
-                    <stop offset="100%" stopColor="#283e93" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                {/* Grid lines */}
-                {ld.ticksA.map((t, i) => (
-                  <g key={i}>
-                    <line x1={ld.xL} y1={t.y.toFixed(1)} x2={ld.xR} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
-                    <text x="4" y={(t.y + 3).toFixed(1)} fontSize="10" fill="#aeb6c6" style={axisFont}>{t.v}</text>
-                  </g>
-                ))}
-                {/* Eixo direito (movimentado) */}
-                {ld.ticksM.map((t, i) => (
-                  <text key={i} x={String(ld.W - 2)} y={(t.y + 3).toFixed(1)} fontSize="10" fill="#e8962e" textAnchor="end" style={axisFont}>{t.v}</text>
-                ))}
-                {/* Área e linha arrecadado */}
-                <path d={ld.areaA} fill="url(#areaItbiA)" />
-                <path d={ld.linhaA} fill="none" stroke="#283e93" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                {ld.dotsA.map((p, i) => <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3.5" fill="#283e93" stroke="#fff" strokeWidth="2" />)}
-                {/* Linha movimentado (tracejada, laranja) */}
-                <path d={ld.linhaM} fill="none" stroke="#e8962e" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" strokeLinejoin="round" />
-                {ld.dotsM.map((p, i) => <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#e8962e" stroke="#fff" strokeWidth="1.5" />)}
-                {/* Labels eixo X */}
-                {ld.labels.map((l, i) => <text key={i} x={l.x.toFixed(1)} y={String(ld.H - 4)} fontSize="12" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{l.ano}</text>)}
-                {/* Hit areas */}
-                {ld.hot.map((r, i) => <rect key={i} onMouseEnter={() => setTip(r.tip)} x={r.x.toFixed(1)} y="0" width={r.w.toFixed(1)} height={String(ld.H)} fill="transparent" pointerEvents="all" />)}
-              </svg>
-              {tip?.chart === 'linha' ? <Tooltip t={tip} /> : null}
+          {g.porAno.length ? (
+            <div style={{ flex: 1, minHeight: 200, marginTop: 14 }}>
+              <LinhaDuplaSerie
+                data={g.porAno.map(p => ({ ano: p.ano, v1: p.arrecadado, v2: g.exercicios.find(e => e.ano === p.ano)?.movimentado ?? 0 }))}
+                nome1="Arrecadado"
+                nome2="Movimentado"
+                fmtValor={fmtMi}
+                fmtEixo={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              />
             </div>
           ) : (
             <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9098a8', fontSize: 13 }}>Sem dados</div>
