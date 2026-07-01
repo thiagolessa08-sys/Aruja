@@ -142,6 +142,115 @@ async function lancadoOficialRaw(codigos: number[]): Promise<Map<number, number>
 }
 
 /**
+ * Buckets oficiais do IPTU (Regras 1-6, def. do usuário) por exercício de lançamento.
+ * Tudo em cima de tb_dsod_parcela_movimento (vl_movimento / vl_movimento*no_sinal),
+ * cd_tributo 1, no_parcela<>0. Adaptado às restrições do IQ (sem <=, <>, literal
+ * de texto no WHERE, sem subquery/HAVING) — filtros de texto e sinal resolvidos em JS.
+ */
+export interface BucketsIptuAno {
+  lancado: number
+  arrecadado: number
+  emAberto: number       // saldo em aberto total (a receber)
+  inadimplente: number   // saldo em aberto vencido
+  isento: number
+  suspenso: number
+}
+
+const IPTU_COD = '1'
+
+export async function bucketsIptu(): Promise<Map<number, BucketsIptuAno>> {
+  return cached('bucketsIptu', TTL_15MIN, bucketsIptuRaw)
+}
+
+async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
+  const [lanc, arrecRows, viRows, isenRows, suspRows] = await Promise.all([
+    lancadoOficial([1]),
+    // Arrecadado: movimento 11,14 · lançamento 0,4,7,10 · exclui tipo_baixa 28 (Estorno)
+    // · exclui guia Recalculo/Validacao (em JS).
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento AS ex, g.ds_situacao AS sit, SUM(pm.vl_movimento) AS vl
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11, 14)
+        AND p.no_parcela NOT IN (0) AND pm.cd_tipo_lancamento IN (0, 4, 7, 10)
+        AND pb.cd_tipo_baixa NOT IN (28)
+      GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 400),
+    // Em Aberto (todos) + Inadimplente (vencidos) — net por ano/mês de vencimento.
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento AS ex, YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm,
+             SUM(pm.vl_movimento * pm.no_sinal) AS net
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (0, 1, 2, 3, 11, 12, 14, 20)
+        AND p.no_parcela NOT IN (0) AND pm.cd_tipo_lancamento IN (0, 4, 7, 10, 1)
+      GROUP BY g.no_exercicio_lancamento, YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 4000),
+    // Isento: movimento 12,5 · lançamento 1 · setor de origem da baixa = 'Isencao' (filtro em JS).
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento AS ex, pb.ds_setor_origem_baixa AS setor, SUM(pm.vl_movimento) AS vl
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (12, 5)
+        AND pm.cd_tipo_lancamento IN (1) AND p.no_parcela NOT IN (0)
+      GROUP BY g.no_exercicio_lancamento, pb.ds_setor_origem_baixa`, 400),
+    // Suspenso: movimento 20 · valor = |net| (devedores com net<0). Aproximado por -SUM(net).
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento AS ex, SUM(pm.vl_movimento * pm.no_sinal) AS net
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (20) AND p.no_parcela NOT IN (0)
+      GROUP BY g.no_exercicio_lancamento`, 200),
+  ])
+
+  const now = new Date()
+  const curY = now.getFullYear(), curM = now.getMonth() + 1
+  const get = (m: Map<number, BucketsIptuAno>, ex: number) =>
+    m.get(ex) ?? { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 }
+  const map = new Map<number, BucketsIptuAno>()
+
+  // Lançado
+  for (const [ex, v] of lanc) { const b = get(map, ex); b.lancado = v; map.set(ex, b) }
+  // Arrecadado (exclui Recalculo/Validacao)
+  for (const row of arrecRows.rows) {
+    const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+    if (LANC_SIT_EXCLUIR.has(String(row[1] ?? '').trim())) continue
+    const b = get(map, ex); b.arrecadado += num(row[2]); map.set(ex, b)
+  }
+  // Em Aberto (todos) + Inadimplente (vencidos)
+  for (const row of viRows.rows) {
+    const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+    const vy = num(row[1]), vm = num(row[2]), net = num(row[3])
+    const b = get(map, ex)
+    b.emAberto += net
+    if (vy < curY || (vy === curY && vm < curM)) b.inadimplente += net
+    map.set(ex, b)
+  }
+  // Isento (só setor 'Isencao')
+  for (const row of isenRows.rows) {
+    const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+    if (String(row[1] ?? '').trim() !== 'Isencao') continue
+    const b = get(map, ex); b.isento += num(row[2]); map.set(ex, b)
+  }
+  // Suspenso (= -net, clamp >= 0)
+  for (const row of suspRows.rows) {
+    const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+    const b = get(map, ex); b.suspenso = Math.max(0, -num(row[1])); map.set(ex, b)
+  }
+
+  // Clamp de valores que não fazem sentido negativos
+  for (const b of map.values()) {
+    b.emAberto = Math.max(0, b.emAberto)
+    b.inadimplente = Math.max(0, b.inadimplente)
+  }
+  return map
+}
+
+/**
  * Split do saldo devedor por exercício em VENCIDO (inadimplência) × A VENCER (em aberto),
  * comparando a data de vencimento da parcela com hoje. Agrupa por ano/mês de vencimento
  * (evita operador < no SQL, que quebra o agente IQ) e classifica em JS.

@@ -12,13 +12,19 @@ do dashboard. Cada regra registra: **contexto**, **regra**, **implementação** 
 _(As correções que o usuário está passando item a item entram aqui. Cada item vira uma
 regra numerada abaixo quando definida.)_
 
-| # | Item | Status | Definição |
-|---|------|--------|-----------|
-| 1 | **Lançado** (definição oficial) | ✅ implementado | `SUM(vl_movimento)` de `parcela_movimento`, `cd_tipo_movimento IN (1,2,3)`, `no_parcela <> 0`, guia `ds_situacao NOT IN ('Recalculo','Validacao')`. Ver Regra 1. |
+| # | Item | Status | Valor IPTU 2026 |
+|---|------|--------|-----------------|
+| 1 | **Lançado** | ✅ | R$ 67,61 mi |
+| 2 | **Arrecadado** | ✅ | R$ 36,60 mi |
+| 3 | **Em Aberto** (a receber total) | ✅ | R$ 28,47 mi |
+| 4 | **Inadimplente** (em aberto vencido) | ✅ | R$ 5,86 mi |
+| 5 | **Suspenso** | ✅ | R$ 1,34 mi |
+| 6 | **Isento** | ✅ | R$ 0,49 mi |
 
-> ⚠️ **Reconciliação pendente:** apenas o **Lançado** foi migrado para o modelo `parcela_movimento`.
-> Arrecadado / Inadimplência / Em Aberto / Isento / Suspenso ainda vêm de `parcela_posicao`
-> (modelo antigo), então os percentuais podem não fechar até essas regras serem passadas.
+> ✅ **Reconciliação:** Arrecadado + Em Aberto + Isento + Suspenso ≈ Lançado
+> (36,6 + 28,47 + 0,49 + 1,34 = 66,9 ≈ 67,61; diferença = cancelado/arredondamento).
+> Inadimplente é SUBCONJUNTO de Em Aberto (a parte vencida), não soma.
+> Todos os 6 buckets do IPTU migraram para o modelo `parcela_movimento`.
 
 ---
 
@@ -51,12 +57,28 @@ feita por `GROUP BY g.ds_situacao` + filtro em JS.
 **Validado:** IPTU 2026 = **R$ 67,61 mi** (era R$ 134,81 mi no modelo antigo).
 ⚠️ IPTU aqui = `cd_tributo` **1** apenas (o 25 = "IPTU Diferença Área" fica de fora — confirmar se deve entrar).
 
-**Regra — demais buckets (AINDA no modelo antigo `parcela_posicao`, a corrigir):**
-- **Arrecadado** = `SUM(vl_pagto)` · **Saldo devedor** = `SUM(vl_saldo)`
-- **Isento** = `SUM(vl_isencao)` · **Suspenso** = `SUM(vl_suspenso)` · **Cancelado** = `SUM(vl_cancelamento)`
-- ⚠️ `tb_dsod_parcelas.vl_*` está ZERADO — no modelo antigo os valores vinham de `parcela_posicao`.
+**Regras 2-6 — BUCKETS OFICIAIS DO IPTU (2026-07)**, todos sobre `parcela_movimento`, `cd_tributo IN (1)`,
+`no_parcela <> 0`. Base comum: `guias → parcelas → parcela_movimento` (+ `parcela_baixas`/`tipo_baixa` quando indicado).
 
-**Implementação:** `lib/tributo-engine.ts` (`lancadoOficial` para o novo lançado; `serieTributo` p/ os demais), `lib/tributos.ts` (mapa de códigos).
+| Bucket | `cd_tipo_movimento` | `cd_tipo_lancamento` | Valor | Filtros extras |
+|--------|--------------------|----------------------|-------|----------------|
+| **2 Arrecadado** | `11,14` | `0,4,7,10` | `SUM(vl_movimento)` | exclui `tipo_baixa=28` (Estorno de Baixa) e guia `Recalculo/Validacao` |
+| **3 Em Aberto** | `0,1,2,3,11,12,14,20` | `0,4,7,10,1` | `SUM(vl_movimento*no_sinal)` por devedor, `HAVING >0` | — (líquido = positivos: sem devedor negativo neste filtro) |
+| **4 Inadimplente** | idem Em Aberto | idem | idem | apenas parcelas **vencidas** (`dt_vencimento < hoje`); é subconjunto do Em Aberto |
+| **5 Suspenso** | `20` | — | `SUM(vl_movimento)` por devedor com `net<0` ≈ `-SUM(vl_movimento*no_sinal)` | — |
+| **6 Isento** | `12,5` | `1` | `SUM(vl_movimento)` | `ds_setor_origem_baixa = 'Isencao'` |
+
+**Adaptações p/ o agente IQ** (não aceita `<`,`>`,`<=`,`<>`, literal de texto no WHERE, subquery, `HAVING`, e capa em 5000 linhas):
+- `cd_tipo_movimento <= 3` → `IN (1,2,3)`; `no_parcela <> 0` → `NOT IN (0)`; `tipo_baixa <> Estorno` → `cd_tipo_baixa NOT IN (28)`.
+- Exclusão de `Recalculo/Validacao` e filtro `ds_setor_origem_baixa='Isencao'` → `GROUP BY` + filtro em JS.
+- `HAVING >0` (Em Aberto) → validado que `SUM(net)` já = soma dos positivos (não há devedor negativo) → usa `SUM(net)` direto (1 linha).
+- Inadimplente `dt_vencimento < hoje` → `GROUP BY YEAR/MONTH(dt_vencimento)` + classifica em JS (mesma query do Em Aberto).
+- Suspenso `HAVING net<0` → validado ≈ `-SUM(net)` (movimento 20 é majoritariamente sinal negativo).
+
+**Reconciliação (IPTU 2026):** Lançado 67,61 = Arrecadado 36,60 + Em Aberto 28,47 + Isento 0,49 + Suspenso 1,34 (+ cancelado). Inadimplente 5,86 ⊂ Em Aberto.
+
+**Implementação:** `lib/tributo-engine.ts` — `lancadoOficial()` (Regra 1) e `bucketsIptu()` (Regras 2-6, cacheado).
+⚠️ IPTU aqui = `cd_tributo` **1** apenas (o 25 "IPTU Diferença Área" fica de fora — confirmar).
 
 ## 2. Inadimplência × Em Aberto (split do saldo devedor)
 

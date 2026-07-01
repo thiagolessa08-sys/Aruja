@@ -29,12 +29,12 @@ const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits:
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
 const KPIS_FALLBACK: KpiCard[] = [
-  { label: 'Total Lançado', value: '67,61 mi', subLabel: 'Ano Anterior', subValue: '—', pct: '', dir: 'flat' },
-  { label: 'Total Arrecadado', value: '54,33 mi', subLabel: 'Ano Anterior', subValue: '69,48 mi', pct: '-21,81%', dir: 'down' },
-  { label: 'Total Inadimplência', value: '18,36 mi', subLabel: 'vencido · do lançado', subValue: '13,6%', pct: '13,6%', dir: 'down' },
-  { label: 'Total em Aberto', value: '22,61 mi', subLabel: 'a vencer · do lançado', subValue: '16,8%', pct: '16,8%', dir: 'flat' },
-  { label: 'Total Isento', value: '1,50 mi', subLabel: 'do lançado', subValue: '1,1%', pct: '1,1%', dir: 'flat' },
-  { label: 'Total Suspenso', value: '1,50 mi', subLabel: 'do lançado', subValue: '1,1%', pct: '1,1%', dir: 'flat' },
+  { label: 'Total Lançado', value: '67,61 mi', subLabel: 'Ano Anterior', subValue: '62,69 mi', pct: '7,85%', dir: 'up' },
+  { label: 'Total Arrecadado', value: '36,60 mi', subLabel: 'do lançado', subValue: '54,1%', pct: '54,1%', dir: 'down' },
+  { label: 'Total Inadimplência', value: '5,86 mi', subLabel: 'vencido · do lançado', subValue: '8,7%', pct: '8,7%', dir: 'down' },
+  { label: 'Total em Aberto', value: '28,47 mi', subLabel: 'a receber · do lançado', subValue: '42,1%', pct: '42,1%', dir: 'flat' },
+  { label: 'Total Isento', value: '0,49 mi', subLabel: 'do lançado', subValue: '0,7%', pct: '0,7%', dir: 'flat' },
+  { label: 'Total Suspenso', value: '1,34 mi', subLabel: 'do lançado', subValue: '2,0%', pct: '2,0%', dir: 'flat' },
 ]
 const FALLBACK_GRAF: Graficos = {
   porAno: [

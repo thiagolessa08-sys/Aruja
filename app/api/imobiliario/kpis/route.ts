@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { lerFiltros, faixaWhere } from '@/lib/imobiliario-filtros'
-import { serieTributo, saldoVencidoAberto, lancadoOficial } from '@/lib/tributo-engine'
+import { bucketsIptu } from '@/lib/tributo-engine'
 
 interface Kpi {
   label: string
@@ -33,42 +33,30 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    // KPIs do motor de parcelas (cd_tributo IPTU). Não decomponíveis por faixa.
-    // Lançado = definição oficial (Regra 1, cd_tributo 1); demais buckets ainda de parcela_posicao.
-    const [serie, saldoVA, lanc] = await Promise.all([
-      serieTributo('iptu'),
-      saldoVencidoAberto('iptu'),
-      lancadoOficial([1]),
-    ])
-
-    const serieAno = new Map(serie.map(s => [s.ano, s]))
-    const anoMax = serie.length ? serie[serie.length - 1].ano : new Date().getFullYear()
+    // Todos os 6 buckets oficiais do IPTU (parcela_movimento). Não decomponíveis por faixa.
+    const buckets = await bucketsIptu()
+    const anos = Array.from(buckets.keys()).filter(a => a >= 2018 && a <= 2035).sort((a, b) => a - b)
+    const anoMax = anos.length ? anos[anos.length - 1] : new Date().getFullYear()
     const anoAtual = f.ano || anoMax
     const anoAnt = anoAtual - 1
 
-    const sA = serieAno.get(anoAtual), sP = serieAno.get(anoAnt)
-    const lcA = lanc.get(anoAtual) ?? 0, lcP = lanc.get(anoAnt) ?? 0
-    const arA = sA?.arrecadado ?? 0, arP = sP?.arrecadado ?? 0
-    const isA = sA?.isencao ?? 0
-    const suA = sA?.suspenso ?? 0
+    const z = { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 }
+    const b = buckets.get(anoAtual) ?? z
+    const bP = buckets.get(anoAnt) ?? z
 
-    const va = saldoVA.get(anoAtual) ?? { vencido: 0, aberto: 0 }
-    const inadA = va.vencido   // saldo vencido = inadimplência
-    const abertoA = va.aberto  // saldo a vencer = em aberto
-
-    const pctDo = (v: number) => (lcA ? fmtPct1((v / lcA) * 100) : '0,0%')
+    const pctDo = (v: number) => (b.lancado ? fmtPct1((v / b.lancado) * 100) : '0,0%')
 
     // Buckets monetários não são decomponíveis por faixa de venal → "—" com faixa ativa.
     const semFaixa = !faixaWhere(f.faixa)
     const branco = (label: string): Kpi => ({ label, value: '—', subLabel: 'não filtrável por faixa', subValue: '—', pct: '', dir: 'flat' })
 
     const kpis: Kpi[] = semFaixa ? [
-      { label: 'Total Lançado', value: fmtMoney(lcA), subLabel: 'Ano Anterior', subValue: fmtMoney(lcP), ...variacao(lcA, lcP) },
-      { label: 'Total Arrecadado', value: fmtMoney(arA), subLabel: 'Ano Anterior', subValue: fmtMoney(arP), ...variacao(arA, arP) },
-      { label: 'Total Inadimplência', value: fmtMoney(inadA), subLabel: 'vencido · do lançado', subValue: pctDo(inadA), pct: pctDo(inadA), dir: 'down' },
-      { label: 'Total em Aberto', value: fmtMoney(abertoA), subLabel: 'a vencer · do lançado', subValue: pctDo(abertoA), pct: pctDo(abertoA), dir: 'flat' },
-      { label: 'Total Isento', value: fmtMoney(isA), subLabel: 'do lançado', subValue: pctDo(isA), pct: pctDo(isA), dir: 'flat' },
-      { label: 'Total Suspenso', value: fmtMoney(suA), subLabel: 'do lançado', subValue: pctDo(suA), pct: pctDo(suA), dir: 'flat' },
+      { label: 'Total Lançado', value: fmtMoney(b.lancado), subLabel: 'Ano Anterior', subValue: fmtMoney(bP.lancado), ...variacao(b.lancado, bP.lancado) },
+      { label: 'Total Arrecadado', value: fmtMoney(b.arrecadado), subLabel: 'do lançado', subValue: pctDo(b.arrecadado), pct: pctDo(b.arrecadado), dir: (b.lancado && b.arrecadado / b.lancado >= 0.6 ? 'up' : 'down') },
+      { label: 'Total Inadimplência', value: fmtMoney(b.inadimplente), subLabel: 'vencido · do lançado', subValue: pctDo(b.inadimplente), pct: pctDo(b.inadimplente), dir: 'down' },
+      { label: 'Total em Aberto', value: fmtMoney(b.emAberto), subLabel: 'a receber · do lançado', subValue: pctDo(b.emAberto), pct: pctDo(b.emAberto), dir: 'flat' },
+      { label: 'Total Isento', value: fmtMoney(b.isento), subLabel: 'do lançado', subValue: pctDo(b.isento), pct: pctDo(b.isento), dir: 'flat' },
+      { label: 'Total Suspenso', value: fmtMoney(b.suspenso), subLabel: 'do lançado', subValue: pctDo(b.suspenso), pct: pctDo(b.suspenso), dir: 'flat' },
     ] : [
       branco('Total Lançado'), branco('Total Arrecadado'), branco('Total Inadimplência'),
       branco('Total em Aberto'), branco('Total Isento'), branco('Total Suspenso'),
