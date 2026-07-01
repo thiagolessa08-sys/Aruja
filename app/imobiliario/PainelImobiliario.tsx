@@ -12,6 +12,8 @@ interface LancArrec { ano: number; lancado: number; arrecadado: number }
 interface Faixa { id: number; label: string; qt: number }
 interface Exercicio { ano: number; lancado: number; pago: number; inadPct: number; imoveis: number; aumPct: number | null; aumQtd: number | null }
 interface AumentoPeriodo { qtd: number; pct: number; imoveisFim: number }
+interface FormaLinha { forma: string; cor: string; v: number[] }
+interface FormaPagamento { anos: number[]; linhas: FormaLinha[] }
 interface Graficos {
   porAno: PorAno[]
   faixas: Faixa[]
@@ -19,6 +21,7 @@ interface Graficos {
   venalComposicao: { terreno: number; predial: number }
   exercicios: Exercicio[]
   aumentoPeriodo: AumentoPeriodo
+  formaPagamento: FormaPagamento
 }
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
@@ -68,7 +71,16 @@ const FALLBACK_GRAF: Graficos = {
     { ano: 2021, lancado: 45473827.24, pago: 38658342.30, inadPct: -14.99, imoveis: 28387, aumPct: 0.65, aumQtd: 184 },
     { ano: 2020, lancado: 41462019.54, pago: 36038959.97, inadPct: -13.08, imoveis: 28203, aumPct: null, aumQtd: null },
   ],
-  aumentoPeriodo: { qtd: 2993, pct: 11, imoveisFim: 31196 },
+  aumentoPeriodo: { qtd: 2932, pct: 10.4, imoveisFim: 31204 },
+  formaPagamento: {
+    anos: [2020, 2021, 2022, 2023, 2024, 2025, 2026],
+    linhas: [
+      { forma: 'Cota única', cor: '#1fa463', v: [6089, 6369, 6566, 7961, 8405, 7628, 7745] },
+      { forma: 'Parcelado', cor: '#283e93', v: [18373, 18107, 17941, 16724, 16523, 16893, 1257] },
+      { forma: 'Pago Parcial', cor: '#e8962e', v: [374, 476, 436, 834, 572, 1150, 16476] },
+      { forma: 'Em aberto', cor: '#d64545', v: [3436, 3709, 3775, 3751, 4125, 4724, 5726] },
+    ],
+  },
 }
 const INSIGHTS_FALLBACK = [
   'O cadastro imobiliário de 2026 tem 33.281 imóveis lançados, somando R$ 9,0 bi em valor venal.',
@@ -78,14 +90,6 @@ const INSIGHTS_FALLBACK = [
 
 const FAIXA_CORES = ['#283e93', '#3f5bb5', '#7d8fce', '#aab8e3', '#e8962e']
 
-// ===== Imóveis por forma de pagamento (planilha — pendente regra oficial p/ dinamizar) =====
-const FORMA_ANOS = [2020, 2021, 2022, 2023, 2024, 2025, 2026]
-const FORMA_PAGTO: { forma: string; cor: string; v: number[] }[] = [
-  { forma: 'Cota única', cor: '#1fa463', v: [6036, 6231, 6482, 7929, 8366, 7620, 7749] },
-  { forma: 'Parcelado', cor: '#283e93', v: [16063, 17069, 17359, 16025, 15864, 16306, 1164] },
-  { forma: 'Pago Parcial', cor: '#e8962e', v: [2709, 1599, 1083, 1540, 1240, 1709, 16499] },
-  { forma: 'Em aberto', cor: '#d64545', v: [3395, 3488, 3692, 3719, 4104, 4725, 5784] },
-]
 
 // ===== Geometria: linha "IPTU Arrecadado por Ano" =====
 function geomLinha(d: PorAno[]) {
@@ -464,13 +468,13 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
             <thead>
               <tr>
                 <th style={{ background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '11px 14px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Forma de Pagamento</th>
-                {FORMA_ANOS.map(a => (
+                {g.formaPagamento.anos.map(a => (
                   <th key={a} style={{ background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '11px 14px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{a}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {FORMA_PAGTO.map((row, ri) => {
+              {g.formaPagamento.linhas.map((row, ri) => {
                 const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
                 return (
                   <tr key={row.forma}>

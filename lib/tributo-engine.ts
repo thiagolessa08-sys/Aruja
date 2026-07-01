@@ -274,6 +274,48 @@ export async function qtdImoveisIptu(): Promise<Map<number, number>> {
 }
 
 /**
+ * Imóveis (guias) de IPTU por FORMA DE PAGAMENTO e exercício. Classifica cada guia:
+ *  • Cota única  = parcela 0 (única) teve pagamento (vl_pagto > 0)
+ *  • Em aberto   = nenhum pagamento
+ *  • Parcelado   = parcelas 1-N totalmente quitadas (saldo <= 0), sem pagar a única
+ *  • Pago Parcial= pagou parte (nem tudo, e não pela única)
+ */
+export interface FormaPagtoAno { cotaUnica: number; parcelado: number; pagoParcial: number; emAberto: number }
+
+export async function formaPagamentoIptu(): Promise<Map<number, FormaPagtoAno>> {
+  return cached('formaPagtoIptu', TTL_15MIN, async () => {
+    const r = await agentQuery(`
+      SELECT ex, categoria, COUNT(*) AS qt FROM (
+        SELECT g.no_exercicio_lancamento AS ex, g.cd_guia,
+          CASE
+            WHEN SUM(CASE WHEN p.no_parcela = 0 THEN pp.vl_pagto ELSE 0 END) > 0 THEN 'CotaUnica'
+            WHEN SUM(pp.vl_pagto) = 0 THEN 'EmAberto'
+            WHEN SUM(CASE WHEN p.no_parcela <> 0 THEN pp.vl_saldo ELSE 0 END) <= 0 THEN 'Parcelado'
+            ELSE 'PagoParcial'
+          END AS categoria
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento BETWEEN 2018 AND 2030
+          AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+        GROUP BY g.no_exercicio_lancamento, g.cd_guia
+      ) t GROUP BY ex, categoria`, 200)
+    const map = new Map<number, FormaPagtoAno>()
+    for (const row of r.rows) {
+      const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+      const cat = String(row[1] ?? '').trim(), qt = num(row[2])
+      const b = map.get(ex) ?? { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
+      if (cat === 'CotaUnica') b.cotaUnica = qt
+      else if (cat === 'Parcelado') b.parcelado = qt
+      else if (cat === 'PagoParcial') b.pagoParcial = qt
+      else if (cat === 'EmAberto') b.emAberto = qt
+      map.set(ex, b)
+    }
+    return map
+  })
+}
+
+/**
  * Split do saldo devedor por exercício em VENCIDO (inadimplência) × A VENCER (em aberto),
  * comparando a data de vencimento da parcela com hoje. Agrupa por ano/mês de vencimento
  * (evita operador < no SQL, que quebra o agente IQ) e classifica em JS.

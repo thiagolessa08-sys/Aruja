@@ -1,4 +1,4 @@
-import { serieTributo, rankingTributos, bucketsIptu } from '@/lib/tributo-engine'
+import { serieTributo, rankingTributos, bucketsIptu, qtdImoveisIptu, formaPagamentoIptu } from '@/lib/tributo-engine'
 import { resumoDivida } from '@/lib/divida-engine'
 import { resumoCobranca } from '@/lib/cobranca-engine'
 import { invalidate } from '@/lib/cache'
@@ -13,6 +13,8 @@ async function runAll() {
     try { await serieTributo(g) } catch { /* ignora */ }
   }
   try { await bucketsIptu() } catch { /* ignora */ }
+  try { await qtdImoveisIptu() } catch { /* ignora */ }
+  try { await formaPagamentoIptu() } catch { /* ignora */ }
   try { await rankingTributos(false, 2025) } catch { /* ignora */ }
   try { await resumoDivida() } catch { /* ignora */ }
   try { await resumoCobranca(2025) } catch { /* ignora */ }

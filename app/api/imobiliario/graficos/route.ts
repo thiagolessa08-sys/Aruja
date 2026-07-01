@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
 import { lerFiltros, FAIXA_CASE, FAIXAS_VENAL } from '@/lib/imobiliario-filtros'
-import { bucketsIptu, qtdImoveisIptu } from '@/lib/tributo-engine'
+import { bucketsIptu, qtdImoveisIptu, formaPagamentoIptu } from '@/lib/tributo-engine'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    const [cadastro, serie, qtdImoveis] = await Promise.all([
+    const [cadastro, serie, qtdImoveis, formaPagto] = await Promise.all([
       agentQuery(`
         SELECT no_exercicio_lancamento AS ano,
           COUNT(*) AS qt,
@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
         GROUP BY no_exercicio_lancamento`, 50),
       bucketsIptu(),
       qtdImoveisIptu(),
+      formaPagamentoIptu(),
     ])
 
     const cad = new Map<number, { qt: number; venal: number; terreno: number; predial: number }>()
@@ -98,7 +99,19 @@ export async function GET(req: NextRequest) {
     const qi = qtdImoveis.get(anoIni) ?? 0, qf = qtdImoveis.get(anoFim) ?? 0
     const aumentoPeriodo = { qtd: qf - qi, pct: qi ? ((qf - qi) / qi) * 100 : 0, imoveisFim: qf }
 
-    return NextResponse.json({ porAno, faixas, lancVsArrec, venalComposicao, exercicios, aumentoPeriodo, referencia: { ano: anoAtual } })
+    // Imóveis por forma de pagamento (linhas = categorias, colunas = anos)
+    const formaAnos = Array.from(formaPagto.keys()).filter(a => a >= 2020 && a <= anoAtual).sort((a, b) => a - b)
+    const formaPagamento = {
+      anos: formaAnos,
+      linhas: [
+        { forma: 'Cota única', cor: '#1fa463', v: formaAnos.map(a => formaPagto.get(a)?.cotaUnica ?? 0) },
+        { forma: 'Parcelado', cor: '#283e93', v: formaAnos.map(a => formaPagto.get(a)?.parcelado ?? 0) },
+        { forma: 'Pago Parcial', cor: '#e8962e', v: formaAnos.map(a => formaPagto.get(a)?.pagoParcial ?? 0) },
+        { forma: 'Em aberto', cor: '#d64545', v: formaAnos.map(a => formaPagto.get(a)?.emAberto ?? 0) },
+      ],
+    }
+
+    return NextResponse.json({ porAno, faixas, lancVsArrec, venalComposicao, exercicios, aumentoPeriodo, formaPagamento, referencia: { ano: anoAtual } })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
