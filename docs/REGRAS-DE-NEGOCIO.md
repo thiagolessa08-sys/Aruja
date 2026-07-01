@@ -26,6 +26,11 @@ regra numerada abaixo quando definida.)_
 > Inadimplente é SUBCONJUNTO de Em Aberto (a parte vencida), não soma.
 > Todos os 6 buckets do IPTU migraram para o modelo `parcela_movimento`.
 
+> 🌐 **Abrangência:** estas regras são fonte de verdade em TODAS as superfícies, não só nos KPIs:
+> KPIs (`/api/imobiliario/kpis`), gráficos (`/api/imobiliario/graficos`),
+> insights (`/api/imobiliario/insights`) e o **chat** (via `lib/regras-negocio.ts` → REGRA 4,
+> injetada no system prompt com templates SQL adaptados ao agente).
+
 ---
 
 ## 1. Motor de tributos (lançado / arrecadado / inadimplência)
