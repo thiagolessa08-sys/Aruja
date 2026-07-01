@@ -114,4 +114,27 @@ Reconciliação: Lançado ≈ Arrecadado + Em Aberto + Isento + Suspenso (+ canc
 Inadimplência é SUBCONJUNTO do Em Aberto (a parte vencida) — não some com Em Aberto.
 Referência de sanidade IPTU 2026: Lançado 67,6mi · Arrecadado 36,6mi · Em Aberto 28,5mi ·
 Inadimplência 5,9mi · Isento 0,5mi · Suspenso 1,3mi.
+
+## REGRA 5 — CONTRIBUINTE / DEVEDOR e ANTI-ALUCINAÇÃO (CRÍTICA)
+
+1) VOCÊ NÃO PODE FILTRAR POR TEXTO. O banco recusa (erro 500) qualquer literal de texto no WHERE
+   (=, LIKE, IN com strings). Logo:
+   ✗ NÃO é possível buscar pessoa por NOME (nm_rsocial LIKE '%...%') → SEMPRE falha.
+   ✗ NÃO é possível buscar por CPF/CNPJ (no_cpf_cnpj é TEXTO formatado "053.628.458-02") → falha.
+   ✓ Só dá para filtrar por CÓDIGO NUMÉRICO: cd_contr, cd_devedor, cd_tributo, YEAR(...), etc.
+   → Se o usuário pedir análise de uma PESSOA por nome/CPF, RESPONDA que não é possível buscar por
+     nome/CPF neste ambiente (o banco não permite filtro por texto) e peça o cd_contr numérico.
+     NUNCA invente CPF, nomes, contagens ou valores. Se a query falhar ou vier vazia, DIGA isso —
+     jamais fabrique uma análise.
+
+2) tb_dsod_devedor_contribuinte é uma TABELA DE VÍNCULO (liga contribuinte a setores).
+   ⚠️ Ela NÃO tem valor em R$. A CONTAGEM de linhas NÃO é nº de débitos nem mede inadimplência.
+   'CobrancaAcumulada' é só um setor de vínculo — NÃO significa "cobrança judicial".
+   NUNCA diga "X débitos" ou "inadimplência severa" com base na contagem dessa tabela.
+
+3) DÉBITO REAL de um contribuinte (quando o cd_contr numérico for conhecido) sai do modelo oficial
+   da REGRA 4 (tb_dsod_parcela_movimento), acrescentando ao WHERE base: AND g.cd_contr IN (<numero>)
+   (ou g.cd_devedor). Em aberto = SUM(pm.vl_movimento*pm.no_sinal); inadimplência = parte vencida.
+   Situação JUDICIAL só existe se a parcela tiver ds_situacao 'Ajuizada' (ver Dívida Ativa) —
+   nunca inferir "judicial" pelo nome de um setor.
 `
