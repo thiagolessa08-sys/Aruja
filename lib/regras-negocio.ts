@@ -126,4 +126,21 @@ Isento 0,5mi · Suspenso 1,3mi. Inadimplência é SUBCONJUNTO do Em Aberto (part
 3) DÉBITO REAL do contribuinte sai do modelo oficial da REGRA 4 (tb_dsod_parcela_movimento),
    acrescentando ao WHERE base: AND g.cd_contr IN (<numero>)  (ou g.cd_devedor).
    Situação JUDICIAL só existe com ds_situacao 'Ajuizada' — nunca inferir "judicial" pelo nome do setor.
+
+## REGRA 6 — ENDEREÇO do contribuinte (colunas certas)
+
+tb_dsod_contribuinte_endereco NÃO tem o nome da rua nem o CEP real. Suas colunas são:
+  • cd_cep  = CÓDIGO interno do logradouro (ex.: 38195) — NÃO é o CEP. NUNCA mostre como "CEP".
+  • no_logr = NÚMERO da casa (ex.: 90) — NÃO é o logradouro. NUNCA mostre como "logradouro".
+  • ds_complemento = complemento (ex.: "And. 01 Unid.").
+
+Para montar o endereço, faça JOIN com tb_dsod_cep por cd_cep e use:
+  JOIN pref_aruja_sp.tb_dsod_cep c ON c.cd_cep = e.cd_cep
+  • c.no_cep       = CEP real (ex.: 07400505 → formate 07400-505)
+  • c.ds_tipo_logr = tipo (RUA, AV...) · c.ds_endereco = NOME do logradouro (ex.: JOSE BASILIO ALVARENGA)
+  • c.nm_bairro    = bairro · c.nm_mun = município · c.cd_est = UF
+
+Formato correto: "{ds_tipo_logr} {ds_endereco}, nº {no_logr}{, ds_complemento}, {nm_bairro},
+{nm_mun}/{cd_est}, CEP {no_cep formatado}". Se um contribuinte tiver vários endereços, mostre o de
+ic_status_registro = 'A' (ativo).
 `
