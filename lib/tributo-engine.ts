@@ -106,3 +106,40 @@ async function rankingTributosRaw(somenteOutros: boolean, ano?: number): Promise
     }))
     .sort((a, b) => b.lancado - a.lancado)
 }
+
+/**
+ * Split do saldo devedor por exercício em VENCIDO (inadimplência) × A VENCER (em aberto),
+ * comparando a data de vencimento da parcela com hoje. Agrupa por ano/mês de vencimento
+ * (evita operador < no SQL, que quebra o agente IQ) e classifica em JS.
+ */
+export async function saldoVencidoAberto(grupo: GrupoTributo): Promise<Map<number, { vencido: number; aberto: number }>> {
+  return cached(`saldoVA:${grupo}`, TTL_15MIN, () => saldoVAraw(grupo))
+}
+
+async function saldoVAraw(grupo: GrupoTributo): Promise<Map<number, { vencido: number; aberto: number }>> {
+  const r = await agentQuery(`
+    SELECT g.no_exercicio_lancamento AS ex, YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm,
+           SUM(pp.vl_saldo) AS saldo
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    WHERE ${whereTributo(grupo)}
+    GROUP BY g.no_exercicio_lancamento, YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 6000)
+
+  const now = new Date()
+  const curY = now.getFullYear()
+  const curM = now.getMonth() + 1
+  const map = new Map<number, { vencido: number; aberto: number }>()
+  for (const row of r.rows) {
+    const ex = num(row[0])
+    if (!(ex >= 2005 && ex <= 2035)) continue
+    const vy = num(row[1]), vm = num(row[2]), saldo = num(row[3])
+    if (saldo <= 0) continue
+    const cur = map.get(ex) ?? { vencido: 0, aberto: 0 }
+    const vencido = vy < curY || (vy === curY && vm < curM)
+    if (vencido) cur.vencido += saldo
+    else cur.aberto += saldo
+    map.set(ex, cur)
+  }
+  return map
+}

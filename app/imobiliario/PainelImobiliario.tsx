@@ -29,11 +29,12 @@ const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits:
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
 const KPIS_FALLBACK: KpiCard[] = [
-  { label: 'Imóveis Lançados', value: '33.281', subLabel: 'Ano Anterior', subValue: '33.065', pct: '0,65%', dir: 'up' },
-  { label: 'Valor Venal Total', value: '9,03 bi', subLabel: 'Ano Anterior', subValue: '8,38 bi', pct: '7,74%', dir: 'up' },
-  { label: 'IPTU Lançado', value: '134,81 mi', subLabel: 'Ano Anterior', subValue: '124,37 mi', pct: '8,39%', dir: 'up' },
-  { label: 'IPTU Arrecadado', value: '54,33 mi', subLabel: 'Ano Anterior', subValue: '69,48 mi', pct: '-21,81%', dir: 'down' },
-  { label: 'Inadimplência', value: '41,11 mi', subLabel: 'do Lançado', subValue: '30,5%', pct: '30,5%', dir: 'down' },
+  { label: 'Total Lançado', value: '134,81 mi', subLabel: 'Ano Anterior', subValue: '124,37 mi', pct: '8,39%', dir: 'up' },
+  { label: 'Total Arrecadado', value: '54,33 mi', subLabel: 'Ano Anterior', subValue: '69,48 mi', pct: '-21,81%', dir: 'down' },
+  { label: 'Total Inadimplência', value: '18,36 mi', subLabel: 'vencido · do lançado', subValue: '13,6%', pct: '13,6%', dir: 'down' },
+  { label: 'Total em Aberto', value: '22,61 mi', subLabel: 'a vencer · do lançado', subValue: '16,8%', pct: '16,8%', dir: 'flat' },
+  { label: 'Total Isento', value: '1,50 mi', subLabel: 'do lançado', subValue: '1,1%', pct: '1,1%', dir: 'flat' },
+  { label: 'Total Suspenso', value: '1,50 mi', subLabel: 'do lançado', subValue: '1,1%', pct: '1,1%', dir: 'flat' },
 ]
 const FALLBACK_GRAF: Graficos = {
   porAno: [
@@ -209,13 +210,14 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
     <svg key="1" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
     <svg key="2" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 7h8M8 11h8M8 15h5" /></svg>,
     <svg key="3" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><path d="M9.5 14a2.5 2.5 0 0 0 5 0c0-1.4-1-2-2.5-2.5S9.5 9.4 9.5 8a2.5 2.5 0 0 1 5 0M12 6v1.5M12 16.5V18" /></svg>,
-    <svg key="4" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 17l6-6 4 4 7-7" /><path d="M14 7h6v6" /></svg>,
+    <svg key="4" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>,
+    <svg key="5" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><path d="M10 9v6M14 9v6" /></svg>,
   ]
 
   return (
     <>
       {/* ===== KPIs ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginTop: 20 }}>
         {kpis.map((k, i) => {
           const azul = i === 0
           return (
