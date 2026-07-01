@@ -72,4 +72,46 @@ Erros comuns a evitar:
   ✗ nr.DS_TIPO_RECEITA             → não existe nessa tabela
   ✓ nr.DS_CATEGORIA_ECONOMICA_RECEITA  → correto
   ✓ nr.DS_ESPECIE_RECEITA              → correto
+
+## REGRA 4 — TRIBUTOS (IPTU): lançado, arrecadado, inadimplência, em aberto, isento, suspenso
+
+Quando o usuário perguntar por LANÇADO, ARRECADADO, INADIMPLÊNCIA, EM ABERTO, ISENTO ou SUSPENSO
+de um tributo (IPTU etc.), a fonte oficial é o LIVRO-RAZÃO DE MOVIMENTO, NUNCA:
+  ✗ FATO_BIORC (isso é receita orçamentária, não o lançado/arrecadado do tributo)
+  ✗ tb_dsod_parcela_posicao (modelo antigo)
+  ✗ vl_venal × alíquota (estimativa — proibido)
+
+Base OBRIGATÓRIA (sempre estes joins, cd_tributo IPTU = 1, exclua no_parcela 0):
+  FROM pref_aruja_sp.tb_dsod_guias g
+  JOIN pref_aruja_sp.tb_dsod_parcelas p            ON p.cd_guia = g.cd_guia
+  JOIN pref_aruja_sp.tb_dsod_parcela_movimento pm  ON pm.cd_parcela = p.cd_parcelas
+  WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (<ano>) AND p.no_parcela NOT IN (0)
+
+⚠️ O agente NÃO aceita: literal de texto no WHERE, operadores < > <= <>, HAVING, subquery, getdate(),
+   e capa em 5000 linhas. Então NÃO filtre texto/HAVING no SQL — faça GROUP BY e você (IA) soma/filtra
+   ao ler o resultado. Use IN / NOT IN e YEAR()/MONTH() para datas.
+
+Definições (cada uma acrescenta ao WHERE base):
+  • LANÇADO: AND pm.cd_tipo_movimento IN (1,2,3)
+      → SELECT g.ds_situacao, SUM(pm.vl_movimento) ... GROUP BY g.ds_situacao
+      → some TODAS as linhas EXCETO ds_situacao 'Recalculo' e 'Validacao'.
+  • ARRECADADO: AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+      + JOIN pref_aruja_sp.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      AND pb.cd_tipo_baixa NOT IN (28)   -- 28 = Estorno de Baixa
+      → GROUP BY g.ds_situacao; some tudo EXCETO 'Recalculo'/'Validacao'.
+  • EM ABERTO (total a receber): AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+      → SELECT SUM(pm.vl_movimento * pm.no_sinal)   (1 linha; o resultado já é o total).
+  • INADIMPLÊNCIA (em aberto VENCIDO): mesmos filtros do Em Aberto, mas
+      → GROUP BY YEAR(p.dt_vencimento), MONTH(p.dt_vencimento), SUM(pm.vl_movimento*pm.no_sinal)
+      → some só os grupos cuja data (ano/mês) é ANTERIOR ao mês/ano de hoje.
+  • ISENTO: AND pm.cd_tipo_movimento IN (12,5) AND pm.cd_tipo_lancamento IN (1)
+      + JOIN tb_dsod_parcela_baixas pb (idem) → GROUP BY pb.ds_setor_origem_baixa
+      → some SÓ a linha ds_setor_origem_baixa = 'Isencao'.
+  • SUSPENSO: AND pm.cd_tipo_movimento IN (20)
+      → SELECT SUM(pm.vl_movimento * pm.no_sinal)  → o valor suspenso = módulo (o resultado é negativo).
+
+Reconciliação: Lançado ≈ Arrecadado + Em Aberto + Isento + Suspenso (+ cancelado).
+Inadimplência é SUBCONJUNTO do Em Aberto (a parte vencida) — não some com Em Aberto.
+Referência de sanidade IPTU 2026: Lançado 67,6mi · Arrecadado 36,6mi · Em Aberto 28,5mi ·
+Inadimplência 5,9mi · Isento 0,5mi · Suspenso 1,3mi.
 `
