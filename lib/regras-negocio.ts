@@ -75,66 +75,55 @@ Erros comuns a evitar:
 
 ## REGRA 4 — TRIBUTOS (IPTU): lançado, arrecadado, inadimplência, em aberto, isento, suspenso
 
-Quando o usuário perguntar por LANÇADO, ARRECADADO, INADIMPLÊNCIA, EM ABERTO, ISENTO ou SUSPENSO
-de um tributo (IPTU etc.), a fonte oficial é o LIVRO-RAZÃO DE MOVIMENTO, NUNCA:
-  ✗ FATO_BIORC (isso é receita orçamentária, não o lançado/arrecadado do tributo)
-  ✗ tb_dsod_parcela_posicao (modelo antigo)
-  ✗ vl_venal × alíquota (estimativa — proibido)
+Para LANÇADO, ARRECADADO, INADIMPLÊNCIA, EM ABERTO, ISENTO ou SUSPENSO de um tributo, a fonte
+oficial é o LIVRO-RAZÃO DE MOVIMENTO (tb_dsod_parcela_movimento). NUNCA use:
+  ✗ FATO_BIORC (é receita orçamentária, não o lançado/arrecadado do tributo)
+  ✗ tb_dsod_parcela_posicao (modelo antigo) · ✗ vl_venal × alíquota (estimativa)
 
-Base OBRIGATÓRIA (sempre estes joins, cd_tributo IPTU = 1, exclua no_parcela 0):
+Base (cd_tributo IPTU = 1; troque <ano>; exclua parcela 0):
   FROM pref_aruja_sp.tb_dsod_guias g
   JOIN pref_aruja_sp.tb_dsod_parcelas p            ON p.cd_guia = g.cd_guia
   JOIN pref_aruja_sp.tb_dsod_parcela_movimento pm  ON pm.cd_parcela = p.cd_parcelas
-  WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (<ano>) AND p.no_parcela NOT IN (0)
+  WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (<ano>) AND p.no_parcela <> 0
 
-⚠️ O agente NÃO aceita: literal de texto no WHERE, operadores < > <= <>, HAVING, subquery, getdate(),
-   e capa em 5000 linhas. Então NÃO filtre texto/HAVING no SQL — faça GROUP BY e você (IA) soma/filtra
-   ao ler o resultado. Use IN / NOT IN e YEAR()/MONTH() para datas.
+O banco aceita SQL completo (string, LIKE, < <= <>, HAVING, subquery, getdate). Use as queries abaixo:
 
-Definições (cada uma acrescenta ao WHERE base):
-  • LANÇADO: AND pm.cd_tipo_movimento IN (1,2,3)
-      → SELECT g.ds_situacao, SUM(pm.vl_movimento) ... GROUP BY g.ds_situacao
-      → some TODAS as linhas EXCETO ds_situacao 'Recalculo' e 'Validacao'.
-  • ARRECADADO: AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
-      + JOIN pref_aruja_sp.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
-      AND pb.cd_tipo_baixa NOT IN (28)   -- 28 = Estorno de Baixa
-      → GROUP BY g.ds_situacao; some tudo EXCETO 'Recalculo'/'Validacao'.
-  • EM ABERTO (total a receber): AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
-      → SELECT SUM(pm.vl_movimento * pm.no_sinal)   (1 linha; o resultado já é o total).
-  • INADIMPLÊNCIA (em aberto VENCIDO): mesmos filtros do Em Aberto, mas
-      → GROUP BY YEAR(p.dt_vencimento), MONTH(p.dt_vencimento), SUM(pm.vl_movimento*pm.no_sinal)
-      → some só os grupos cuja data (ano/mês) é ANTERIOR ao mês/ano de hoje.
-  • ISENTO: AND pm.cd_tipo_movimento IN (12,5) AND pm.cd_tipo_lancamento IN (1)
-      + JOIN tb_dsod_parcela_baixas pb (idem) → GROUP BY pb.ds_setor_origem_baixa
-      → some SÓ a linha ds_setor_origem_baixa = 'Isencao'.
-  • SUSPENSO: AND pm.cd_tipo_movimento IN (20)
-      → SELECT SUM(pm.vl_movimento * pm.no_sinal)  → o valor suspenso = módulo (o resultado é negativo).
+  • LANÇADO:  ...base... AND pm.cd_tipo_movimento <= 3 AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+      → SELECT SUM(pm.vl_movimento)
+  • ARRECADADO: adicione ao FROM  JOIN pref_aruja_sp.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa=pm.cd_parcela_baixa
+      JOIN pref_aruja_sp.tb_dsod_tipo_baixa tb ON tb.cd_tipo_baixa=pb.cd_tipo_baixa
+      ...base... AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+      AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND tb.ds_tipo_baixa <> 'Estorno de Baixa'
+      → SELECT SUM(pm.vl_movimento)
+  • EM ABERTO (total a receber): SELECT SUM(bal) FROM (
+      SELECT g.cd_devedor, SUM(pm.vl_movimento*pm.no_sinal) bal ...base...
+      AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+      GROUP BY g.cd_devedor HAVING SUM(pm.vl_movimento*pm.no_sinal) > 0 ) t
+  • INADIMPLÊNCIA (em aberto VENCIDO): igual Em Aberto, mas adicione AND p.dt_vencimento < getdate()-1
+      e HAVING SUM(pm.vl_movimento*pm.no_sinal) > 1.
+  • ISENTO: adicione os JOINs de baixa (como no Arrecadado)
+      ...base... AND pm.cd_tipo_movimento IN (12,5) AND pm.cd_tipo_lancamento IN (1) AND pb.ds_setor_origem_baixa IN ('Isencao')
+      → SELECT SUM(pm.vl_movimento)
+  • SUSPENSO: ...base... AND pm.cd_tipo_movimento IN (20) GROUP BY g.cd_devedor
+      HAVING SUM(pm.vl_movimento*pm.no_sinal) < 0 → some SUM(pm.vl_movimento) (é negativo; mostre o módulo).
 
-Reconciliação: Lançado ≈ Arrecadado + Em Aberto + Isento + Suspenso (+ cancelado).
-Inadimplência é SUBCONJUNTO do Em Aberto (a parte vencida) — não some com Em Aberto.
-Referência de sanidade IPTU 2026: Lançado 67,6mi · Arrecadado 36,6mi · Em Aberto 28,5mi ·
-Inadimplência 5,9mi · Isento 0,5mi · Suspenso 1,3mi.
+Sanidade IPTU 2026: Lançado 67,6mi · Arrecadado 36,6mi · Em Aberto 28,5mi · Inadimplência 5,9mi ·
+Isento 0,5mi · Suspenso 1,3mi. Inadimplência é SUBCONJUNTO do Em Aberto (parte vencida) — não some os dois.
 
-## REGRA 5 — CONTRIBUINTE / DEVEDOR e ANTI-ALUCINAÇÃO (CRÍTICA)
+## REGRA 5 — CONTRIBUINTE / DEVEDOR e ANTI-ALUCINAÇÃO
 
-1) VOCÊ NÃO PODE FILTRAR POR TEXTO. O banco recusa (erro 500) qualquer literal de texto no WHERE
-   (=, LIKE, IN com strings). Logo:
-   ✗ NÃO é possível buscar pessoa por NOME (nm_rsocial LIKE '%...%') → SEMPRE falha.
-   ✗ NÃO é possível buscar por CPF/CNPJ (no_cpf_cnpj é TEXTO formatado "053.628.458-02") → falha.
-   ✓ Só dá para filtrar por CÓDIGO NUMÉRICO: cd_contr, cd_devedor, cd_tributo, YEAR(...), etc.
-   → Se o usuário pedir análise de uma PESSOA por nome/CPF, RESPONDA que não é possível buscar por
-     nome/CPF neste ambiente (o banco não permite filtro por texto) e peça o cd_contr numérico.
-     NUNCA invente CPF, nomes, contagens ou valores. Se a query falhar ou vier vazia, DIGA isso —
-     jamais fabrique uma análise.
+1) BUSCA POR TEXTO É PERMITIDA (o banco aceita = e LIKE com strings). Para achar uma pessoa:
+   ...WHERE nm_rsocial LIKE '%ROBINSON SIM%'   (nome) — ou — no_cpf_cnpj = '053.628.458-02'  (CPF é
+   TEXTO FORMATADO com pontos/traço). Traga cd_contr, nm_rsocial, no_cpf_cnpj.
+   ⚠️ Se a query voltar VAZIA, diga que NÃO encontrou. NUNCA invente CPF, nomes, contagens ou valores.
+   Reporte apenas o que a query realmente retornou.
 
-2) tb_dsod_devedor_contribuinte é uma TABELA DE VÍNCULO (liga contribuinte a setores).
-   ⚠️ Ela NÃO tem valor em R$. A CONTAGEM de linhas NÃO é nº de débitos nem mede inadimplência.
-   'CobrancaAcumulada' é só um setor de vínculo — NÃO significa "cobrança judicial".
-   NUNCA diga "X débitos" ou "inadimplência severa" com base na contagem dessa tabela.
+2) tb_dsod_devedor_contribuinte é TABELA DE VÍNCULO (liga contribuinte a setores), SEM valor em R$.
+   A CONTAGEM de linhas NÃO é nº de débitos nem mede inadimplência. 'CobrancaAcumulada' é só um setor
+   de vínculo — NÃO significa "cobrança judicial". Nunca diga "X débitos / inadimplência severa" com
+   base nessa contagem.
 
-3) DÉBITO REAL de um contribuinte (quando o cd_contr numérico for conhecido) sai do modelo oficial
-   da REGRA 4 (tb_dsod_parcela_movimento), acrescentando ao WHERE base: AND g.cd_contr IN (<numero>)
-   (ou g.cd_devedor). Em aberto = SUM(pm.vl_movimento*pm.no_sinal); inadimplência = parte vencida.
-   Situação JUDICIAL só existe se a parcela tiver ds_situacao 'Ajuizada' (ver Dívida Ativa) —
-   nunca inferir "judicial" pelo nome de um setor.
+3) DÉBITO REAL do contribuinte sai do modelo oficial da REGRA 4 (tb_dsod_parcela_movimento),
+   acrescentando ao WHERE base: AND g.cd_contr IN (<numero>)  (ou g.cd_devedor).
+   Situação JUDICIAL só existe com ds_situacao 'Ajuizada' — nunca inferir "judicial" pelo nome do setor.
 `
