@@ -14,7 +14,11 @@ regra numerada abaixo quando definida.)_
 
 | # | Item | Status | Definição |
 |---|------|--------|-----------|
-| — | _(aguardando o 1º item)_ | — | — |
+| 1 | **Lançado** (definição oficial) | ✅ implementado | `SUM(vl_movimento)` de `parcela_movimento`, `cd_tipo_movimento IN (1,2,3)`, `no_parcela <> 0`, guia `ds_situacao NOT IN ('Recalculo','Validacao')`. Ver Regra 1. |
+
+> ⚠️ **Reconciliação pendente:** apenas o **Lançado** foi migrado para o modelo `parcela_movimento`.
+> Arrecadado / Inadimplência / Em Aberto / Isento / Suspenso ainda vêm de `parcela_posicao`
+> (modelo antigo), então os percentuais podem não fechar até essas regras serem passadas.
 
 ---
 
@@ -26,14 +30,33 @@ regra numerada abaixo quando definida.)_
 **Regra — cadeia de tabelas:**
 `tb_dsod_parcela_posicao` (valores) → `tb_dsod_parcelas` (parcela/vencimento) → `tb_dsod_guias` (tributo/exercício).
 
-**Regra — definições (por `cd_tributo` e exercício de lançamento):**
-- **Lançado** = `SUM(vl_lancto)`
-- **Arrecadado** = `SUM(vl_pagto)`
-- **Saldo devedor (a receber)** = `SUM(vl_saldo)`
-- **Isento** = `SUM(vl_isencao)` · **Suspenso** = `SUM(vl_suspenso)` · **Cancelado** = `SUM(vl_cancelamento)`
-- ⚠️ `tb_dsod_parcelas.vl_*` está ZERADO — os valores vêm SÓ de `tb_dsod_parcela_posicao`.
+**Regra 1 — LANÇADO (oficial, 2026-07):** vem de `tb_dsod_parcela_movimento.vl_movimento`, NÃO de
+`parcela_posicao.vl_lancto`. Query de referência do usuário:
+```
+SUM(pm.vl_movimento)
+FROM tb_dsod_guias g
+  JOIN tb_dsod_parcelas p        ON p.cd_guia = g.cd_guia
+  JOIN tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+  JOIN tb_dsod_tributos t        ON t.cd_tributo = g.cd_tributo
+WHERE g.cd_tributo IN (1)                      -- IPTU
+  AND g.no_exercicio_lancamento IN (2026)
+  AND pm.cd_tipo_movimento <= 3                -- = IN (1,2,3); não há 0/negativos
+  AND p.no_parcela <> 0                        -- exclui parcela 0
+  AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+GROUP BY ...
+```
+Adaptações p/ o agente IQ (que quebra com `<=`, `<>` e literal de texto no WHERE):
+`cd_tipo_movimento IN (1,2,3)`, `no_parcela NOT IN (0)`, e a exclusão de `Recalculo`/`Validacao`
+feita por `GROUP BY g.ds_situacao` + filtro em JS.
+**Validado:** IPTU 2026 = **R$ 67,61 mi** (era R$ 134,81 mi no modelo antigo).
+⚠️ IPTU aqui = `cd_tributo` **1** apenas (o 25 = "IPTU Diferença Área" fica de fora — confirmar se deve entrar).
 
-**Implementação:** `lib/tributo-engine.ts` (`serieTributo`), `lib/tributos.ts` (mapa de códigos).
+**Regra — demais buckets (AINDA no modelo antigo `parcela_posicao`, a corrigir):**
+- **Arrecadado** = `SUM(vl_pagto)` · **Saldo devedor** = `SUM(vl_saldo)`
+- **Isento** = `SUM(vl_isencao)` · **Suspenso** = `SUM(vl_suspenso)` · **Cancelado** = `SUM(vl_cancelamento)`
+- ⚠️ `tb_dsod_parcelas.vl_*` está ZERADO — no modelo antigo os valores vinham de `parcela_posicao`.
+
+**Implementação:** `lib/tributo-engine.ts` (`lancadoOficial` para o novo lançado; `serieTributo` p/ os demais), `lib/tributos.ts` (mapa de códigos).
 
 ## 2. Inadimplência × Em Aberto (split do saldo devedor)
 

@@ -29,7 +29,7 @@ const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits:
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
 const KPIS_FALLBACK: KpiCard[] = [
-  { label: 'Total Lançado', value: '134,81 mi', subLabel: 'Ano Anterior', subValue: '124,37 mi', pct: '8,39%', dir: 'up' },
+  { label: 'Total Lançado', value: '67,61 mi', subLabel: 'Ano Anterior', subValue: '—', pct: '', dir: 'flat' },
   { label: 'Total Arrecadado', value: '54,33 mi', subLabel: 'Ano Anterior', subValue: '69,48 mi', pct: '-21,81%', dir: 'down' },
   { label: 'Total Inadimplência', value: '18,36 mi', subLabel: 'vencido · do lançado', subValue: '13,6%', pct: '13,6%', dir: 'down' },
   { label: 'Total em Aberto', value: '22,61 mi', subLabel: 'a vencer · do lançado', subValue: '16,8%', pct: '16,8%', dir: 'flat' },

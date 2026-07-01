@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { lerFiltros, faixaWhere } from '@/lib/imobiliario-filtros'
-import { serieTributo, saldoVencidoAberto } from '@/lib/tributo-engine'
+import { serieTributo, saldoVencidoAberto, lancadoOficial } from '@/lib/tributo-engine'
 
 interface Kpi {
   label: string
@@ -33,10 +33,12 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    // Todos os KPIs vêm do motor de parcelas (cd_tributo IPTU). Não decomponíveis por faixa.
-    const [serie, saldoVA] = await Promise.all([
+    // KPIs do motor de parcelas (cd_tributo IPTU). Não decomponíveis por faixa.
+    // Lançado = definição oficial (Regra 1, cd_tributo 1); demais buckets ainda de parcela_posicao.
+    const [serie, saldoVA, lanc] = await Promise.all([
       serieTributo('iptu'),
       saldoVencidoAberto('iptu'),
+      lancadoOficial([1]),
     ])
 
     const serieAno = new Map(serie.map(s => [s.ano, s]))
@@ -45,7 +47,7 @@ export async function GET(req: NextRequest) {
     const anoAnt = anoAtual - 1
 
     const sA = serieAno.get(anoAtual), sP = serieAno.get(anoAnt)
-    const lcA = sA?.lancado ?? 0, lcP = sP?.lancado ?? 0
+    const lcA = lanc.get(anoAtual) ?? 0, lcP = lanc.get(anoAnt) ?? 0
     const arA = sA?.arrecadado ?? 0, arP = sP?.arrecadado ?? 0
     const isA = sA?.isencao ?? 0
     const suA = sA?.suspenso ?? 0

@@ -108,6 +108,40 @@ async function rankingTributosRaw(somenteOutros: boolean, ano?: number): Promise
 }
 
 /**
+ * LANÇADO oficial (Regra 1): SUM(vl_movimento) de tb_dsod_parcela_movimento com
+ * cd_tipo_movimento IN (1,2,3), no_parcela <> 0 e guia.ds_situacao fora de
+ * ('Recalculo','Validacao'). Retorna o lançado por exercício de lançamento.
+ * NÃO usa parcela_posicao.vl_lancto (modelo antigo).
+ */
+const LANC_SIT_EXCLUIR = new Set(['Recalculo', 'Validacao'])
+
+export async function lancadoOficial(codigos: number[]): Promise<Map<number, number>> {
+  return cached(`lancOf:${codigos.join('.')}`, TTL_15MIN, () => lancadoOficialRaw(codigos))
+}
+
+async function lancadoOficialRaw(codigos: number[]): Promise<Map<number, number>> {
+  const r = await agentQuery(`
+    SELECT g.no_exercicio_lancamento AS ex, g.ds_situacao AS sit, SUM(pm.vl_movimento) AS vl
+    FROM ${SCHEMA}.tb_dsod_guias g
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+    JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+    WHERE g.cd_tributo IN (${codigos.join(',')})
+      AND pm.cd_tipo_movimento IN (1, 2, 3)
+      AND p.no_parcela NOT IN (0)
+    GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 3000)
+
+  const map = new Map<number, number>()
+  for (const row of r.rows) {
+    const ex = num(row[0])
+    if (!(ex >= 2005 && ex <= 2035)) continue
+    const sit = String(row[1] ?? '').trim()
+    if (LANC_SIT_EXCLUIR.has(sit)) continue
+    map.set(ex, (map.get(ex) ?? 0) + num(row[2]))
+  }
+  return map
+}
+
+/**
  * Split do saldo devedor por exercício em VENCIDO (inadimplência) × A VENCER (em aberto),
  * comparando a data de vencimento da parcela com hoje. Agrupa por ano/mês de vencimento
  * (evita operador < no SQL, que quebra o agente IQ) e classifica em JS.
