@@ -175,6 +175,10 @@ filtrando `cd_contr`/`cd_devedor`; judicial só via `ds_situacao 'Ajuizada'`.
 - **Score de adimplência** = base − contribuintes em `CobrancaAcumulada`.
 - ⚠️ Demografia (sexo/escolaridade/estado civil) é ~99% nula → descartada.
 
+**Endereço (chat):** `tb_dsod_contribuinte_endereco` NÃO tem rua nem CEP real — `cd_cep` é código
+interno e `no_logr` é o número da casa. Fazer JOIN com `tb_dsod_cep` (por `cd_cep`) para pegar
+`ds_endereco` (logradouro), `nm_bairro`, `no_cep` (CEP real), `nm_mun`. Ver `lib/regras-negocio.ts` (REGRA 6).
+
 **Implementação:** `app/api/contribuinte/*`.
 
 ## 9. Reforma Tributária
