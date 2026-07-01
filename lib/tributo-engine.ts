@@ -251,6 +251,29 @@ async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
 }
 
 /**
+ * Quantidade de imóveis lançados de IPTU por exercício = COUNT(DISTINCT cd_guia) na base oficial
+ * de lançamento (cd_tributo 1, no_parcela<>0, exclui guia Recalculo/Validacao).
+ */
+export async function qtdImoveisIptu(): Promise<Map<number, number>> {
+  return cached('qtdImoveisIptu', TTL_15MIN, async () => {
+    // Cada guia de IPTU = um imóvel lançado no exercício. Conta direto na tabela de guias
+    // (sem join com parcelas — evita 502 por peso), excluindo Recalculo/Validacao (em JS).
+    const r = await agentQuery(`
+      SELECT no_exercicio_lancamento AS ex, ds_situacao AS sit, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias
+      WHERE cd_tributo IN (1)
+      GROUP BY no_exercicio_lancamento, ds_situacao`, 400)
+    const map = new Map<number, number>()
+    for (const row of r.rows) {
+      const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+      if (LANC_SIT_EXCLUIR.has(String(row[1] ?? '').trim())) continue
+      map.set(ex, (map.get(ex) ?? 0) + num(row[2]))
+    }
+    return map
+  })
+}
+
+/**
  * Split do saldo devedor por exercício em VENCIDO (inadimplência) × A VENCER (em aberto),
  * comparando a data de vencimento da parcela com hoje. Agrupa por ano/mês de vencimento
  * (evita operador < no SQL, que quebra o agente IQ) e classifica em JS.

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
 import { lerFiltros, FAIXA_CASE, FAIXAS_VENAL } from '@/lib/imobiliario-filtros'
-import { bucketsIptu } from '@/lib/tributo-engine'
+import { bucketsIptu, qtdImoveisIptu } from '@/lib/tributo-engine'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    const [cadastro, serie] = await Promise.all([
+    const [cadastro, serie, qtdImoveis] = await Promise.all([
       agentQuery(`
         SELECT no_exercicio_lancamento AS ano,
           COUNT(*) AS qt,
@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
         WHERE no_exercicio_lancamento BETWEEN 2018 AND 2030
         GROUP BY no_exercicio_lancamento`, 50),
       bucketsIptu(),
+      qtdImoveisIptu(),
     ])
 
     const cad = new Map<number, { qt: number; venal: number; terreno: number; predial: number }>()
@@ -68,24 +69,36 @@ export async function GET(req: NextRequest) {
     const cAtual = cad.get(anoAtual) ?? { terreno: 0, predial: 0 }
     const venalComposicao = { terreno: cAtual.terreno, predial: cAtual.predial }
 
-    // Tabela — exercícios (últimos 6): imóveis/venal do cadastro, lançado/arrec do motor
-    const anosTab = Array.from(cad.keys()).filter(a => a <= anoAtual).sort((a, b) => b - a).slice(0, 6)
-    const exercicios = anosTab.map(ano => {
-      const c = cad.get(ano)!
-      const s = eng.get(ano)
-      const lanc = s?.lancado ?? null
-      const arr = s?.arrecadado ?? 0
+    // Tabela oficial de exercícios — lançado/pago do motor, qtd imóveis da base oficial,
+    // inadimplência % = (pago − lançado) / lançado, aumento de imóveis ano-a-ano.
+    const anosAsc = Array.from(new Set([...serie.keys(), ...qtdImoveis.keys()]))
+      .filter(a => a >= 2020 && a <= anoAtual)
+      .sort((a, b) => a - b)
+    const exercicios = anosAsc.map((ano, i) => {
+      const b = serie.get(ano)
+      const lancado = b?.lancado ?? 0
+      const pago = b?.arrecadado ?? 0
+      const imoveis = qtdImoveis.get(ano) ?? 0
+      const imoveisAnt = i > 0 ? (qtdImoveis.get(anosAsc[i - 1]) ?? 0) : 0
+      const aumQtd = i > 0 ? imoveis - imoveisAnt : null
+      const aumPct = i > 0 && imoveisAnt ? ((imoveis - imoveisAnt) / imoveisAnt) * 100 : null
       return {
         ano,
-        qt: c.qt,
-        venal: c.venal,
-        lancado: lanc,
-        arrecadado: arr,
-        pct: lanc && lanc > 0 ? (arr / lanc) * 100 : null,
+        lancado,
+        pago,
+        inadPct: lancado > 0 ? ((pago - lancado) / lancado) * 100 : 0,
+        imoveis,
+        aumPct,
+        aumQtd,
       }
-    })
+    }).reverse() // exibe do mais recente para o mais antigo
 
-    return NextResponse.json({ porAno, faixas, lancVsArrec, venalComposicao, exercicios, referencia: { ano: anoAtual } })
+    // Aumento total de imóveis no período (primeiro → último exercício)
+    const anoIni = anosAsc[0], anoFim = anosAsc[anosAsc.length - 1]
+    const qi = qtdImoveis.get(anoIni) ?? 0, qf = qtdImoveis.get(anoFim) ?? 0
+    const aumentoPeriodo = { qtd: qf - qi, pct: qi ? ((qf - qi) / qi) * 100 : 0, imoveisFim: qf }
+
+    return NextResponse.json({ porAno, faixas, lancVsArrec, venalComposicao, exercicios, aumentoPeriodo, referencia: { ano: anoAtual } })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

@@ -10,13 +10,15 @@ interface Tip { chart: 'linha' | 'hbar'; left: string; top: string; title: strin
 interface PorAno { ano: number; arrecadado: number }
 interface LancArrec { ano: number; lancado: number; arrecadado: number }
 interface Faixa { id: number; label: string; qt: number }
-interface Exercicio { ano: number; qt: number; venal: number; lancado: number | null; arrecadado: number; pct: number | null }
+interface Exercicio { ano: number; lancado: number; pago: number; inadPct: number; imoveis: number; aumPct: number | null; aumQtd: number | null }
+interface AumentoPeriodo { qtd: number; pct: number; imoveisFim: number }
 interface Graficos {
   porAno: PorAno[]
   faixas: Faixa[]
   lancVsArrec: LancArrec[]
   venalComposicao: { terreno: number; predial: number }
   exercicios: Exercicio[]
+  aumentoPeriodo: AumentoPeriodo
 }
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
@@ -58,12 +60,15 @@ const FALLBACK_GRAF: Graficos = {
   ],
   venalComposicao: { terreno: 2696442029, predial: 6135114896 },
   exercicios: [
-    { ano: 2026, qt: 33281, venal: 9033211585, lancado: 67610889, arrecadado: 36603737, pct: 54.1 },
-    { ano: 2025, qt: 33065, venal: 8384415578, lancado: 62692697, arrecadado: 51632637, pct: 82.4 },
-    { ano: 2024, qt: 32072, venal: 7827236703, lancado: 57760167, arrecadado: 48631390, pct: 84.2 },
-    { ano: 2023, qt: 30878, venal: 7223562103, lancado: 54320000, arrecadado: 46268836, pct: 85.2 },
-    { ano: 2022, qt: 30281, venal: 6591459160, lancado: 50010000, arrecadado: 42877371, pct: 85.7 },
+    { ano: 2026, lancado: 67608947.08, pago: 36216117.70, inadPct: -46.43, imoveis: 31196, aumPct: 2.75, aumQtd: 836 },
+    { ano: 2025, lancado: 62675238.35, pago: 51511198.68, inadPct: -17.81, imoveis: 30360, aumPct: 2.66, aumQtd: 786 },
+    { ano: 2024, lancado: 57721168.35, pago: 48529721.77, inadPct: -15.92, imoveis: 29574, aumPct: 1.24, aumQtd: 361 },
+    { ano: 2023, lancado: 54279551.90, pago: 46173674.06, inadPct: -14.93, imoveis: 29213, aumPct: 2.08, aumQtd: 596 },
+    { ano: 2022, lancado: 49950111.25, pago: 42707951.62, inadPct: -14.50, imoveis: 28617, aumPct: 0.81, aumQtd: 230 },
+    { ano: 2021, lancado: 45473827.24, pago: 38658342.30, inadPct: -14.99, imoveis: 28387, aumPct: 0.65, aumQtd: 184 },
+    { ano: 2020, lancado: 41462019.54, pago: 36038959.97, inadPct: -13.08, imoveis: 28203, aumPct: null, aumQtd: null },
   ],
+  aumentoPeriodo: { qtd: 2993, pct: 11, imoveisFim: 31196 },
 }
 const INSIGHTS_FALLBACK = [
   'O cadastro imobiliário de 2026 tem 33.281 imóveis lançados, somando R$ 9,0 bi em valor venal.',
@@ -73,16 +78,7 @@ const INSIGHTS_FALLBACK = [
 
 const FAIXA_CORES = ['#283e93', '#3f5bb5', '#7d8fce', '#aab8e3', '#e8962e']
 
-// ===== Tabela oficial de exercícios de IPTU (planilha, posição 16/06/2026) =====
-const EXERC_IPTU = [
-  { ano: 2020, lancado: 41462019.54, pago: 36038959.97, inad: -13.08, imoveis: 28203, aumPct: null as number | null, aumQtd: null as number | null },
-  { ano: 2021, lancado: 45473827.24, pago: 38658342.30, inad: -14.99, imoveis: 28387, aumPct: 0.65, aumQtd: 184 },
-  { ano: 2022, lancado: 49950111.25, pago: 42707951.62, inad: -14.50, imoveis: 28617, aumPct: 0.81, aumQtd: 230 },
-  { ano: 2023, lancado: 54279551.90, pago: 46173674.06, inad: -14.93, imoveis: 29213, aumPct: 2.08, aumQtd: 596 },
-  { ano: 2024, lancado: 57721168.35, pago: 48529721.77, inad: -15.92, imoveis: 29574, aumPct: 1.24, aumQtd: 361 },
-  { ano: 2025, lancado: 62675238.35, pago: 51511198.68, inad: -17.81, imoveis: 30360, aumPct: 2.66, aumQtd: 786 },
-  { ano: 2026, lancado: 67608947.08, pago: 36216117.70, inad: -46.43, imoveis: 31196, aumPct: 2.75, aumQtd: 836 },
-]
+// ===== Imóveis por forma de pagamento (planilha — pendente regra oficial p/ dinamizar) =====
 const FORMA_ANOS = [2020, 2021, 2022, 2023, 2024, 2025, 2026]
 const FORMA_PAGTO: { forma: string; cor: string; v: number[] }[] = [
   { forma: 'Cota única', cor: '#1fa463', v: [6036, 6231, 6482, 7929, 8366, 7620, 7749] },
@@ -199,9 +195,9 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
   const totFaixa = g.faixas.reduce((s, f) => s + f.qt, 0)
 
   // Gauge: pct do exercício mais recente com lancado disponível
-  const exComLanc = g.exercicios.find(e => e.pct != null)
-  const gaugePct = exComLanc?.pct ?? null
-  const gaugeAno = exComLanc?.ano ?? null
+  const exAtual = g.exercicios.find(e => e.lancado > 0)
+  const gaugePct = exAtual && exAtual.lancado > 0 ? (exAtual.pago / exAtual.lancado) * 100 : null
+  const gaugeAno = exAtual?.ano ?? null
   const gg = geomGauge(gaugePct)
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
@@ -435,25 +431,25 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
               </tr>
             </thead>
             <tbody>
-              {EXERC_IPTU.map((row, ri) => {
+              {g.exercicios.map((row, ri) => {
                 const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
                 return (
                   <tr key={row.ano}>
                     <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 14px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.ano}</td>
                     <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.lancado)}</td>
                     <td style={{ background: cellBg, color: '#1fa463', fontSize: 12, fontWeight: 500, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.pago)}</td>
-                    <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.inad.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>
+                    <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.inadPct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>
                     <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtInt(row.imoveis)}</td>
                     <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.aumPct == null ? '—' : row.aumPct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{row.aumQtd == null ? '—' : '+' + fmtInt(row.aumQtd)}</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{row.aumQtd == null ? '—' : (row.aumQtd >= 0 ? '+' : '') + fmtInt(row.aumQtd)}</td>
                   </tr>
                 )
               })}
               <tr>
-                <td colSpan={4} style={{ background: '#eef2fb', color: '#1f2a44', fontSize: 12, fontWeight: 700, padding: '10px 14px', borderRight: '1px solid #d6deef' }}>Aumento de imóveis 2020–2026</td>
-                <td style={{ background: '#eef2fb', color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '10px 14px', textAlign: 'center', borderRight: '1px solid #eef1f7' }}>31.196</td>
-                <td style={{ background: '#eef2fb', color: '#283e93', fontSize: 12, fontWeight: 700, padding: '10px 14px', textAlign: 'center', borderRight: '1px solid #eef1f7' }}>11%</td>
-                <td style={{ background: '#eef2fb', color: '#283e93', fontSize: 12, fontWeight: 700, padding: '10px 14px', textAlign: 'center' }}>+2.993</td>
+                <td colSpan={4} style={{ background: '#eef2fb', color: '#1f2a44', fontSize: 12, fontWeight: 700, padding: '10px 14px', borderRight: '1px solid #d6deef' }}>Aumento de imóveis no período</td>
+                <td style={{ background: '#eef2fb', color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '10px 14px', textAlign: 'center', borderRight: '1px solid #eef1f7' }}>{fmtInt(g.aumentoPeriodo.imoveisFim)}</td>
+                <td style={{ background: '#eef2fb', color: '#283e93', fontSize: 12, fontWeight: 700, padding: '10px 14px', textAlign: 'center', borderRight: '1px solid #eef1f7' }}>{fmtPct(g.aumentoPeriodo.pct)}</td>
+                <td style={{ background: '#eef2fb', color: '#283e93', fontSize: 12, fontWeight: 700, padding: '10px 14px', textAlign: 'center' }}>+{fmtInt(g.aumentoPeriodo.qtd)}</td>
               </tr>
             </tbody>
           </table>
