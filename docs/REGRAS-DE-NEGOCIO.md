@@ -148,6 +148,24 @@ por regex em JS. Arrecadado/inadimplência do motor; transmissões/movimentado/t
 
 **Implementação:** `lib/itbi-filtros.ts`, `app/api/itbi/*`.
 
+## 7b. Chat — busca por texto e anti-alucinação (Regra 5 do prompt)
+
+**Contexto:** o chat gerou uma análise falsa sobre um contribuinte ("Robinson Simões": CPF e
+"120 débitos / cobrança judicial" inventados).
+
+**Causa raiz:** o agente IQ **recusa qualquer literal de texto no WHERE** → o chat NÃO consegue
+buscar pessoa por **nome** (`nm_rsocial LIKE`) nem por **CPF** (`no_cpf_cnpj` é texto formatado
+"053.628.458-02"). Sem conseguir, a IA **alucinou**. Além disso interpretou a contagem de
+`tb_dsod_devedor_contribuinte` (tabela de vínculo, sem R$) como "débitos/inadimplência judicial".
+
+**Regra:** (a) só filtrar por código NUMÉRICO (`cd_contr`, `cd_devedor`, `cd_tributo`, `YEAR`);
+se pedir pessoa por nome/CPF, dizer que não é possível e pedir o `cd_contr` — NUNCA inventar;
+(b) contagem de `devedor_contribuinte` ≠ débitos (é vínculo); "CobrancaAcumulada" ≠ judicial;
+(c) débito real do contribuinte = modelo `parcela_movimento` (Regra 4) filtrando `cd_contr`/`cd_devedor`;
+judicial só via `ds_situacao 'Ajuizada'`. **Implementação:** `lib/regras-negocio.ts` (REGRA 5).
+⚠️ Para habilitar busca por nome/CPF de fato, seria preciso o agente Cloudflare aceitar literal de
+texto (fora do nosso controle aqui).
+
 ## 8. Contribuintes
 
 **Regra:**
