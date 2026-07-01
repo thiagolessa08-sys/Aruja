@@ -73,6 +73,24 @@ const INSIGHTS_FALLBACK = [
 
 const FAIXA_CORES = ['#283e93', '#3f5bb5', '#7d8fce', '#aab8e3', '#e8962e']
 
+// ===== Tabela oficial de exercícios de IPTU (planilha, posição 16/06/2026) =====
+const EXERC_IPTU = [
+  { ano: 2020, lancado: 41462019.54, pago: 36038959.97, inad: -13.08, imoveis: 28203, aumPct: null as number | null, aumQtd: null as number | null },
+  { ano: 2021, lancado: 45473827.24, pago: 38658342.30, inad: -14.99, imoveis: 28387, aumPct: 0.65, aumQtd: 184 },
+  { ano: 2022, lancado: 49950111.25, pago: 42707951.62, inad: -14.50, imoveis: 28617, aumPct: 0.81, aumQtd: 230 },
+  { ano: 2023, lancado: 54279551.90, pago: 46173674.06, inad: -14.93, imoveis: 29213, aumPct: 2.08, aumQtd: 596 },
+  { ano: 2024, lancado: 57721168.35, pago: 48529721.77, inad: -15.92, imoveis: 29574, aumPct: 1.24, aumQtd: 361 },
+  { ano: 2025, lancado: 62675238.35, pago: 51511198.68, inad: -17.81, imoveis: 30360, aumPct: 2.66, aumQtd: 786 },
+  { ano: 2026, lancado: 67608947.08, pago: 36216117.70, inad: -46.43, imoveis: 31196, aumPct: 2.75, aumQtd: 836 },
+]
+const FORMA_ANOS = [2020, 2021, 2022, 2023, 2024, 2025, 2026]
+const FORMA_PAGTO: { forma: string; cor: string; v: number[] }[] = [
+  { forma: 'Cota única', cor: '#1fa463', v: [6036, 6231, 6482, 7929, 8366, 7620, 7749] },
+  { forma: 'Parcelado', cor: '#283e93', v: [16063, 17069, 17359, 16025, 15864, 16306, 1164] },
+  { forma: 'Pago Parcial', cor: '#e8962e', v: [2709, 1599, 1083, 1540, 1240, 1709, 16499] },
+  { forma: 'Em aberto', cor: '#d64545', v: [3395, 3488, 3692, 3719, 4104, 4725, 5784] },
+]
+
 // ===== Geometria: linha "IPTU Arrecadado por Ano" =====
 function geomLinha(d: PorAno[]) {
   const mi = (v: number) => v / 1e6
@@ -401,29 +419,71 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
         </div>
       </div>
 
-      {/* ===== Tabela: Exercícios de IPTU ===== */}
+      {/* ===== Tabela: Exercícios de IPTU (planilha oficial) ===== */}
       <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Exercícios de IPTU</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Exercícios de IPTU</span>
+          <span style={{ fontSize: 12, color: '#9098a8' }}>Valor pago — posição 16/06/2026 · valor médio por parcela lançada (2026): R$ 216,72</span>
+        </div>
         <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Exercício', 'Imóveis', 'Valor Venal', 'IPTU Lançado', 'IPTU Arrecadado', '% Arrec.'].map((h, i) => (
-                  <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                {['Ano', 'Valor Lançado Total', 'Valor Pago Total', 'Inadimplência', 'Qtd Imóveis', 'Aumento %', 'Aumento Qtd'].map((h, i) => (
+                  <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '11px 14px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {g.exercicios.map((row, ri) => {
+              {EXERC_IPTU.map((row, ri) => {
                 const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
                 return (
                   <tr key={row.ano}>
-                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.ano}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtInt(row.qt)}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.venal)}</td>
-                    <td style={{ background: cellBg, color: row.lancado == null ? '#9098a8' : '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.lancado == null ? '—' : fmtReais(row.lancado)}</td>
-                    <td style={{ background: cellBg, color: '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.arrecadado)}</td>
-                    <td style={{ background: cellBg, color: row.pct == null ? '#9098a8' : '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{row.pct == null ? '—' : fmtPct(row.pct)}</td>
+                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 14px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.ano}</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.lancado)}</td>
+                    <td style={{ background: cellBg, color: '#1fa463', fontSize: 12, fontWeight: 500, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.pago)}</td>
+                    <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.inad.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtInt(row.imoveis)}</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.aumPct == null ? '—' : row.aumPct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'}</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{row.aumQtd == null ? '—' : '+' + fmtInt(row.aumQtd)}</td>
+                  </tr>
+                )
+              })}
+              <tr>
+                <td colSpan={4} style={{ background: '#eef2fb', color: '#1f2a44', fontSize: 12, fontWeight: 700, padding: '10px 14px', borderRight: '1px solid #d6deef' }}>Aumento de imóveis 2020–2026</td>
+                <td style={{ background: '#eef2fb', color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '10px 14px', textAlign: 'center', borderRight: '1px solid #eef1f7' }}>31.196</td>
+                <td style={{ background: '#eef2fb', color: '#283e93', fontSize: 12, fontWeight: 700, padding: '10px 14px', textAlign: 'center', borderRight: '1px solid #eef1f7' }}>11%</td>
+                <td style={{ background: '#eef2fb', color: '#283e93', fontSize: 12, fontWeight: 700, padding: '10px 14px', textAlign: 'center' }}>+2.993</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ===== Tabela: Imóveis por Forma de Pagamento ===== */}
+      <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
+        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Imóveis por Forma de Pagamento</span>
+        <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '11px 14px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Forma de Pagamento</th>
+                {FORMA_ANOS.map(a => (
+                  <th key={a} style={{ background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '11px 14px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{a}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {FORMA_PAGTO.map((row, ri) => {
+                const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
+                return (
+                  <tr key={row.forma}>
+                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 14px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>
+                      <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 3, background: row.cor, marginRight: 7 }} />{row.forma}
+                    </td>
+                    {row.v.map((val, ci) => (
+                      <td key={ci} style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 500, padding: '9px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: ci < row.v.length - 1 ? '1px solid #eef1f7' : 'none' }}>{fmtInt(val)}</td>
+                    ))}
                   </tr>
                 )
               })}
