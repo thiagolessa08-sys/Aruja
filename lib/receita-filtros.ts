@@ -20,3 +20,22 @@ export function lerFiltros(sp: URLSearchParams): FiltrosReceita {
 export function whereMes(f: FiltrosReceita): string {
   return f.mes ? ` AND d.NO_MES = ${f.mes}` : ''
 }
+
+// Ano mínimo da receita oficial (regra do Ronaldo).
+export const ANO_MIN_RECEITA = 2023
+
+// Filtro OFICIAL de receita — definição do Ronaldo (aplica em KPIs, gráficos e chat):
+//   • Receita BRUTA (CD_TIPO_NATUREZA_RECEITA = 1)
+//   • Fichas de receita < 5000
+//   • Categorias econômicas válidas (exclui '-1' e '-3')
+//   • A partir de 2023
+// Aliases exigidos no FROM da consulta:
+//   f  = FATO_BIORC_EXECUCAO_RECEITA
+//   tn = DIM_BIORC_TIPO_NATUREZA_RECEITA
+//   nr = DIM_BIORC_NATUREZA_RECEITA
+//   d  = DIM_BIORC_DATA_CALENDARIO
+export const WHERE_RECEITA_OFICIAL =
+  ` AND tn.CD_TIPO_NATUREZA_RECEITA = 1` +
+  ` AND f.CD_FICHA_RECEITA < 5000` +
+  ` AND nr.CD_CATEGORIA_ECONOMICA_RECEITA NOT IN ('-1','-3')` +
+  ` AND d.NO_ANO >= ${ANO_MIN_RECEITA}`

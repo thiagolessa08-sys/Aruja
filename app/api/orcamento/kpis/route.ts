@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros } from '@/lib/receita-filtros'
+import { lerFiltros, WHERE_RECEITA_OFICIAL } from '@/lib/receita-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -36,11 +36,12 @@ export async function GET(req: NextRequest) {
     const [receita, orcado, alteracao] = await Promise.all([
       agentQuery(`
         SELECT d.NO_ANO AS ano, d.NO_MES AS mes, nr.DS_ESPECIE_RECEITA AS esp,
-          SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA IN (1,2) THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS liquida
+          SUM(f.VL_ARRECADACAO_RECEITA) AS liquida
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}
         GROUP BY d.NO_ANO, d.NO_MES, nr.DS_ESPECIE_RECEITA`, 5000),
       agentQuery(`
         SELECT d.NO_ANO AS ano, SUM(f.VL_ORC_APROV_LEI) AS loa

@@ -190,6 +190,32 @@ interno e `no_logr` é o número da casa. Fazer JOIN com `tb_dsod_cep` (por `cd_
 
 ---
 
+## 10. Orçamento / Receita — filtro oficial (Ronaldo)
+
+**Regra:** o número OFICIAL de receita/arrecadação do painel de Orçamento usa este filtro
+(vale em KPIs, gráficos, insights e no chat):
+
+```sql
+WHERE tn.CD_TIPO_NATUREZA_RECEITA = 1                     -- receita BRUTA
+  AND f.CD_FICHA_RECEITA < 5000                           -- fichas orçamentárias
+  AND nr.CD_CATEGORIA_ECONOMICA_RECEITA NOT IN ('-1','-3')-- exclui categorias inválidas
+  AND d.NO_ANO >= 2023                                    -- a partir de 2023
+```
+
+- Sanidade: arrecadação **2025 = 739,4 mi**, 2024 = 655,3 mi, 2023 = 575,9 mi.
+  Correntes 2025 = 692 mi · Capital 2025 = 47,4 mi.
+- **Drill** do gráfico "Arrecadação por Categoria / Origem" (4 níveis, todos em `DIM_BIORC_NATUREZA_RECEITA`):
+  `DS_CATEGORIA_ECONOMICA_RECEITA → DS_ESPECIE_RECEITA → DS_ALINEA_RECEITA → DS_NATUREZA_RECEITA`.
+  O filtro "Impostos e Taxas" tem 2 níveis: `DS_ALINEA_RECEITA` (nível 1) → `DS_NATUREZA_RECEITA` (nível 2).
+- **Diferença p/ a Regra 1 (bruta/deduções/líquida):** a Regra 1 é o detalhamento analítico
+  (`IN (1,2)` = líquida). A Regra 10 é o total oficial exibido no painel (bruta com os filtros acima).
+
+**Implementação:** `lib/receita-filtros.ts` (`WHERE_RECEITA_OFICIAL`, `ANO_MIN_RECEITA`),
+`app/api/orcamento/{kpis,graficos,insights}/route.ts`, `app/dashboard/PainelReceita.tsx` (drill),
+`lib/regras-negocio.ts` (REGRA 7 do chat).
+
+---
+
 ## Restrições técnicas do agente IQ (transversais)
 
 - ✅ **MITO DERRUBADO (2026-07):** o agente NÃO rejeita literal de texto, `<`, `>`, `<=`, `<>`, `HAVING`,

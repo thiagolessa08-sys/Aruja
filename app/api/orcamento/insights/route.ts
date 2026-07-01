@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
+import { WHERE_RECEITA_OFICIAL } from '@/lib/receita-filtros'
 
 const MESES = ['', 'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 const SCHEMA = 'pref_aruja_sp'
@@ -16,13 +17,15 @@ function mi(v: number): string {
 }
 
 async function gerarInsights(): Promise<string[]> {
-  // 1) Arrecadação líquida mensal (todos os anos)
+  // 1) Arrecadação oficial mensal (regra Ronaldo — bruta, ficha<5000, categorias válidas, >=2023)
   const mensal = await agentQuery(`
     SELECT d.NO_ANO AS ano, d.NO_MES AS mes,
-      SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA IN (1,2) THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS liq
+      SUM(f.VL_ARRECADACAO_RECEITA) AS liq
     FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
     JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
+    JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
     JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
+    WHERE 1=1${WHERE_RECEITA_OFICIAL}
     GROUP BY d.NO_ANO, d.NO_MES`, 3000)
 
   const arrec = new Map<string, number>()
@@ -44,12 +47,12 @@ async function gerarInsights(): Promise<string[]> {
   // 2) Composição por espécie no ano atual
   const especie = await agentQuery(`
     SELECT nr.DS_ESPECIE_RECEITA AS especie,
-      SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA IN (1,2) THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS liq
+      SUM(f.VL_ARRECADACAO_RECEITA) AS liq
     FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
     JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
     JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
     JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-    WHERE d.NO_ANO = ${anoAtual}
+    WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}
     GROUP BY nr.DS_ESPECIE_RECEITA ORDER BY liq DESC`, 50)
 
   const topEspecies = especie.rows.slice(0, 6).map(r => `${String(r[0])}: ${mi(Number(r[1]) || 0)}`).join('; ')

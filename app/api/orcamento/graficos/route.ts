@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, whereMes } from '@/lib/receita-filtros'
+import { lerFiltros, whereMes, WHERE_RECEITA_OFICIAL, ANO_MIN_RECEITA } from '@/lib/receita-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -16,11 +16,12 @@ export async function GET(req: NextRequest) {
     const [mensalR, previstoR, categoriaR] = await Promise.all([
       agentQuery(`
         SELECT d.NO_ANO AS ano, d.NO_MES AS mes, nr.DS_ESPECIE_RECEITA AS esp,
-          SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA IN (1,2) THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS liq
+          SUM(f.VL_ARRECADACAO_RECEITA) AS liq
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}
         GROUP BY d.NO_ANO, d.NO_MES, nr.DS_ESPECIE_RECEITA`, 5000),
       agentQuery(`
         SELECT d.NO_ANO AS ano,
@@ -31,12 +32,12 @@ export async function GET(req: NextRequest) {
         GROUP BY d.NO_ANO`, 100),
       agentQuery(`
         SELECT d.NO_ANO AS ano, nr.DS_CATEGORIA_ECONOMICA_RECEITA AS cat, nr.DS_ESPECIE_RECEITA AS esp,
-          SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA IN (1,2) THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS liq
+          SUM(f.VL_ARRECADACAO_RECEITA) AS liq
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${whereMes(f)}
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereMes(f)}
         GROUP BY d.NO_ANO, nr.DS_CATEGORIA_ECONOMICA_RECEITA, nr.DS_ESPECIE_RECEITA`, 800),
     ])
 
@@ -65,8 +66,11 @@ export async function GET(req: NextRequest) {
     const loa = new Map<number, number>()
     for (const r of previstoR.rows) loa.set(Number(r[0]), Number(r[1]) || 0)
 
-    // 1) Arrecadação por Ano (4 anos terminando no ano selecionado)
-    const porAno = [fimAno - 3, fimAno - 2, fimAno - 1, fimAno].map(ano => {
+    // 1) Arrecadação por Ano (até 4 anos terminando no ano selecionado, mín. 2023 — regra Ronaldo)
+    const anoIniPorAno = Math.max(fimAno - 3, ANO_MIN_RECEITA)
+    const anosPorAno: number[] = []
+    for (let a = anoIniPorAno; a <= fimAno; a++) anosPorAno.push(a)
+    const porAno = anosPorAno.map(ano => {
       let arrecadado = 0
       for (let m = 1; m <= 12; m++) arrecadado += get(ano, m)
       return { ano, arrecadado, previsto: loa.get(ano) ?? 0 }
@@ -94,12 +98,12 @@ export async function GET(req: NextRequest) {
     // 4) Dívida Ativa por espécie (ano selecionado) — visão própria, não usa filtro de espécie
     const dividaR = await agentQuery(`
       SELECT nr.DS_ESPECIE_RECEITA AS esp, nr.DS_TIPO_RECEITA AS tipo,
-        SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA IN (1,2) THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS liq
+        SUM(f.VL_ARRECADACAO_RECEITA) AS liq
       FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
       JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-      WHERE d.NO_ANO = ${anoAtual}
+      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}
       GROUP BY nr.DS_ESPECIE_RECEITA, nr.DS_TIPO_RECEITA`, 300)
     let daImpostos = 0, daTaxas = 0, daDemais = 0
     for (const r of dividaR.rows) {
@@ -113,6 +117,21 @@ export async function GET(req: NextRequest) {
     }
     const dividaAtiva = { total: daImpostos + daTaxas + daDemais, impostos: daImpostos, taxas: daTaxas, demais: daDemais }
 
+    // 4b) Hierarquia da arrecadação (drill: Categoria → Espécie → Alínea → Natureza) no ano selecionado
+    const treeR = await agentQuery(`
+      SELECT nr.DS_CATEGORIA_ECONOMICA_RECEITA AS cat, nr.DS_ESPECIE_RECEITA AS esp,
+        nr.DS_ALINEA_RECEITA AS ali, nr.DS_NATUREZA_RECEITA AS nat,
+        SUM(f.VL_ARRECADACAO_RECEITA) AS v
+      FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
+      JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
+      JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
+      JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
+      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}
+      GROUP BY nr.DS_CATEGORIA_ECONOMICA_RECEITA, nr.DS_ESPECIE_RECEITA, nr.DS_ALINEA_RECEITA, nr.DS_NATUREZA_RECEITA`, 5000)
+    const categoriaTree = treeR.rows
+      .map(r => ({ cat: String(r[0] ?? '').trim(), esp: String(r[1] ?? '').trim(), ali: String(r[2] ?? '').trim(), nat: String(r[3] ?? '').trim(), v: Number(r[4]) || 0 }))
+      .filter(t => t.v !== 0)
+
     // 5) Histórico mensal (4 últimos anos presentes, espécie filtrada)
     const anosHist = [...anos].sort((a, b) => a - b).slice(-4)
     const historico = {
@@ -123,7 +142,7 @@ export async function GET(req: NextRequest) {
       })),
     }
 
-    return NextResponse.json({ porAno, porMes, categoria: { correntes, capital }, dividaAtiva, historico })
+    return NextResponse.json({ porAno, porMes, categoria: { correntes, capital }, categoriaTree, dividaAtiva, historico, referencia: { ano: anoAtual } })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

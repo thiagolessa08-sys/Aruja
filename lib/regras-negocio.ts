@@ -143,4 +143,25 @@ Para montar o endereço, faça JOIN com tb_dsod_cep por cd_cep e use:
 Formato correto: "{ds_tipo_logr} {ds_endereco}, nº {no_logr}{, ds_complemento}, {nm_bairro},
 {nm_mun}/{cd_est}, CEP {no_cep formatado}". Se um contribuinte tiver vários endereços, mostre o de
 ic_status_registro = 'A' (ativo).
+
+## REGRA 7 — RECEITA OFICIAL DO PAINEL/RELATÓRIO (definição do Ronaldo)
+
+Quando a pergunta for sobre a RECEITA/ARRECADAÇÃO OFICIAL do painel de Orçamento (totais, por ano,
+por mês, por categoria/origem, "quanto a prefeitura arrecadou no total"), aplique SEMPRE este filtro:
+
+  WHERE tn.CD_TIPO_NATUREZA_RECEITA = 1            -- receita BRUTA
+    AND f.CD_FICHA_RECEITA < 5000                  -- fichas de receita orçamentária
+    AND nr.CD_CATEGORIA_ECONOMICA_RECEITA NOT IN ('-1','-3')  -- exclui categorias inválidas
+    AND d.NO_ANO >= 2023                           -- receita a partir de 2023
+
+Isso define o valor oficial (bruta). Sanidade: arrecadação 2025 = 739,4 mi · 2024 = 655,3 mi ·
+2023 = 575,9 mi. Receitas Correntes 2025 = 692 mi; Receitas de Capital 2025 = 47,4 mi.
+
+Hierarquia de drill (do maior para o menor detalhe), toda em DIM_BIORC_NATUREZA_RECEITA:
+  DS_CATEGORIA_ECONOMICA_RECEITA → DS_ESPECIE_RECEITA → DS_ALINEA_RECEITA → DS_NATUREZA_RECEITA
+O filtro "Impostos e Taxas" tem 2 níveis: DS_ALINEA_RECEITA (nível 1) e DS_NATUREZA_RECEITA (nível 2).
+
+Diferença para a REGRA 1: a REGRA 1 detalha bruta/deduções/líquida (uso analítico). A REGRA 7 é o
+número OFICIAL exibido no painel (bruta com os filtros acima). Se o usuário pedir explicitamente
+deduções/líquida, use a REGRA 1; caso contrário, o total oficial é o da REGRA 7.
 `

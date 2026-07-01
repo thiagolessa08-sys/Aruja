@@ -33,13 +33,23 @@ const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
 
 interface PorAno { ano: number; arrecadado: number; previsto: number }
 interface PorMes { mes: number; nome: string; anoAnterior: number; anoAtual: number; pct: number }
+interface NoTree { cat: string; esp: string; ali: string; nat: string; v: number }
 interface Graficos {
   porAno: PorAno[]
   porMes: PorMes[]
   categoria: { correntes: number; capital: number }
+  categoriaTree?: NoTree[]
   dividaAtiva: { total: number; impostos: number; taxas: number; demais: number }
   historico: { anos: number[]; linhas: { mes: string; vals: number[] }[] }
 }
+
+// Campo de cada nível do drill: 0=Categoria, 1=Espécie, 2=Alínea, 3=Natureza
+const NIVEIS_DRILL: { campo: keyof NoTree; titulo: string }[] = [
+  { campo: 'cat', titulo: 'Categoria' },
+  { campo: 'esp', titulo: 'Origem / Espécie' },
+  { campo: 'ali', titulo: 'Alínea' },
+  { campo: 'nat', titulo: 'Natureza' },
+]
 
 const parseBR = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.')) || 0
 const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
@@ -68,6 +78,14 @@ const FALLBACK_GRAF: Graficos = {
     return { mes: i + 1, nome: MESES_NOME[i], anoAnterior: ant, anoAtual: atu, pct }
   }),
   categoria: { correntes: 337489272, capital: 12939471 },
+  categoriaTree: [
+    { cat: 'RECEITAS CORRENTES', esp: 'IMPOSTOS', ali: 'ISSQN', nat: 'ISSQN - IMPOSTO SERVIÇOS QUALQUER NATUREZA', v: 69880000 },
+    { cat: 'RECEITAS CORRENTES', esp: 'IMPOSTOS', ali: 'IPTU', nat: 'IPTU - IMPOSTO PROPR PREDIAL E TERRIT URBANA', v: 50590000 },
+    { cat: 'RECEITAS CORRENTES', esp: 'IMPOSTOS', ali: 'ITBI', nat: 'ITBI - IMPOSTO TRANSM INTER VIVOS - BENS IMÓVEIS', v: 25330000 },
+    { cat: 'RECEITAS CORRENTES', esp: 'TRANSFERÊNCIAS DA UNIÃO E DE SUAS ENTIDADES', ali: 'FPM', nat: 'COTA-PARTE DO FPM', v: 95520000 },
+    { cat: 'RECEITAS CORRENTES', esp: 'TAXAS', ali: 'TAXAS DE FISCALIZAÇÃO', nat: 'TFE', v: 8000000 },
+    { cat: 'RECEITAS DE CAPITAL', esp: 'OPERAÇÕES DE CRÉDITO', ali: 'MERCADO INTERNO', nat: 'OPER CRED DESP CAPITAL', v: 18000000 },
+  ],
   dividaAtiva: { total: 9618583, impostos: 7630496, taxas: 1979821, demais: 8266 },
   historico: { anos: [2023, 2024, 2025, 2026], linhas: TABELA.map(t => ({ mes: t.mes, vals: t.vals.map(parseBR) })) },
 }
@@ -161,8 +179,12 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
+  const [drill, setDrill] = useState<string[]>([]) // caminho do drill Categoria→…→Natureza
 
   const qs = buildQS(filtros)
+
+  // Ao trocar filtros, volta o drill para a raiz
+  useEffect(() => { setDrill([]) }, [qs])
 
   useEffect(() => {
     fetch(`/api/orcamento/graficos${qs}`)
@@ -308,32 +330,67 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
           )}
         </div>
 
-        {/* Arrecadação por Categoria / Origem */}
+        {/* Arrecadação por Categoria / Origem — com DRILL (Categoria→Espécie→Alínea→Natureza) */}
         <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação por Categoria / Origem</span>
-            <span style={dots}>···</span>
-          </div>
           {(() => {
-            const maxCat = Math.max(g.categoria.correntes, g.categoria.capital) || 1
-            const wCorr = Math.max(8, 90 * g.categoria.correntes / maxCat)
-            const wCap = Math.max(8, 90 * g.categoria.capital / maxCat)
+            const tree = g.categoriaTree ?? []
+            const depth = Math.min(drill.length, 3)
+            const filtered = tree.filter(n => drill.every((sel, i) => n[NIVEIS_DRILL[i].campo] === sel))
+            const campo = NIVEIS_DRILL[depth].campo
+            const agg = new Map<string, number>()
+            for (const n of filtered) if (n[campo]) agg.set(String(n[campo]), (agg.get(String(n[campo])) ?? 0) + n.v)
+            const itens = [...agg.entries()].map(([label, v]) => ({ label, v })).sort((a, b) => b.v - a.v)
+            const maxV = Math.max(1, ...itens.map(i => i.v))
+            const canDrill = drill.length < 3
+            const TOP = 7
+            const vis = itens.slice(0, TOP)
+            const resto = itens.slice(TOP)
+            const restoV = resto.reduce((s, i) => s + i.v, 0)
+
             return (
-              <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 30 }}>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS CORRENTES</div>
-                  <div style={{ height: 70, width: `${wCorr.toFixed(1)}%`, borderRadius: 12, marginTop: 12, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 14, boxSizing: 'border-box' }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{fmtM(g.categoria.correntes)}</span>
-                  </div>
+              <>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação por Categoria / Origem</span>
+                  <span style={{ ...dots, fontSize: 11, color: '#aeb6c6', fontWeight: 600, letterSpacing: 0 }}>{NIVEIS_DRILL[depth].titulo}</span>
                 </div>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>RECEITAS DE CAPITAL</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 12 }}>
-                    <div style={{ height: 70, width: `${wCap.toFixed(1)}%`, minWidth: 18, borderRadius: 12, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', flex: 'none' }}></div>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#283e93' }}>{fmtM(g.categoria.capital)}</span>
-                  </div>
+
+                {/* Trilha (breadcrumb) */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 10, fontSize: 11 }}>
+                  <button onClick={() => setDrill([])} style={{ border: 'none', background: drill.length ? '#eef1fb' : 'transparent', color: '#283e93', fontWeight: 600, cursor: drill.length ? 'pointer' : 'default', borderRadius: 8, padding: '3px 8px' }}>Todas</button>
+                  {drill.map((sel, i) => (
+                    <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ color: '#c2c9d6' }}>›</span>
+                      <button onClick={() => setDrill(drill.slice(0, i + 1))} title={sel} style={{ border: 'none', background: i === drill.length - 1 ? 'transparent' : '#eef1fb', color: i === drill.length - 1 ? '#5b6477' : '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '3px 8px', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel}</button>
+                    </span>
+                  ))}
                 </div>
-              </div>
+
+                {/* Barras horizontais clicáveis */}
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {vis.map((it, i) => {
+                    const w = Math.max(6, 100 * it.v / maxV)
+                    return (
+                      <div key={i} onClick={() => { if (canDrill) setDrill([...drill, it.label]) }} style={{ cursor: canDrill ? 'pointer' : 'default' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 4 }}>
+                          <span title={it.label} style={{ color: '#3a4256', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
+                          <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtM(it.v)}</span>
+                        </div>
+                        <div style={{ height: 14, borderRadius: 7, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 7, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {resto.length ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: '#9098a8', paddingTop: 2 }}>
+                      <span>+{resto.length} outras</span>
+                      <span style={{ fontWeight: 600 }}>{fmtM(restoV)}</span>
+                    </div>
+                  ) : null}
+                  {!vis.length ? <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados neste nível.</div> : null}
+                </div>
+                {canDrill && vis.length ? <div style={{ marginTop: 12, fontSize: 10.5, color: '#aeb6c6' }}>Clique numa barra para detalhar</div> : null}
+              </>
             )
           })()}
         </div>
