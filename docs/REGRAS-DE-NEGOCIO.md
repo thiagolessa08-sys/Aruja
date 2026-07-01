@@ -153,18 +153,17 @@ por regex em JS. Arrecadado/inadimplência do motor; transmissões/movimentado/t
 **Contexto:** o chat gerou uma análise falsa sobre um contribuinte ("Robinson Simões": CPF e
 "120 débitos / cobrança judicial" inventados).
 
-**Causa raiz:** o agente IQ **recusa qualquer literal de texto no WHERE** → o chat NÃO consegue
-buscar pessoa por **nome** (`nm_rsocial LIKE`) nem por **CPF** (`no_cpf_cnpj` é texto formatado
-"053.628.458-02"). Sem conseguir, a IA **alucinou**. Além disso interpretou a contagem de
-`tb_dsod_devedor_contribuinte` (tabela de vínculo, sem R$) como "débitos/inadimplência judicial".
+**Causa raiz (revisada):** a IA **alucinou** (inventou CPF e "120 débitos / judicial") e interpretou a
+contagem de `tb_dsod_devedor_contribuinte` (tabela de vínculo, sem R$) como inadimplência.
+⚠️ A hipótese inicial de que "o agente não aceita texto" estava ERRADA — era artefato do PowerShell
+(ver "Restrições técnicas"). **Busca por texto FUNCIONA** (`nm_rsocial LIKE '%NOME%'`,
+`no_cpf_cnpj = '053.628.458-02'`).
 
-**Regra:** (a) só filtrar por código NUMÉRICO (`cd_contr`, `cd_devedor`, `cd_tributo`, `YEAR`);
-se pedir pessoa por nome/CPF, dizer que não é possível e pedir o `cd_contr` — NUNCA inventar;
-(b) contagem de `devedor_contribuinte` ≠ débitos (é vínculo); "CobrancaAcumulada" ≠ judicial;
-(c) débito real do contribuinte = modelo `parcela_movimento` (Regra 4) filtrando `cd_contr`/`cd_devedor`;
-judicial só via `ds_situacao 'Ajuizada'`. **Implementação:** `lib/regras-negocio.ts` (REGRA 5).
-⚠️ Para habilitar busca por nome/CPF de fato, seria preciso o agente Cloudflare aceitar literal de
-texto (fora do nosso controle aqui).
+**Regra (corrigida):** (a) buscar pessoa por texto É permitido — `nm_rsocial LIKE`/`no_cpf_cnpj =`;
+se vier vazio, dizer que não encontrou, NUNCA inventar; (b) contagem de `devedor_contribuinte` ≠ débitos
+(é vínculo); "CobrancaAcumulada" ≠ judicial; (c) débito real = modelo `parcela_movimento` (Regra 4)
+filtrando `cd_contr`/`cd_devedor`; judicial só via `ds_situacao 'Ajuizada'`.
+**Implementação:** `lib/regras-negocio.ts` (REGRA 5).
 
 ## 8. Contribuintes
 
@@ -189,7 +188,12 @@ texto (fora do nosso controle aqui).
 
 ## Restrições técnicas do agente IQ (transversais)
 
-- **HTTP 500 com literal de TEXTO no `WHERE`** → filtros por texto viram `GROUP BY` + filtro em JS.
-- **HTTP 500 com operadores `<` / `>`** → usar `BETWEEN`, `YEAR()`/`MONTH()`, ou classificar em JS.
-- `cd_tributo` é numérico → `WHERE cd_tributo IN (...)` é seguro.
-- Tabelas grandes (guias 7,1M; parcela_posicao; devedor 4M) → SEMPRE agregar server-side; resultados pesados são cacheados (`lib/cache.ts`, TTL 1h) e pré-aquecidos no boot (`instrumentation.ts`).
+- ✅ **MITO DERRUBADO (2026-07):** o agente NÃO rejeita literal de texto, `<`, `>`, `<=`, `<>`, `HAVING`,
+  subquery nem `getdate()`. Isso era **artefato do PowerShell** (`ConvertTo-Json` escapa `< > ' &` como
+  `\uXXXX`, e o agente engasgava). Via **Node/`fetch`** (o caminho real do app, `lib/agent.ts`) o SQL
+  passa inteiro — confirmado (`WHERE ds_situacao = 'Ativa'`, `< getdate()`, `HAVING`, subquery: todos OK).
+  → Ao TESTAR o agente, use Node, nunca PowerShell `ConvertTo-Json`.
+  → O código do dashboard usa `GROUP BY` + JS por herança dessa premissa errada — funciona e dá resultado
+    correto (validado), mas PODE ser simplificado para as queries oficiais diretas quando conveniente.
+- Tabelas grandes (guias 7,1M; parcela_posicao; devedor 4M) → agregar server-side; resultados pesados
+  são cacheados (`lib/cache.ts`, TTL 1h) e pré-aquecidos no boot (`instrumentation.ts`).
