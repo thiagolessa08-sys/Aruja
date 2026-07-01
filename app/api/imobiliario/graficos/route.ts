@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
 import { lerFiltros, FAIXA_CASE, FAIXAS_VENAL } from '@/lib/imobiliario-filtros'
-import { serieTributo } from '@/lib/tributo-engine'
+import { bucketsIptu } from '@/lib/tributo-engine'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         FROM ${SCHEMA}.tb_dsod_imovel_urbano_lanc
         WHERE no_exercicio_lancamento BETWEEN 2018 AND 2030
         GROUP BY no_exercicio_lancamento`, 50),
-      serieTributo('iptu'),
+      bucketsIptu(),
     ])
 
     const cad = new Map<number, { qt: number; venal: number; terreno: number; predial: number }>()
@@ -35,11 +35,10 @@ export async function GET(req: NextRequest) {
       if (ano > anoMax) anoMax = ano
     }
 
-    // Lançado/arrecadado REAIS pelo motor de parcelas (cd_tributo IPTU).
-    const eng = new Map(serie.map(s => [s.ano, s]))
-    const iptuLanc = new Map<number, number>(serie.map(s => [s.ano, s.lancado]))
-    const iptuArr = new Map<number, number>(serie.map(s => [s.ano, s.arrecadado]))
-    const serieMax = serie.length ? serie[serie.length - 1].ano : 0
+    // Lançado/arrecadado OFICIAIS (Regras 1-2, parcela_movimento) por exercício.
+    const eng = serie
+    const iptuArr = new Map<number, number>(Array.from(serie.entries()).map(([ano, b]) => [ano, b.arrecadado]))
+    const serieMax = serie.size ? Math.max(...serie.keys()) : 0
     anoMax = Math.max(anoMax, serieMax)
 
     const anoAtual = f.ano || anoMax
@@ -58,12 +57,12 @@ export async function GET(req: NextRequest) {
     const anosLinha = Array.from(iptuArr.keys()).filter(a => a <= anoAtual).sort((a, b) => a - b).slice(-6)
     const porAno = anosLinha.map(ano => ({ ano, arrecadado: iptuArr.get(ano) ?? 0 }))
 
-    // Barras — Lançado × Arrecadado real (motor) — últimos 3 exercícios
-    const lancVsArrec = serie
-      .filter(s => s.ano <= anoAtual && s.lancado > 0)
-      .sort((a, b) => a.ano - b.ano)
+    // Barras — Lançado × Arrecadado oficiais — últimos 3 exercícios
+    const lancVsArrec = Array.from(serie.entries())
+      .filter(([ano, b]) => ano <= anoAtual && b.lancado > 0)
+      .sort((a, b) => a[0] - b[0])
       .slice(-3)
-      .map(s => ({ ano: s.ano, lancado: s.lancado, arrecadado: s.arrecadado }))
+      .map(([ano, b]) => ({ ano, lancado: b.lancado, arrecadado: b.arrecadado }))
 
     // Composição do valor venal (terreno × predial) no exercício corrente
     const cAtual = cad.get(anoAtual) ?? { terreno: 0, predial: 0 }

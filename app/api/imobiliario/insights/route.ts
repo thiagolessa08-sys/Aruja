@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
 import { lerFiltros, FAIXA_CASE } from '@/lib/imobiliario-filtros'
+import { bucketsIptu } from '@/lib/tributo-engine'
 
 const SCHEMA = 'pref_aruja_sp'
-const RE_IPTU = /PREDIAL E TERRITORIAL URBANA/i
 
 function money(v: number): string {
   if (Math.abs(v) >= 1e9) return 'R$ ' + (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' bi'
@@ -20,38 +20,26 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    const [cadastro, receita] = await Promise.all([
+    const [cadastro, buckets] = await Promise.all([
       agentQuery(`
-        SELECT no_exercicio_lancamento AS ano, COUNT(*) AS qt,
-          SUM(vl_venal_imovel) AS venal, SUM(vl_venal_imovel * vl_aliquota) AS lancado
+        SELECT no_exercicio_lancamento AS ano, COUNT(*) AS qt, SUM(vl_venal_imovel) AS venal
         FROM ${SCHEMA}.tb_dsod_imovel_urbano_lanc
         WHERE no_exercicio_lancamento BETWEEN 2018 AND 2030
         GROUP BY no_exercicio_lancamento`, 50),
-      agentQuery(`
-        SELECT d.NO_ANO AS ano, nr.DS_ALINEA_RECEITA AS alinea, SUM(r.VL_ARRECADACAO_RECEITA) AS arrec
-        FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA r
-        JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON r.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
-        JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON r.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE d.NO_ANO BETWEEN 2018 AND 2030
-        GROUP BY d.NO_ANO, nr.DS_ALINEA_RECEITA`, 2000),
+      bucketsIptu(),
     ])
 
-    const cad = new Map<number, { qt: number; venal: number; lancado: number }>()
+    const cad = new Map<number, { qt: number; venal: number }>()
     let anoMax = 0
     for (const r of cadastro.rows) {
       const ano = Number(r[0]); if (!ano || ano < 1990) continue
-      cad.set(ano, { qt: Number(r[1]) || 0, venal: Number(r[2]) || 0, lancado: Number(r[3]) || 0 })
+      cad.set(ano, { qt: Number(r[1]) || 0, venal: Number(r[2]) || 0 })
       if (ano > anoMax) anoMax = ano
     }
-    const iptuArr = new Map<number, number>()
-    for (const r of receita.rows) {
-      if (!RE_IPTU.test(String(r[1] ?? ''))) continue
-      const ano = Number(r[0]); iptuArr.set(ano, (iptuArr.get(ano) ?? 0) + (Number(r[2]) || 0))
-    }
-
+    anoMax = Math.max(anoMax, buckets.size ? Math.max(...buckets.keys()) : 0)
     const ano = f.ano || anoMax
     const c = cad.get(ano)
-    const arr = iptuArr.get(ano) ?? 0
+    const b = buckets.get(ano)
 
     // Concentração: imóveis com venal até R$ 300 mil (faixas 1 e 2)
     const faixaRes = await agentQuery(`
@@ -66,16 +54,13 @@ export async function GET(req: NextRequest) {
     }
 
     const insights: string[] = []
-    if (c) {
-      insights.push(`O cadastro imobiliário de ${ano} tem ${int(c.qt)} imóveis lançados, somando ${money(c.venal)} em valor venal.`)
-      const taxa = c.lancado ? (arr / c.lancado) * 100 : 0
-      if (c.lancado >= 1e6) {
-        insights.push(`IPTU lançado estimado de ${money(c.lancado)}; arrecadado ${money(arr)} até agora (${pct(taxa)} do lançado).`)
-      } else {
-        insights.push(`IPTU arrecadado de ${money(arr)} em ${ano}.`)
-      }
+    if (c) insights.push(`O cadastro imobiliário de ${ano} tem ${int(c.qt)} imóveis lançados, somando ${money(c.venal)} em valor venal.`)
+    if (b) {
+      const taxa = b.lancado ? (b.arrecadado / b.lancado) * 100 : 0
+      insights.push(`IPTU lançado de ${money(b.lancado)}; arrecadado ${money(b.arrecadado)} (${pct(taxa)} do lançado).`)
+      insights.push(`Inadimplência de ${money(b.inadimplente)} (vencido) e ${money(b.emAberto)} ainda em aberto a receber.`)
     }
-    if (totFaixa) {
+    if (totFaixa && insights.length < 3) {
       insights.push(`${pct((ate300 / totFaixa) * 100)} dos imóveis têm valor venal de até R$ 300 mil — base predominantemente residencial popular.`)
     }
 

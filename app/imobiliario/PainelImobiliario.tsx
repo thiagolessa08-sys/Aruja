@@ -38,11 +38,11 @@ const KPIS_FALLBACK: KpiCard[] = [
 ]
 const FALLBACK_GRAF: Graficos = {
   porAno: [
-    { ano: 2022, arrecadado: 56993408 },
-    { ano: 2023, arrecadado: 63093816 },
-    { ano: 2024, arrecadado: 65877143 },
-    { ano: 2025, arrecadado: 69477696 },
-    { ano: 2026, arrecadado: 54326354 },
+    { ano: 2022, arrecadado: 42877371 },
+    { ano: 2023, arrecadado: 46268836 },
+    { ano: 2024, arrecadado: 48631390 },
+    { ano: 2025, arrecadado: 51632637 },
+    { ano: 2026, arrecadado: 36603737 },
   ],
   faixas: [
     { id: 1, label: 'Até R$ 100 mil', qt: 13453 },
@@ -52,23 +52,23 @@ const FALLBACK_GRAF: Graficos = {
     { id: 5, label: 'Acima de R$ 1 mi', qt: 989 },
   ],
   lancVsArrec: [
-    { ano: 2024, lancado: 114568930, arrecadado: 65877143 },
-    { ano: 2025, lancado: 124373967, arrecadado: 69477696 },
-    { ano: 2026, lancado: 134812306, arrecadado: 54326354 },
+    { ano: 2024, lancado: 57760167, arrecadado: 48631390 },
+    { ano: 2025, lancado: 62692697, arrecadado: 51632637 },
+    { ano: 2026, lancado: 67610889, arrecadado: 36603737 },
   ],
   venalComposicao: { terreno: 2696442029, predial: 6135114896 },
   exercicios: [
-    { ano: 2026, qt: 33281, venal: 9033211585, lancado: 134812306, arrecadado: 54326354, pct: 40.3 },
-    { ano: 2025, qt: 33065, venal: 8384415578, lancado: 124373967, arrecadado: 69477696, pct: 55.9 },
-    { ano: 2024, qt: 32072, venal: 7827236703, lancado: 114568930, arrecadado: 65877143, pct: 57.5 },
-    { ano: 2023, qt: 30878, venal: 7223562103, lancado: 107514760, arrecadado: 63093816, pct: 58.7 },
-    { ano: 2022, qt: 30281, venal: 6591459160, lancado: 99947458, arrecadado: 56993408, pct: 57.0 },
+    { ano: 2026, qt: 33281, venal: 9033211585, lancado: 67610889, arrecadado: 36603737, pct: 54.1 },
+    { ano: 2025, qt: 33065, venal: 8384415578, lancado: 62692697, arrecadado: 51632637, pct: 82.4 },
+    { ano: 2024, qt: 32072, venal: 7827236703, lancado: 57760167, arrecadado: 48631390, pct: 84.2 },
+    { ano: 2023, qt: 30878, venal: 7223562103, lancado: 54320000, arrecadado: 46268836, pct: 85.2 },
+    { ano: 2022, qt: 30281, venal: 6591459160, lancado: 50010000, arrecadado: 42877371, pct: 85.7 },
   ],
 }
 const INSIGHTS_FALLBACK = [
   'O cadastro imobiliário de 2026 tem 33.281 imóveis lançados, somando R$ 9,0 bi em valor venal.',
-  'IPTU lançado de R$ 134,8 mi; arrecadado R$ 54,3 mi (40,3% do lançado) e R$ 41,1 mi de inadimplência.',
-  '79,5% dos imóveis têm valor venal de até R$ 300 mil — base predominantemente residencial popular.',
+  'IPTU lançado de R$ 67,6 mi; arrecadado R$ 36,6 mi (54,1% do lançado).',
+  'Inadimplência de R$ 5,9 mi (vencido) e R$ 28,5 mi ainda em aberto a receber.',
 ]
 
 const FAIXA_CORES = ['#283e93', '#3f5bb5', '#7d8fce', '#aab8e3', '#e8962e']
