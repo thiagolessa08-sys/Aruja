@@ -233,10 +233,12 @@ function buildQS(f: FiltrosDespesa): string {
 // fica alternando entre dado real e o fallback antigo.
 async function fetchJsonRetry(url: string, tries = 3): Promise<any | null> {
   for (let i = 0; i < tries; i++) {
+    const ctrl = new AbortController()
+    const to = setTimeout(() => ctrl.abort(), 8000) // evita fetch pendurado (túnel sem resposta)
     try {
-      const r = await fetch(url)
+      const r = await fetch(url, { signal: ctrl.signal })
       if (r.ok) { const d = await r.json(); if (d && !d.error) return d }
-    } catch { /* rede — tenta de novo */ }
+    } catch { /* timeout/rede — tenta de novo */ } finally { clearTimeout(to) }
     if (i < tries - 1) await new Promise(res => setTimeout(res, 700 * (i + 1)))
   }
   return null
@@ -272,6 +274,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   useEffect(() => {
     let vivo = true
     setCarregando(true)
+    const safety = setTimeout(() => { if (vivo) setCarregando(false) }, 15000) // nunca trava o overlay
     Promise.all([
       fetchJsonRetry(`/api/despesa/graficos${qs}`).then(d => {
         if (!vivo || !d) return
@@ -282,8 +285,8 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
       }),
       fetchJsonRetry(`/api/despesa/kpis${qs}`).then(d => { if (vivo && d?.kpis?.length) setKpis(d.kpis) }),
       fetchJsonRetry(`/api/despesa/fornecedores${qs}`).then(d => { if (vivo && d?.itens?.length) setFornecedores(d) }),
-    ]).finally(() => { if (vivo) setCarregando(false) })
-    return () => { vivo = false }
+    ]).finally(() => { if (vivo) { clearTimeout(safety); setCarregando(false) } })
+    return () => { vivo = false; clearTimeout(safety) }
   }, [qs])
 
   useEffect(() => {
