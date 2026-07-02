@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import AreaSerie from '../_components/AreaSerie'
+import LoadingOverlay from '../_components/LoadingOverlay'
 
 interface Tip {
   chart: 'report' | 'arrec'
@@ -253,6 +254,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   const [fornecedores, setFornecedores] = useState<FornecedoresData>(FALLBACK_FORNECEDORES)
   const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
   const [elementoSel, setElementoSel] = useState('TODOS')
+  const [carregando, setCarregando] = useState(false)
 
   const qs = buildQS(filtros)
 
@@ -261,32 +263,26 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
 
   useEffect(() => {
     let vivo = true
-    fetchJsonRetry(`/api/despesa/fornecedores${qs}`).then(d => { if (vivo && d?.itens?.length) setFornecedores(d) })
-    return () => { vivo = false }
-  }, [qs])
-
-  useEffect(() => {
-    let vivo = true
     const sep = qs ? '&' : '?'
     fetchJsonRetry(`/api/despesa/liquidado-subelemento${qs}${sep}elemento=${encodeURIComponent(elementoSel)}`).then(d => { if (vivo && d) setSubElemento(d) })
     return () => { vivo = false }
   }, [elementoSel, qs])
 
+  // Busca gráficos + KPIs + fornecedores juntos e controla o overlay de carregamento
   useEffect(() => {
     let vivo = true
-    fetchJsonRetry(`/api/despesa/graficos${qs}`).then(d => {
-      if (!vivo || !d) return
-      if (d?.porAno?.length) setDespesaAno(d.porAno.map((p: { ano: number; pago: number }) => ({ ano: p.ano, arrecadado: p.pago, previsto: p.pago })))
-      if (d?.porMes?.length) setDespesaMes(d.porMes)
-      if (d?.categoria) setDespesaCategoria(d.categoria)
-      if (d?.categoriaTree?.length) setCatTree(d.categoriaTree)
-    })
-    return () => { vivo = false }
-  }, [qs])
-
-  useEffect(() => {
-    let vivo = true
-    fetchJsonRetry(`/api/despesa/kpis${qs}`).then(d => { if (vivo && d?.kpis?.length) setKpis(d.kpis) })
+    setCarregando(true)
+    Promise.all([
+      fetchJsonRetry(`/api/despesa/graficos${qs}`).then(d => {
+        if (!vivo || !d) return
+        if (d?.porAno?.length) setDespesaAno(d.porAno.map((p: { ano: number; pago: number }) => ({ ano: p.ano, arrecadado: p.pago, previsto: p.pago })))
+        if (d?.porMes?.length) setDespesaMes(d.porMes)
+        if (d?.categoria) setDespesaCategoria(d.categoria)
+        if (d?.categoriaTree?.length) setCatTree(d.categoriaTree)
+      }),
+      fetchJsonRetry(`/api/despesa/kpis${qs}`).then(d => { if (vivo && d?.kpis?.length) setKpis(d.kpis) }),
+      fetchJsonRetry(`/api/despesa/fornecedores${qs}`).then(d => { if (vivo && d?.itens?.length) setFornecedores(d) }),
+    ]).finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
   }, [qs])
 
@@ -347,7 +343,8 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   ]
 
   return (
-    <>
+    <div style={{ position: 'relative' }}>
+      {carregando ? <LoadingOverlay /> : null}
       {/* ===== KPIs ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
@@ -609,6 +606,6 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
           </table>
         </div>
       </div>
-    </>
+    </div>
   )
 }

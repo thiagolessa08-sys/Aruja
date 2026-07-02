@@ -68,10 +68,10 @@ export async function GET(req: NextRequest) {
     const anoIniPorAno = Math.max(fimAno - 3, ANO_MIN_RECEITA)
     const anosPorAno: number[] = []
     for (let a = anoIniPorAno; a <= fimAno; a++) anosPorAno.push(a)
+    const ateMes = f.mes || 12 // mês selecionado: acumula jan→mês (YTD); senão, ano todo
     const porAno = anosPorAno.map(ano => {
       let arrecadado = 0
-      if (f.mes) arrecadado = get(ano, f.mes) // mês selecionado: só aquele mês por ano
-      else for (let m = 1; m <= 12; m++) arrecadado += get(ano, m)
+      for (let m = 1; m <= ateMes; m++) arrecadado += get(ano, m)
       return { ano, arrecadado, previsto: loa.get(ano) ?? 0 }
     })
 
@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
     // 5) Histórico mensal — mesmos anos do gráfico por ano (respeita o ano) e,
     // se um mês estiver selecionado, mostra só a linha daquele mês.
     const anosHist = anosPorAno.slice()
-    const mesesHist = f.mes ? [f.mes] : Array.from({ length: 12 }, (_, i) => i + 1)
+    const mesesHist = Array.from({ length: f.mes || 12 }, (_, i) => i + 1) // até o mês selecionado
     const historico = {
       anos: anosHist,
       linhas: mesesHist.map(m => ({

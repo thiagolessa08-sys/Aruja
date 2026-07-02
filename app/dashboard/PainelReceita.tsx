@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import AreaSerie from '../_components/AreaSerie'
+import LoadingOverlay from '../_components/LoadingOverlay'
 
 interface Tip {
   chart: 'report' | 'arrec'
@@ -206,21 +207,21 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
   const [graf, setGraf] = useState<Graficos | null>(null)
   const [drill, setDrill] = useState<string[]>([]) // caminho do drill Categoria→…→Natureza
   const [daDrill, setDaDrill] = useState<string | null>(null) // bucket selecionado na Dívida Ativa
+  const [carregando, setCarregando] = useState(false)
 
   const qs = buildQS(filtros)
 
   // Ao trocar filtros, volta os drills para a raiz
   useEffect(() => { setDrill([]); setDaDrill(null) }, [qs])
 
+  // Busca gráficos + KPIs juntos e controla o overlay de carregamento
   useEffect(() => {
     let vivo = true
-    fetchJsonRetry(`/api/orcamento/graficos${qs}`).then(d => { if (vivo && d) setGraf(d) })
-    return () => { vivo = false }
-  }, [qs])
-
-  useEffect(() => {
-    let vivo = true
-    fetchJsonRetry(`/api/orcamento/kpis${qs}`).then(d => { if (vivo && d?.kpis?.length) setKpis(d.kpis) })
+    setCarregando(true)
+    Promise.all([
+      fetchJsonRetry(`/api/orcamento/graficos${qs}`).then(d => { if (vivo && d) setGraf(d) }),
+      fetchJsonRetry(`/api/orcamento/kpis${qs}`).then(d => { if (vivo && d?.kpis?.length) setKpis(d.kpis) }),
+    ]).finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
   }, [qs])
 
@@ -283,7 +284,8 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
   ]
 
   return (
-    <>
+    <div style={{ position: 'relative' }}>
+      {carregando ? <LoadingOverlay /> : null}
       {/* ===== KPIs ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
@@ -570,6 +572,6 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
           </table>
         </div>
       </div>
-    </>
+    </div>
   )
 }

@@ -39,10 +39,10 @@ export async function GET(req: NextRequest) {
     const anoIni = Math.max(ano - 3, ANO_MIN_DESPESA)
     const anosAno: number[] = []
     for (let a = anoIni; a <= ano; a++) anosAno.push(a)
+    const ateMes = f.mes || 12 // mês selecionado: acumula jan→mês (YTD); senão, ano todo
     const porAno = anosAno.map(a => {
       let pago = 0
-      if (f.mes) pago = val.get(`${a}-${f.mes}`) ?? 0 // mês selecionado: só aquele mês por ano
-      else pago = totalAno.get(a) ?? 0
+      for (let m = 1; m <= ateMes; m++) pago += val.get(`${a}-${m}`) ?? 0
       return { ano: a, pago }
     })
 
