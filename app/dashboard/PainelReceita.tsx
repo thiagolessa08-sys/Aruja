@@ -67,10 +67,10 @@ const _A2025 = [60899312.06, 59622020.95, 47029868.84, 60347748.41, 45822535.10,
 const _A2026 = [72824455.17, 60263870.41, 61773438.84, 55902811.85, 61842501.23, 37821665.45, 0, 0, 0, 0, 0, 0]
 const FALLBACK_GRAF: Graficos = {
   porAno: [
-    { ano: 2022, arrecadado: 482473693, previsto: 341200000 },
-    { ano: 2023, arrecadado: 525597074, previsto: 530000000 },
-    { ano: 2024, arrecadado: 600375250, previsto: 606000000 },
-    { ano: 2025, arrecadado: 679144097, previsto: 700000000 },
+    { ano: 2023, arrecadado: 575900000, previsto: 578980000 },
+    { ano: 2024, arrecadado: 655300000, previsto: 660980000 },
+    { ano: 2025, arrecadado: 739400000, previsto: 761140000 },
+    { ano: 2026, arrecadado: 410900000, previsto: 829720000 },
   ],
   porMes: _A2025.map((ant, i) => {
     const atu = _A2026[i]
@@ -153,11 +153,11 @@ interface KpiCard {
 
 // Fallback = valores reais mais recentes (exibidos enquanto a API carrega ou se falhar)
 const KPIS_FALLBACK: KpiCard[] = [
-  { label: 'Orçado', value: '760,00 mi', subLabel: 'Ano Anterior', subValue: '700,00 mi', pct: '8,57%', dir: 'up' },
-  { label: 'Orçado Atualizado', value: '835,35 mi', subLabel: 'Ano Anterior', subValue: '762,49 mi', pct: '9,56%', dir: 'up' },
-  { label: 'Arrecadação Mês', value: '37,82 mi', subLabel: 'Junho/25', subValue: '49,11 mi', pct: '-22,99%', dir: 'down' },
-  { label: 'Arrecadação Até o Mês', value: '350,43 mi', subLabel: 'Ano Anterior', subValue: '322,84 mi', pct: '8,55%', dir: 'up' },
-  { label: 'Arrecadação Mês Anterior', value: '61,84 mi', subLabel: 'Maio/25', subValue: '45,82 mi', pct: '34,96%', dir: 'up' },
+  { label: 'Orçado', value: '829,72 mi', subLabel: 'Ano Anterior', subValue: '761,14 mi', pct: '9,01%', dir: 'up' },
+  { label: 'Orçado Atualizado', value: '879,68 mi', subLabel: 'Ano Anterior', subValue: '816,64 mi', pct: '7,72%', dir: 'up' },
+  { label: 'Arrecadação Mês', value: '0,40 mi', subLabel: 'Julho/25', subValue: '66,52 mi', pct: '-99,40%', dir: 'down' },
+  { label: 'Arrecadação Até o Mês', value: '413,48 mi', subLabel: 'Ano Anterior', subValue: '420,51 mi', pct: '-1,67%', dir: 'down' },
+  { label: 'Arrecadação Mês Anterior', value: '71,06 mi', subLabel: 'Junho/25', subValue: '53,13 mi', pct: '33,74%', dir: 'up' },
 ]
 
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
@@ -184,6 +184,19 @@ function buildQS(f: FiltrosReceita): string {
   return s ? `?${s}` : ''
 }
 
+// Busca com retry — o túnel do agente às vezes devolve 502; sem isso o painel
+// fica mostrando o fallback (ex.: ano 2022 e valores antigos) de forma intermitente.
+async function fetchJsonRetry(url: string, tries = 3): Promise<any | null> {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url)
+      if (r.ok) { const d = await r.json(); if (d && !d.error) return d }
+    } catch { /* rede — tenta de novo */ }
+    if (i < tries - 1) await new Promise(res => setTimeout(res, 700 * (i + 1)))
+  }
+  return null
+}
+
 export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) {
   const [tip, setTip] = useState<Tip | null>(null)
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
@@ -198,24 +211,21 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
   useEffect(() => { setDrill([]); setDaDrill(null) }, [qs])
 
   useEffect(() => {
-    fetch(`/api/orcamento/graficos${qs}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setGraf(d) })
-      .catch(() => { /* mantém fallback */ })
+    let vivo = true
+    fetchJsonRetry(`/api/orcamento/graficos${qs}`).then(d => { if (vivo && d) setGraf(d) })
+    return () => { vivo = false }
   }, [qs])
 
   useEffect(() => {
-    fetch(`/api/orcamento/kpis${qs}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.kpis?.length) setKpis(d.kpis) })
-      .catch(() => { /* mantém fallback */ })
+    let vivo = true
+    fetchJsonRetry(`/api/orcamento/kpis${qs}`).then(d => { if (vivo && d?.kpis?.length) setKpis(d.kpis) })
+    return () => { vivo = false }
   }, [qs])
 
   useEffect(() => {
-    fetch('/api/orcamento/insights')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK))
-      .catch(() => setInsights(INSIGHTS_FALLBACK))
+    let vivo = true
+    fetchJsonRetry('/api/orcamento/insights').then(d => { if (vivo) setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK) })
+    return () => { vivo = false }
   }, [])
 
   const tipReport = tip && tip.chart === 'report' ? tip : null

@@ -74,10 +74,10 @@ const FALLBACK_GRAF: Graficos = {
 
 // Despesas por Ano — Valor Pago real (substituído pelo fetch de /api/despesa/graficos)
 const FALLBACK_DESPESA_ANO: PorAno[] = [
-  { ano: 2022, arrecadado: 626930502, previsto: 626930502 },
-  { ano: 2023, arrecadado: 737772419, previsto: 737772419 },
-  { ano: 2024, arrecadado: 965317788, previsto: 965317788 },
-  { ano: 2025, arrecadado: 1075995807, previsto: 1075995807 },
+  { ano: 2023, arrecadado: 552110000, previsto: 552110000 },
+  { ano: 2024, arrecadado: 563610000, previsto: 563610000 },
+  { ano: 2025, arrecadado: 628180000, previsto: 628180000 },
+  { ano: 2026, arrecadado: 360600000, previsto: 360600000 },
 ]
 
 interface FornecedorItem { doc: string; nome: string; empenhado: number; liquidado: number; pago: number }
@@ -195,11 +195,11 @@ interface KpiCard {
 
 // Fallback = valores reais mais recentes (exibidos enquanto a API carrega ou se falhar)
 const KPIS_FALLBACK: KpiCard[] = [
-  { label: 'Dotação Inicial', value: '760,00 mi', subLabel: 'Ano Anterior', subValue: '700,00 mi', pct: '8,57%', dir: 'up' },
-  { label: 'Dotação Atualizada', value: '835,35 mi', subLabel: 'Ano Anterior', subValue: '762,49 mi', pct: '9,56%', dir: 'up' },
-  { label: 'Valor Empenho', value: '771,25 mi', subLabel: 'Ano Anterior', subValue: '694,36 mi', pct: '11,07%', dir: 'up' },
-  { label: 'Valor Liquidado', value: '579,53 mi', subLabel: 'Ano Anterior', subValue: '542,70 mi', pct: '6,78%', dir: 'up' },
-  { label: 'Valor Pago', value: '575,94 mi', subLabel: 'Ano Anterior', subValue: '521,02 mi', pct: '10,54%', dir: 'up' },
+  { label: 'Dotação Inicial', value: '724,00 mi', subLabel: 'Ano Anterior', subValue: '672,00 mi', pct: '7,74%', dir: 'up' },
+  { label: 'Dotação Atualizada', value: '802,25 mi', subLabel: 'Ano Anterior', subValue: '727,50 mi', pct: '10,27%', dir: 'up' },
+  { label: 'Valor Empenho', value: '545,82 mi', subLabel: 'Ano Anterior', subValue: '634,17 mi', pct: '-13,93%', dir: 'down' },
+  { label: 'Valor Liquidado', value: '366,19 mi', subLabel: 'Ano Anterior', subValue: '632,31 mi', pct: '-42,09%', dir: 'down' },
+  { label: 'Valor Pago', value: '360,60 mi', subLabel: 'Ano Anterior', subValue: '628,18 mi', pct: '-42,60%', dir: 'down' },
 ]
 
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
@@ -226,6 +226,19 @@ function buildQS(f: FiltrosDespesa): string {
   return s ? `?${s}` : ''
 }
 
+// Busca com retry — o túnel do agente às vezes devolve 502; sem isso o painel
+// fica alternando entre dado real e o fallback antigo.
+async function fetchJsonRetry(url: string, tries = 3): Promise<any | null> {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url)
+      if (r.ok) { const d = await r.json(); if (d && !d.error) return d }
+    } catch { /* rede — tenta de novo */ }
+    if (i < tries - 1) await new Promise(res => setTimeout(res, 700 * (i + 1)))
+  }
+  return null
+}
+
 export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) {
   const [tip, setTip] = useState<Tip | null>(null)
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
@@ -245,52 +258,40 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   useEffect(() => { setCatDrill(null) }, [qs])
 
   useEffect(() => {
-    fetch(`/api/despesa/fornecedores${qs}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.itens?.length) setFornecedores(d) })
-      .catch(() => { /* mantém fallback */ })
+    let vivo = true
+    fetchJsonRetry(`/api/despesa/fornecedores${qs}`).then(d => { if (vivo && d?.itens?.length) setFornecedores(d) })
+    return () => { vivo = false }
   }, [qs])
 
   useEffect(() => {
+    let vivo = true
     const sep = qs ? '&' : '?'
-    fetch(`/api/despesa/liquidado-subelemento${qs}${sep}elemento=${encodeURIComponent(elementoSel)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setSubElemento(d) })
-      .catch(() => { /* mantém fallback */ })
+    fetchJsonRetry(`/api/despesa/liquidado-subelemento${qs}${sep}elemento=${encodeURIComponent(elementoSel)}`).then(d => { if (vivo && d) setSubElemento(d) })
+    return () => { vivo = false }
   }, [elementoSel, qs])
 
   useEffect(() => {
-    fetch(`/api/despesa/graficos${qs}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.porAno?.length) {
-          setDespesaAno(d.porAno.map((p: { ano: number; pago: number }) => ({ ano: p.ano, arrecadado: p.pago, previsto: p.pago })))
-        }
-        if (d?.porMes?.length) {
-          setDespesaMes(d.porMes)
-        }
-        if (d?.categoria) {
-          setDespesaCategoria(d.categoria)
-        }
-        if (d?.categoriaTree?.length) {
-          setCatTree(d.categoriaTree)
-        }
-      })
-      .catch(() => { /* mantém fallback */ })
+    let vivo = true
+    fetchJsonRetry(`/api/despesa/graficos${qs}`).then(d => {
+      if (!vivo || !d) return
+      if (d?.porAno?.length) setDespesaAno(d.porAno.map((p: { ano: number; pago: number }) => ({ ano: p.ano, arrecadado: p.pago, previsto: p.pago })))
+      if (d?.porMes?.length) setDespesaMes(d.porMes)
+      if (d?.categoria) setDespesaCategoria(d.categoria)
+      if (d?.categoriaTree?.length) setCatTree(d.categoriaTree)
+    })
+    return () => { vivo = false }
   }, [qs])
 
   useEffect(() => {
-    fetch(`/api/despesa/kpis${qs}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.kpis?.length) setKpis(d.kpis) })
-      .catch(() => { /* mantém fallback */ })
+    let vivo = true
+    fetchJsonRetry(`/api/despesa/kpis${qs}`).then(d => { if (vivo && d?.kpis?.length) setKpis(d.kpis) })
+    return () => { vivo = false }
   }, [qs])
 
   useEffect(() => {
-    fetch('/api/despesa/insights')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK))
-      .catch(() => setInsights(INSIGHTS_FALLBACK))
+    let vivo = true
+    fetchJsonRetry('/api/despesa/insights').then(d => { if (vivo) setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK) })
+    return () => { vivo = false }
   }, [])
 
   const tipReport = tip && tip.chart === 'report' ? tip : null
