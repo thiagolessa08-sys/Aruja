@@ -285,7 +285,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
       {/* ===== KPIs ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
-          const azul = i === 0
+          const azul = k.label === 'Orçado Atualizado'
           return (
             <div key={k.label} style={azul
               ? { background: '#283e93', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 20px rgba(40,62,147,0.22)' }
