@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PainelReceita, { type FiltrosReceita } from './PainelReceita'
 import PainelDespesa, { type FiltrosDespesa } from './PainelDespesa'
+import ImpostoTaxaSelect from '../_components/ImpostoTaxaSelect'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const INDICADORES = ['Dotação Inicial', 'Dotação Atualizada', 'Empenhado', 'Liquidado', 'Pago']
@@ -179,16 +180,7 @@ export default function DashboardPage() {
                   <option value="">Mês: Todos</option>
                   {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
-                <select aria-label="Impostos e Taxas" title={rIT ? rIT.slice(3) : 'Impostos e Taxas: Todos'} value={rIT} onChange={e => setRIT(e.target.value)} style={selectPill}>
-                  <option value="">Impostos e Taxas: Todos</option>
-                  {optsRec.impostosTaxas.map(g => (
-                    <optgroup key={g.alinea} label={g.alinea}>
-                      {/* nível 1 (Alínea) selecionável quando há mais de uma natureza */}
-                      {g.naturezas.length > 1 ? <option value={`A::${g.alinea}`}>{g.alinea} — todas</option> : null}
-                      {g.naturezas.map(nat => <option key={nat} value={`N::${nat}`}>{nat}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
+                <ImpostoTaxaSelect grupos={optsRec.impostosTaxas} value={rIT} onChange={setRIT} style={selectPill} />
               </>
             )}
           </div>
