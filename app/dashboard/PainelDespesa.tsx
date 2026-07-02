@@ -46,6 +46,8 @@ const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFraction
 const fmtM = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M'
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
+// Rótulo curto p/ barras (só o número em milhões, 1 casa) — evita sobreposição
+const fmtBar = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 function fmtCompact(v: number): string {
   if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M'
   if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'K'
@@ -174,7 +176,7 @@ function geomBar(d: PorMes[]) {
     const cx = i * gw + gw / 2
     const hAnt = sc(m.anoAnterior), hAtu = sc(m.anoAtual)
     return {
-      cx, nome: m.nome, pct: fmtPct(m.pct),
+      cx, nome: m.nome, pct: fmtPct(m.pct), vAnt: m.anoAnterior, vAtu: m.anoAtual,
       ant: { x: cx - 28, y: bottom - hAnt, h: hAnt },
       atu: m.anoAtual > 0 ? { x: cx + 4, y: bottom - hAtu, h: hAtu } : null,
       tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtMi(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtMi(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hAnt, hAtu)) / H * 100).toFixed(1)}%` },
@@ -480,6 +482,8 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                 <g key={i}>
                   <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill="url(#arrAnt)" />
                   {b.atu ? <rect x={b.atu.x.toFixed(1)} y={b.atu.y.toFixed(1)} width="24" height={b.atu.h.toFixed(1)} rx="6" fill="url(#arrAtu)" /> : null}
+                  {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtBar(b.vAnt)}</text> : null}
+                  {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtBar(b.vAtu)}</text> : null}
                   <text x={b.cx.toFixed(1)} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.nome}</text>
                   <text x={b.cx.toFixed(1)} y="350" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="middle">{b.pct}</text>
                 </g>
