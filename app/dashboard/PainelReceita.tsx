@@ -372,7 +372,6 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
               <>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação por Categoria / Origem</span>
-                  <span style={{ ...dots, fontSize: 11, color: '#aeb6c6', fontWeight: 600, letterSpacing: 0 }}>{NIVEIS_DRILL[depth].titulo}</span>
                 </div>
 
                 {/* Trilha (breadcrumb) */}
@@ -458,7 +457,6 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação Dívida Ativa</span>
-            <span style={{ ...dots, fontSize: 11, color: '#aeb6c6', fontWeight: 600, letterSpacing: 0 }}>{daDrill ? 'Natureza' : 'Espécie'}</span>
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(da.total)}</div>
           {daDrill ? (() => {

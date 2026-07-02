@@ -496,7 +496,6 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Liquidado por Categoria / Grupo</span>
-            <span style={{ ...dots, fontSize: 11, color: '#aeb6c6', fontWeight: 600, letterSpacing: 0 }}>{catDrill ? 'Grupo' : 'Categoria'}</span>
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(catTotal)}</div>
           {catDrill ? (() => {
