@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, whereMes, WHERE_RECEITA_OFICIAL, ANO_MIN_RECEITA } from '@/lib/receita-filtros'
+import { lerFiltros, whereMes, whereNatureza, WHERE_RECEITA_OFICIAL, ANO_MIN_RECEITA } from '@/lib/receita-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -15,14 +15,14 @@ export async function GET(req: NextRequest) {
 
     const [mensalR, previstoR, categoriaR] = await Promise.all([
       agentQuery(`
-        SELECT d.NO_ANO AS ano, d.NO_MES AS mes, nr.DS_ESPECIE_RECEITA AS esp,
+        SELECT d.NO_ANO AS ano, d.NO_MES AS mes,
           SUM(f.VL_ARRECADACAO_RECEITA) AS liq
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${WHERE_RECEITA_OFICIAL}
-        GROUP BY d.NO_ANO, d.NO_MES, nr.DS_ESPECIE_RECEITA`, 5000),
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereNatureza(f)}
+        GROUP BY d.NO_ANO, d.NO_MES`, 5000),
       agentQuery(`
         SELECT d.NO_ANO AS ano,
           SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA IN (1,2) THEN f.VL_PREVISAO_RECEITA_LOA ELSE 0 END) AS loa
@@ -31,25 +31,23 @@ export async function GET(req: NextRequest) {
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
         GROUP BY d.NO_ANO`, 100),
       agentQuery(`
-        SELECT d.NO_ANO AS ano, nr.DS_CATEGORIA_ECONOMICA_RECEITA AS cat, nr.DS_ESPECIE_RECEITA AS esp,
+        SELECT d.NO_ANO AS ano, nr.DS_CATEGORIA_ECONOMICA_RECEITA AS cat,
           SUM(f.VL_ARRECADACAO_RECEITA) AS liq
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereMes(f)}
-        GROUP BY d.NO_ANO, nr.DS_CATEGORIA_ECONOMICA_RECEITA, nr.DS_ESPECIE_RECEITA`, 800),
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereMes(f)}${whereNatureza(f)}
+        GROUP BY d.NO_ANO, nr.DS_CATEGORIA_ECONOMICA_RECEITA`, 800),
     ])
 
-    // Arrecadação por ano-mês (espécie filtrada em JS)
+    // Arrecadação por ano-mês (natureza já filtrada no SQL)
     const arrec = new Map<string, number>()
     const anos = new Set<number>()
     const mesMaxPorAno = new Map<number, number>()
     let anoMax = 0
     for (const r of mensalR.rows) {
-      const esp = String(r[2] ?? '').trim()
-      if (f.especie && esp !== f.especie) continue
-      const ano = Number(r[0]), mes = Number(r[1]), v = Number(r[3]) || 0
+      const ano = Number(r[0]), mes = Number(r[1]), v = Number(r[2]) || 0
       arrec.set(`${ano}-${mes}`, (arrec.get(`${ano}-${mes}`) ?? 0) + v)
       anos.add(ano)
       mesMaxPorAno.set(ano, Math.max(mesMaxPorAno.get(ano) ?? 0, mes))
@@ -84,13 +82,11 @@ export async function GET(req: NextRequest) {
       porMes.push({ mes: m, nome: MESES[m], anoAnterior: ant, anoAtual: atu, pct })
     }
 
-    // 3) Categoria econômica (ano selecionado/mês/espécie) — filtra ano e espécie em JS
+    // 3) Categoria econômica (ano selecionado; mês/natureza já filtrados no SQL) — filtra ano em JS
     let correntes = 0, capital = 0
     for (const r of categoriaR.rows) {
       if (Number(r[0]) !== anoAtual) continue
-      const esp = String(r[2] ?? '').trim()
-      if (f.especie && esp !== f.especie) continue
-      const cat = String(r[1] ?? '').trim().toUpperCase(); const v = Number(r[3]) || 0
+      const cat = String(r[1] ?? '').trim().toUpperCase(); const v = Number(r[2]) || 0
       if (cat.includes('CORRENTE')) correntes += v
       else if (cat.includes('CAPITAL')) capital += v
     }
@@ -132,11 +128,11 @@ export async function GET(req: NextRequest) {
       JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}${whereMes(f)}
+      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}${whereMes(f)}${whereNatureza(f)}
       GROUP BY nr.DS_CATEGORIA_ECONOMICA_RECEITA, nr.DS_ORIGEM_RECEITA, nr.DS_ESPECIE_RECEITA, nr.DS_ALINEA_RECEITA, nr.DS_NATUREZA_RECEITA`, 5000)
     const categoriaTree = treeR.rows
       .map(r => ({ cat: String(r[0] ?? '').trim(), ori: String(r[1] ?? '').trim(), esp: String(r[2] ?? '').trim(), ali: String(r[3] ?? '').trim(), nat: String(r[4] ?? '').trim(), v: Number(r[5]) || 0 }))
-      .filter(t => t.v !== 0 && (!f.especie || t.esp === f.especie))
+      .filter(t => t.v !== 0)
 
     // 5) Histórico mensal (4 últimos anos presentes, espécie filtrada)
     const anosHist = [...anos].sort((a, b) => a - b).slice(-4)

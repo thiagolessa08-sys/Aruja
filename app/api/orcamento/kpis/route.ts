@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, WHERE_RECEITA_OFICIAL } from '@/lib/receita-filtros'
+import { lerFiltros, whereNatureza, WHERE_RECEITA_OFICIAL } from '@/lib/receita-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -35,14 +35,14 @@ export async function GET(req: NextRequest) {
 
     const [receita, orcado, alteracao] = await Promise.all([
       agentQuery(`
-        SELECT d.NO_ANO AS ano, d.NO_MES AS mes, nr.DS_ESPECIE_RECEITA AS esp,
+        SELECT d.NO_ANO AS ano, d.NO_MES AS mes,
           SUM(f.VL_ARRECADACAO_RECEITA) AS liquida
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${WHERE_RECEITA_OFICIAL}
-        GROUP BY d.NO_ANO, d.NO_MES, nr.DS_ESPECIE_RECEITA`, 5000),
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereNatureza(f)}
+        GROUP BY d.NO_ANO, d.NO_MES`, 5000),
       // Orçado = PREVISÃO DE RECEITA na LOA (lado receita, filtro oficial Ronaldo)
       agentQuery(`
         SELECT d.NO_ANO AS ano, SUM(f.VL_PREVISAO_RECEITA_LOA) AS loa
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${WHERE_RECEITA_OFICIAL}
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereNatureza(f)}
         GROUP BY d.NO_ANO`, 100),
       // Alteração da previsão de receita (lado receita; sem coluna de tipo, filtra ficha/categoria/ano)
       agentQuery(`
@@ -58,18 +58,16 @@ export async function GET(req: NextRequest) {
         FROM ${SCHEMA}.FATO_BIORC_ALTERACAO_ORCAMENTARIA_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE f.CD_FICHA_RECEITA < 5000 AND nr.CD_CATEGORIA_ECONOMICA_RECEITA NOT IN ('-1','-3') AND d.NO_ANO >= 2023
+        WHERE f.CD_FICHA_RECEITA < 5000 AND nr.CD_CATEGORIA_ECONOMICA_RECEITA NOT IN ('-1','-3') AND d.NO_ANO >= 2023${whereNatureza(f)}
         GROUP BY d.NO_ANO`, 100),
     ])
 
-    // Arrecadação por ano-mês, aplicando filtro de espécie em JS
+    // Arrecadação por ano-mês (natureza já filtrada no SQL)
     const arrec = new Map<string, number>()
     const mesesPorAno = new Map<number, number>()
     let anoMax = 0
     for (const r of receita.rows) {
-      const esp = String(r[2] ?? '').trim()
-      if (f.especie && esp !== f.especie) continue
-      const ano = Number(r[0]), mes = Number(r[1]), v = Number(r[3]) || 0
+      const ano = Number(r[0]), mes = Number(r[1]), v = Number(r[2]) || 0
       arrec.set(`${ano}-${mes}`, (arrec.get(`${ano}-${mes}`) ?? 0) + v)
       mesesPorAno.set(ano, Math.max(mesesPorAno.get(ano) ?? 0, mes))
       if (ano > anoMax) anoMax = ano

@@ -15,28 +15,37 @@ export async function GET() {
   if (cache && Date.now() - cache.at < TTL) return NextResponse.json(cache.data)
 
   try {
-    const [anosR, espR] = await Promise.all([
+    const [anosR, hierR] = await Promise.all([
       agentQuery(`
         SELECT DISTINCT d.NO_ANO AS ano
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
         ORDER BY ano DESC`, 50),
+      // Filtro "Impostos e Taxas" — 2 níveis (Alínea → Natureza), na base oficial
       agentQuery(`
-        SELECT nr.DS_ESPECIE_RECEITA AS especie, SUM(f.VL_ARRECADACAO_RECEITA) AS v
+        SELECT DISTINCT nr.DS_ALINEA_RECEITA AS alinea, nr.DS_NATUREZA_RECEITA AS natureza
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
         WHERE 1=1${WHERE_RECEITA_OFICIAL}
-        GROUP BY nr.DS_ESPECIE_RECEITA ORDER BY v DESC`, 100),
+        ORDER BY nr.DS_ALINEA_RECEITA, nr.DS_NATUREZA_RECEITA`, 500),
     ])
 
     const anos = anosR.rows.map(r => Number(r[0])).filter(a => a >= ANO_MIN_RECEITA)
-    const especies = espR.rows
-      .map(r => String(r[0] ?? '').trim())
-      .filter(e => e && e.toLowerCase() !== 'não informado')
 
-    const data = { anos, especies }
+    // Agrupa em [{ alinea, naturezas: [...] }] preservando a ordem alfabética
+    const mapa = new Map<string, string[]>()
+    for (const r of hierR.rows) {
+      const ali = String(r[0] ?? '').trim()
+      const nat = String(r[1] ?? '').trim()
+      if (!ali || !nat) continue
+      if (!mapa.has(ali)) mapa.set(ali, [])
+      mapa.get(ali)!.push(nat)
+    }
+    const impostosTaxas = [...mapa.entries()].map(([alinea, naturezas]) => ({ alinea, naturezas }))
+
+    const data = { anos, impostosTaxas }
     cache = { data, at: Date.now() }
     return NextResponse.json(data)
   } catch (e) {

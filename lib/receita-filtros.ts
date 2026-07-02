@@ -6,19 +6,26 @@
 export interface FiltrosReceita {
   ano: number | null
   mes: number | null
-  especie: string | null
+  natureza: string | null // filtro "Impostos e Taxas" — nível 2 (DS_NATUREZA_RECEITA)
 }
 
 export function lerFiltros(sp: URLSearchParams): FiltrosReceita {
   const ano = Number(sp.get('ano')) || null
   const mes = Number(sp.get('mes')) || null
-  const especie = sp.get('especie')
-  return { ano, mes, especie: especie && especie !== 'TODAS' ? especie : null }
+  const natureza = sp.get('natureza')
+  return { ano, mes, natureza: natureza && natureza !== 'TODAS' ? natureza : null }
 }
 
-// WHERE numérico (alias d = calendário). Espécie NÃO entra aqui (filtrada em JS).
+// WHERE numérico (alias d = calendário).
 export function whereMes(f: FiltrosReceita): string {
   return f.mes ? ` AND d.NO_MES = ${f.mes}` : ''
+}
+
+// Filtro "Impostos e Taxas" (nível 2 = natureza). O agente aceita literal de texto;
+// escapa aspas simples para não quebrar o SQL. Alias nr = DIM_BIORC_NATUREZA_RECEITA.
+export function whereNatureza(f: FiltrosReceita): string {
+  if (!f.natureza) return ''
+  return ` AND nr.DS_NATUREZA_RECEITA = '${f.natureza.replace(/'/g, "''")}'`
 }
 
 // Ano mínimo da receita oficial (regra do Ronaldo).

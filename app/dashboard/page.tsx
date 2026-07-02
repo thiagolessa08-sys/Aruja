@@ -22,10 +22,10 @@ export default function DashboardPage() {
   const [fInd, setFInd] = useState('Liquidado')
 
   // Filtros do painel de Receita
-  const [optsRec, setOptsRec] = useState<{ anos: number[]; especies: string[] }>({ anos: [], especies: [] })
+  const [optsRec, setOptsRec] = useState<{ anos: number[]; impostosTaxas: { alinea: string; naturezas: string[] }[] }>({ anos: [], impostosTaxas: [] })
   const [rAno, setRAno] = useState<number | ''>('')
   const [rMes, setRMes] = useState('')
-  const [rEsp, setREsp] = useState('')
+  const [rNat, setRNat] = useState('') // filtro "Impostos e Taxas" (natureza)
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -51,7 +51,7 @@ export default function DashboardPage() {
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d && !d.error) {
-          setOptsRec({ anos: d.anos ?? [], especies: d.especies ?? [] })
+          setOptsRec({ anos: d.anos ?? [], impostosTaxas: d.impostosTaxas ?? [] })
           if (d.anos?.length) setRAno(d.anos[0])
         }
       })
@@ -80,7 +80,7 @@ export default function DashboardPage() {
   const selectPill: React.CSSProperties = { ...selectBase, backgroundColor: '#fff', color: '#283e93', border: '1.5px solid #e3e9f5', backgroundImage: chevron('%23283e93') }
 
   const filtros: FiltrosDespesa = { ano: fAno, mes: fMes, secretaria: fSec, indicador: fInd }
-  const filtrosReceita: FiltrosReceita = { ano: rAno, mes: rMes, especie: rEsp }
+  const filtrosReceita: FiltrosReceita = { ano: rAno, mes: rMes, natureza: rNat }
 
   return (
     <div style={{ minHeight: '100vh', background: '#eef2f9', padding: '26px 14px', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>
@@ -176,9 +176,13 @@ export default function DashboardPage() {
                   <option value="">Mês: Todos</option>
                   {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
-                <select aria-label="Espécie" value={rEsp} onChange={e => setREsp(e.target.value)} style={selectPill}>
-                  <option value="">Espécie: Todas</option>
-                  {optsRec.especies.map(esp => <option key={esp} value={esp}>{esp}</option>)}
+                <select aria-label="Impostos e Taxas" title={rNat || 'Impostos e Taxas: Todos'} value={rNat} onChange={e => setRNat(e.target.value)} style={selectPill}>
+                  <option value="">Impostos e Taxas: Todos</option>
+                  {optsRec.impostosTaxas.map(g => (
+                    <optgroup key={g.alinea} label={g.alinea}>
+                      {g.naturezas.map(nat => <option key={nat} value={nat}>{nat}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
               </>
             )}
