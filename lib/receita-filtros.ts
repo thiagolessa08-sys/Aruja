@@ -6,14 +6,20 @@
 export interface FiltrosReceita {
   ano: number | null
   mes: number | null
+  alinea: string | null   // filtro "Impostos e Taxas" — nível 1 (DS_ALINEA_RECEITA)
   natureza: string | null // filtro "Impostos e Taxas" — nível 2 (DS_NATUREZA_RECEITA)
 }
 
 export function lerFiltros(sp: URLSearchParams): FiltrosReceita {
   const ano = Number(sp.get('ano')) || null
   const mes = Number(sp.get('mes')) || null
+  const alinea = sp.get('alinea')
   const natureza = sp.get('natureza')
-  return { ano, mes, natureza: natureza && natureza !== 'TODAS' ? natureza : null }
+  return {
+    ano, mes,
+    alinea: alinea && alinea !== 'TODAS' ? alinea : null,
+    natureza: natureza && natureza !== 'TODAS' ? natureza : null,
+  }
 }
 
 // WHERE numérico (alias d = calendário).
@@ -21,11 +27,14 @@ export function whereMes(f: FiltrosReceita): string {
   return f.mes ? ` AND d.NO_MES = ${f.mes}` : ''
 }
 
-// Filtro "Impostos e Taxas" (nível 2 = natureza). O agente aceita literal de texto;
-// escapa aspas simples para não quebrar o SQL. Alias nr = DIM_BIORC_NATUREZA_RECEITA.
-export function whereNatureza(f: FiltrosReceita): string {
-  if (!f.natureza) return ''
-  return ` AND nr.DS_NATUREZA_RECEITA = '${f.natureza.replace(/'/g, "''")}'`
+const esc = (s: string) => s.replace(/'/g, "''")
+
+// Filtro "Impostos e Taxas" — nível 2 (natureza) tem prioridade; senão nível 1 (alínea).
+// O agente aceita literal de texto; escapa aspas simples. Alias nr = DIM_BIORC_NATUREZA_RECEITA.
+export function whereImpostoTaxa(f: FiltrosReceita): string {
+  if (f.natureza) return ` AND nr.DS_NATUREZA_RECEITA = '${esc(f.natureza)}'`
+  if (f.alinea) return ` AND nr.DS_ALINEA_RECEITA = '${esc(f.alinea)}'`
+  return ''
 }
 
 // Ano mínimo da receita oficial (regra do Ronaldo).

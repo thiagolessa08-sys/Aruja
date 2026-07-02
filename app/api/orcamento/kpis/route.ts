@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, whereNatureza, WHERE_RECEITA_OFICIAL } from '@/lib/receita-filtros'
+import { lerFiltros, whereImpostoTaxa, WHERE_RECEITA_OFICIAL } from '@/lib/receita-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereNatureza(f)}
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereImpostoTaxa(f)}
         GROUP BY d.NO_ANO, d.NO_MES`, 5000),
       // Orçado = PREVISÃO DE RECEITA na LOA (lado receita, filtro oficial Ronaldo)
       agentQuery(`
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereNatureza(f)}
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereImpostoTaxa(f)}
         GROUP BY d.NO_ANO`, 100),
       // Alteração da previsão de receita (lado receita; sem coluna de tipo, filtra ficha/categoria/ano)
       agentQuery(`
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
         FROM ${SCHEMA}.FATO_BIORC_ALTERACAO_ORCAMENTARIA_RECEITA f
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE f.CD_FICHA_RECEITA < 5000 AND nr.CD_CATEGORIA_ECONOMICA_RECEITA NOT IN ('-1','-3') AND d.NO_ANO >= 2023${whereNatureza(f)}
+        WHERE f.CD_FICHA_RECEITA < 5000 AND nr.CD_CATEGORIA_ECONOMICA_RECEITA NOT IN ('-1','-3') AND d.NO_ANO >= 2023${whereImpostoTaxa(f)}
         GROUP BY d.NO_ANO`, 100),
     ])
 

@@ -172,13 +172,14 @@ const INSIGHTS_FALLBACK = [
   'Junho/2026 arrecadou R$ 37,8 mi, abaixo do ritmo dos meses anteriores.',
 ]
 
-export interface FiltrosReceita { ano: number | ''; mes: string; natureza: string }
+export interface FiltrosReceita { ano: number | ''; mes: string; alinea: string; natureza: string }
 
 function buildQS(f: FiltrosReceita): string {
   const p = new URLSearchParams()
   if (f.ano) p.set('ano', String(f.ano))
   if (f.mes) p.set('mes', f.mes)
   if (f.natureza) p.set('natureza', f.natureza)
+  else if (f.alinea) p.set('alinea', f.alinea)
   const s = p.toString()
   return s ? `?${s}` : ''
 }

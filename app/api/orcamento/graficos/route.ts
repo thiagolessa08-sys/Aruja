@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, whereMes, whereNatureza, WHERE_RECEITA_OFICIAL, ANO_MIN_RECEITA } from '@/lib/receita-filtros'
+import { lerFiltros, whereMes, whereImpostoTaxa, WHERE_RECEITA_OFICIAL, ANO_MIN_RECEITA } from '@/lib/receita-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereNatureza(f)}
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereImpostoTaxa(f)}
         GROUP BY d.NO_ANO, d.NO_MES`, 5000),
       agentQuery(`
         SELECT d.NO_ANO AS ano,
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
         JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereMes(f)}${whereNatureza(f)}
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}${whereMes(f)}${whereImpostoTaxa(f)}
         GROUP BY d.NO_ANO, nr.DS_CATEGORIA_ECONOMICA_RECEITA`, 800),
     ])
 
@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
       JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}${whereMes(f)}${whereNatureza(f)}
+      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}${whereMes(f)}${whereImpostoTaxa(f)}
       GROUP BY nr.DS_CATEGORIA_ECONOMICA_RECEITA, nr.DS_ORIGEM_RECEITA, nr.DS_ESPECIE_RECEITA, nr.DS_ALINEA_RECEITA, nr.DS_NATUREZA_RECEITA`, 5000)
     const categoriaTree = treeR.rows
       .map(r => ({ cat: String(r[0] ?? '').trim(), ori: String(r[1] ?? '').trim(), esp: String(r[2] ?? '').trim(), ali: String(r[3] ?? '').trim(), nat: String(r[4] ?? '').trim(), v: Number(r[5]) || 0 }))
