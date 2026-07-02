@@ -514,9 +514,14 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
                 <svg viewBox="0 0 200 200" width="210" height="210">
                   <g transform="rotate(-90 100 100)">
-                    {donut.map((s, i) => (
-                      <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
-                    ))}
+                    {donut.map((s, i) => {
+                      const temNat = (da.tree ?? []).some(n => n.bucket === s.nome)
+                      return (
+                        <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30"
+                          strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
+                          onClick={() => { if (temNat) setDaDrill(s.nome) }} style={{ cursor: temNat ? 'pointer' : 'default' }} />
+                      )
+                    })}
                   </g>
                 </svg>
               </div>
