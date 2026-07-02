@@ -44,15 +44,12 @@ interface Graficos {
   historico: { anos: number[]; linhas: { mes: string; vals: number[] }[] }
 }
 
-// Campos de cada nível do drill: Categoria → Origem → Espécie → Alínea → Natureza
+// Drill de apenas 1 nível: Categoria → Origem (e para)
 const NIVEIS_DRILL: { campo: keyof NoTree; titulo: string }[] = [
   { campo: 'cat', titulo: 'Categoria' },
   { campo: 'ori', titulo: 'Origem' },
-  { campo: 'esp', titulo: 'Espécie' },
-  { campo: 'ali', titulo: 'Alínea' },
-  { campo: 'nat', titulo: 'Natureza' },
 ]
-const DRILL_MAX = NIVEIS_DRILL.length - 1 // último nível não permite drill
+const DRILL_MAX = NIVEIS_DRILL.length - 1 // último nível (Origem) não permite drill
 
 const parseBR = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.')) || 0
 const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
