@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
+import { WHERE_RECEITA_OFICIAL, ANO_MIN_RECEITA } from '@/lib/receita-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -23,11 +24,14 @@ export async function GET() {
       agentQuery(`
         SELECT nr.DS_ESPECIE_RECEITA AS especie, SUM(f.VL_ARRECADACAO_RECEITA) AS v
         FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
+        JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
         JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
+        JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
+        WHERE 1=1${WHERE_RECEITA_OFICIAL}
         GROUP BY nr.DS_ESPECIE_RECEITA ORDER BY v DESC`, 100),
     ])
 
-    const anos = anosR.rows.map(r => Number(r[0])).filter(Boolean)
+    const anos = anosR.rows.map(r => Number(r[0])).filter(a => a >= ANO_MIN_RECEITA)
     const especies = espR.rows
       .map(r => String(r[0] ?? '').trim())
       .filter(e => e && e.toLowerCase() !== 'não informado')

@@ -33,23 +33,26 @@ const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
 
 interface PorAno { ano: number; arrecadado: number; previsto: number }
 interface PorMes { mes: number; nome: string; anoAnterior: number; anoAtual: number; pct: number }
-interface NoTree { cat: string; esp: string; ali: string; nat: string; v: number }
+interface NoTree { cat: string; ori: string; esp: string; ali: string; nat: string; v: number }
+interface NoDivida { bucket: string; nat: string; v: number }
 interface Graficos {
   porAno: PorAno[]
   porMes: PorMes[]
   categoria: { correntes: number; capital: number }
   categoriaTree?: NoTree[]
-  dividaAtiva: { total: number; impostos: number; taxas: number; demais: number }
+  dividaAtiva: { total: number; impostos: number; taxas: number; demais: number; tree?: NoDivida[] }
   historico: { anos: number[]; linhas: { mes: string; vals: number[] }[] }
 }
 
-// Campo de cada nível do drill: 0=Categoria, 1=Espécie, 2=Alínea, 3=Natureza
+// Campos de cada nível do drill: Categoria → Origem → Espécie → Alínea → Natureza
 const NIVEIS_DRILL: { campo: keyof NoTree; titulo: string }[] = [
   { campo: 'cat', titulo: 'Categoria' },
-  { campo: 'esp', titulo: 'Origem / Espécie' },
+  { campo: 'ori', titulo: 'Origem' },
+  { campo: 'esp', titulo: 'Espécie' },
   { campo: 'ali', titulo: 'Alínea' },
   { campo: 'nat', titulo: 'Natureza' },
 ]
+const DRILL_MAX = NIVEIS_DRILL.length - 1 // último nível não permite drill
 
 const parseBR = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.')) || 0
 const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
@@ -79,14 +82,23 @@ const FALLBACK_GRAF: Graficos = {
   }),
   categoria: { correntes: 337489272, capital: 12939471 },
   categoriaTree: [
-    { cat: 'RECEITAS CORRENTES', esp: 'IMPOSTOS', ali: 'ISSQN', nat: 'ISSQN - IMPOSTO SERVIÇOS QUALQUER NATUREZA', v: 69880000 },
-    { cat: 'RECEITAS CORRENTES', esp: 'IMPOSTOS', ali: 'IPTU', nat: 'IPTU - IMPOSTO PROPR PREDIAL E TERRIT URBANA', v: 50590000 },
-    { cat: 'RECEITAS CORRENTES', esp: 'IMPOSTOS', ali: 'ITBI', nat: 'ITBI - IMPOSTO TRANSM INTER VIVOS - BENS IMÓVEIS', v: 25330000 },
-    { cat: 'RECEITAS CORRENTES', esp: 'TRANSFERÊNCIAS DA UNIÃO E DE SUAS ENTIDADES', ali: 'FPM', nat: 'COTA-PARTE DO FPM', v: 95520000 },
-    { cat: 'RECEITAS CORRENTES', esp: 'TAXAS', ali: 'TAXAS DE FISCALIZAÇÃO', nat: 'TFE', v: 8000000 },
-    { cat: 'RECEITAS DE CAPITAL', esp: 'OPERAÇÕES DE CRÉDITO', ali: 'MERCADO INTERNO', nat: 'OPER CRED DESP CAPITAL', v: 18000000 },
+    { cat: 'RECEITAS CORRENTES', ori: 'IMPOSTOS, TAXAS E CONTRIBUIÇÕES DE MELHORIA', esp: 'IMPOSTOS', ali: 'ISSQN', nat: 'ISSQN - IMPOSTO SERVIÇOS QUALQUER NATUREZA', v: 69880000 },
+    { cat: 'RECEITAS CORRENTES', ori: 'IMPOSTOS, TAXAS E CONTRIBUIÇÕES DE MELHORIA', esp: 'IMPOSTOS', ali: 'IPTU', nat: 'IPTU - IMPOSTO PROPR PREDIAL E TERRIT URBANA', v: 50590000 },
+    { cat: 'RECEITAS CORRENTES', ori: 'IMPOSTOS, TAXAS E CONTRIBUIÇÕES DE MELHORIA', esp: 'IMPOSTOS', ali: 'ITBI', nat: 'ITBI - IMPOSTO TRANSM INTER VIVOS - BENS IMÓVEIS', v: 25330000 },
+    { cat: 'RECEITAS CORRENTES', ori: 'TRANSFERÊNCIAS CORRENTES', esp: 'TRANSFERÊNCIAS DA UNIÃO E DE SUAS ENTIDADES', ali: 'FPM', nat: 'COTA-PARTE DO FPM', v: 95520000 },
+    { cat: 'RECEITAS CORRENTES', ori: 'IMPOSTOS, TAXAS E CONTRIBUIÇÕES DE MELHORIA', esp: 'TAXAS', ali: 'TAXAS DE FISCALIZAÇÃO', nat: 'TFE', v: 8000000 },
+    { cat: 'RECEITAS DE CAPITAL', ori: 'OPERAÇÕES DE CRÉDITO', esp: 'OPERAÇÕES DE CRÉDITO', ali: 'MERCADO INTERNO', nat: 'OPER CRED DESP CAPITAL', v: 18000000 },
   ],
-  dividaAtiva: { total: 9618583, impostos: 7630496, taxas: 1979821, demais: 8266 },
+  dividaAtiva: {
+    total: 9618583, impostos: 7630496, taxas: 1979821, demais: 8266,
+    tree: [
+      { bucket: 'IMPOSTOS', nat: 'IPTU - DÍVIDA ATIVA', v: 5500000 },
+      { bucket: 'IMPOSTOS', nat: 'ISSQN - DÍVIDA ATIVA', v: 1400000 },
+      { bucket: 'IMPOSTOS', nat: 'ITBI - DÍVIDA ATIVA', v: 730496 },
+      { bucket: 'TAXAS', nat: 'OUTROS TRIBUTOS - DÍVIDA ATIVA', v: 1979821 },
+      { bucket: 'DEMAIS RECEITAS CORRENTES', nat: 'OUTRAS RECEITAS - DÍVIDA ATIVA', v: 8266 },
+    ],
+  },
   historico: { anos: [2023, 2024, 2025, 2026], linhas: TABELA.map(t => ({ mes: t.mes, vals: t.vals.map(parseBR) })) },
 }
 
@@ -180,11 +192,12 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
   const [drill, setDrill] = useState<string[]>([]) // caminho do drill Categoria→…→Natureza
+  const [daDrill, setDaDrill] = useState<string | null>(null) // bucket selecionado na Dívida Ativa
 
   const qs = buildQS(filtros)
 
-  // Ao trocar filtros, volta o drill para a raiz
-  useEffect(() => { setDrill([]) }, [qs])
+  // Ao trocar filtros, volta os drills para a raiz
+  useEffect(() => { setDrill([]); setDaDrill(null) }, [qs])
 
   useEffect(() => {
     fetch(`/api/orcamento/graficos${qs}`)
@@ -334,14 +347,14 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
         <div style={card}>
           {(() => {
             const tree = g.categoriaTree ?? []
-            const depth = Math.min(drill.length, 3)
+            const depth = Math.min(drill.length, DRILL_MAX)
             const filtered = tree.filter(n => drill.every((sel, i) => n[NIVEIS_DRILL[i].campo] === sel))
             const campo = NIVEIS_DRILL[depth].campo
             const agg = new Map<string, number>()
             for (const n of filtered) if (n[campo]) agg.set(String(n[campo]), (agg.get(String(n[campo])) ?? 0) + n.v)
             const itens = [...agg.entries()].map(([label, v]) => ({ label, v })).sort((a, b) => b.v - a.v)
             const maxV = Math.max(1, ...itens.map(i => i.v))
-            const canDrill = drill.length < 3
+            const canDrill = drill.length < DRILL_MAX
             const TOP = 7
             const vis = itens.slice(0, TOP)
             const resto = itens.slice(TOP)
@@ -433,31 +446,65 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
           </div>
         </div>
 
-        {/* Arrecadação Dívida Ativa */}
+        {/* Arrecadação Dívida Ativa — com DRILL para Natureza */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação Dívida Ativa</span>
-            <span style={dots}>···</span>
+            <span style={{ ...dots, fontSize: 11, color: '#aeb6c6', fontWeight: 600, letterSpacing: 0 }}>{daDrill ? 'Natureza' : 'Espécie'}</span>
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(da.total)}</div>
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
-            <svg viewBox="0 0 200 200" width="210" height="210">
-              <g transform="rotate(-90 100 100)">
-                {donut.map((s, i) => (
-                  <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
-                ))}
-              </g>
-            </svg>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 16 }}>
-            {donut.map((s, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+          {daDrill ? (() => {
+            const cor = donut.find(s => s.nome === daDrill)?.cor ?? '#283e93'
+            const nats = (da.tree ?? []).filter(n => n.bucket === daDrill).sort((a, b) => b.v - a.v)
+            const maxN = Math.max(1, ...nats.map(n => n.v))
+            return (
+              <>
+                <button onClick={() => setDaDrill(null)} title={daDrill} style={{ marginTop: 12, maxWidth: '100%', border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 10px', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>‹ {daDrill}</button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 14 }}>
+                  {nats.map((n, i) => {
+                    const w = Math.max(6, 100 * n.v / maxN)
+                    return (
+                      <div key={i}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 4 }}>
+                          <span title={n.nat} style={{ color: '#3a4256', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.nat}</span>
+                          <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtCompact(n.v)}</span>
+                        </div>
+                        <div style={{ height: 14, borderRadius: 7, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 7, background: cor }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {!nats.length ? <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Sem naturezas neste nível.</div> : null}
+                </div>
+              </>
+            )
+          })() : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
+                <svg viewBox="0 0 200 200" width="210" height="210">
+                  <g transform="rotate(-90 100 100)">
+                    {donut.map((s, i) => (
+                      <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
+                    ))}
+                  </g>
+                </svg>
               </div>
-            ))}
-          </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 16 }}>
+                {donut.map((s, i) => {
+                  const temNat = (da.tree ?? []).some(n => n.bucket === s.nome)
+                  return (
+                    <div key={i} onClick={() => { if (temNat) setDaDrill(s.nome) }} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: temNat ? 'pointer' : 'default' }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                    </div>
+                  )
+                })}
+              </div>
+              {(da.tree ?? []).length ? <div style={{ marginTop: 12, fontSize: 10.5, color: '#aeb6c6' }}>Clique numa espécie para ver as naturezas</div> : null}
+            </>
+          )}
         </div>
       </div>
 

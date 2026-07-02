@@ -97,40 +97,46 @@ export async function GET(req: NextRequest) {
 
     // 4) Dívida Ativa por espécie (ano selecionado) — visão própria, não usa filtro de espécie
     const dividaR = await agentQuery(`
-      SELECT nr.DS_ESPECIE_RECEITA AS esp, nr.DS_TIPO_RECEITA AS tipo,
+      SELECT nr.DS_ESPECIE_RECEITA AS esp, nr.DS_TIPO_RECEITA AS tipo, nr.DS_NATUREZA_RECEITA AS nat,
         SUM(f.VL_ARRECADACAO_RECEITA) AS liq
       FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
       JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}
-      GROUP BY nr.DS_ESPECIE_RECEITA, nr.DS_TIPO_RECEITA`, 300)
+      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}${whereMes(f)}
+      GROUP BY nr.DS_ESPECIE_RECEITA, nr.DS_TIPO_RECEITA, nr.DS_NATUREZA_RECEITA`, 600)
     let daImpostos = 0, daTaxas = 0, daDemais = 0
+    // Árvore de drill da DA: bucket (Impostos/Taxas/Demais) → natureza
+    const dividaTree: { bucket: string; nat: string; v: number }[] = []
     for (const r of dividaR.rows) {
       const esp = String(r[0]).trim().toUpperCase()
       const tipo = String(r[1]).toUpperCase()
       if (!tipo.includes('VIDA ATIVA')) continue
-      const v = Number(r[2]) || 0
-      if (esp === 'IMPOSTOS') daImpostos += v
-      else if (esp === 'TAXAS') daTaxas += v
+      const nat = String(r[2] ?? '').trim()
+      const v = Number(r[3]) || 0
+      let bucket = 'DEMAIS RECEITAS CORRENTES'
+      if (esp === 'IMPOSTOS') { daImpostos += v; bucket = 'IMPOSTOS' }
+      else if (esp === 'TAXAS') { daTaxas += v; bucket = 'TAXAS' }
       else daDemais += v
+      if (v !== 0) dividaTree.push({ bucket, nat, v })
     }
-    const dividaAtiva = { total: daImpostos + daTaxas + daDemais, impostos: daImpostos, taxas: daTaxas, demais: daDemais }
+    const dividaAtiva = { total: daImpostos + daTaxas + daDemais, impostos: daImpostos, taxas: daTaxas, demais: daDemais, tree: dividaTree }
 
-    // 4b) Hierarquia da arrecadação (drill: Categoria → Espécie → Alínea → Natureza) no ano selecionado
+    // 4b) Hierarquia da arrecadação (drill: Categoria → Origem → Espécie → Alínea → Natureza)
+    // no ano selecionado; respeita o filtro de mês. Espécie é filtrada em JS abaixo.
     const treeR = await agentQuery(`
-      SELECT nr.DS_CATEGORIA_ECONOMICA_RECEITA AS cat, nr.DS_ESPECIE_RECEITA AS esp,
-        nr.DS_ALINEA_RECEITA AS ali, nr.DS_NATUREZA_RECEITA AS nat,
+      SELECT nr.DS_CATEGORIA_ECONOMICA_RECEITA AS cat, nr.DS_ORIGEM_RECEITA AS ori,
+        nr.DS_ESPECIE_RECEITA AS esp, nr.DS_ALINEA_RECEITA AS ali, nr.DS_NATUREZA_RECEITA AS nat,
         SUM(f.VL_ARRECADACAO_RECEITA) AS v
       FROM ${SCHEMA}.FATO_BIORC_EXECUCAO_RECEITA f
       JOIN ${SCHEMA}.DIM_BIORC_TIPO_NATUREZA_RECEITA tn ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_RECEITA nr ON f.SK_NATUREZA_RECEITA = nr.SK_NATUREZA_RECEITA
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}
-      GROUP BY nr.DS_CATEGORIA_ECONOMICA_RECEITA, nr.DS_ESPECIE_RECEITA, nr.DS_ALINEA_RECEITA, nr.DS_NATUREZA_RECEITA`, 5000)
+      WHERE d.NO_ANO = ${anoAtual}${WHERE_RECEITA_OFICIAL}${whereMes(f)}
+      GROUP BY nr.DS_CATEGORIA_ECONOMICA_RECEITA, nr.DS_ORIGEM_RECEITA, nr.DS_ESPECIE_RECEITA, nr.DS_ALINEA_RECEITA, nr.DS_NATUREZA_RECEITA`, 5000)
     const categoriaTree = treeR.rows
-      .map(r => ({ cat: String(r[0] ?? '').trim(), esp: String(r[1] ?? '').trim(), ali: String(r[2] ?? '').trim(), nat: String(r[3] ?? '').trim(), v: Number(r[4]) || 0 }))
-      .filter(t => t.v !== 0)
+      .map(r => ({ cat: String(r[0] ?? '').trim(), ori: String(r[1] ?? '').trim(), esp: String(r[2] ?? '').trim(), ali: String(r[3] ?? '').trim(), nat: String(r[4] ?? '').trim(), v: Number(r[5]) || 0 }))
+      .filter(t => t.v !== 0 && (!f.especie || t.esp === f.especie))
 
     // 5) Histórico mensal (4 últimos anos presentes, espécie filtrada)
     const anosHist = [...anos].sort((a, b) => a - b).slice(-4)
