@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
+import { whereUO, ANO_MIN_DESPESA } from '@/lib/despesa-filtros'
 
 const MESES = ['', 'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 const SCHEMA = 'pref_aruja_sp'
@@ -24,6 +25,7 @@ async function gerarInsights(): Promise<string[]> {
       SUM(f.VL_SALDO_MES_PAGO) AS pago
     FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
     JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO
+    WHERE d.NO_ANO >= ${ANO_MIN_DESPESA}${whereUO()}
     GROUP BY d.NO_ANO, d.NO_MES`, 3000)
 
   const emp = new Map<string, number>(), liq = new Map<string, number>(), pago = new Map<string, number>()
@@ -54,7 +56,7 @@ async function gerarInsights(): Promise<string[]> {
     JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_DESPESA nd ON f.SK_NATUREZA_DESPESA = nd.SK_NATUREZA_DESPESA
     JOIN ${SCHEMA}.DIM_BIORC_GRUPO_DESPESA gd ON nd.SK_GRUPO_DESPESA = gd.SK_GRUPO_DESPESA
     JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO
-    WHERE d.NO_ANO = ${anoAtual}
+    WHERE d.NO_ANO = ${anoAtual}${whereUO()}
     GROUP BY gd.DS_GRUPO ORDER BY pago DESC`, 50)
 
   const topGrupos = grupo.rows

@@ -216,6 +216,31 @@ WHERE tn.CD_TIPO_NATUREZA_RECEITA = 1                     -- receita BRUTA
 
 ---
 
+## 11. Orçamento / Despesa — filtro oficial (unidades orçamentárias)
+
+**Regra:** o painel de Despesa usa SEMPRE este filtro (KPIs, gráficos, insights, subelemento, fornecedores):
+
+- `NO_ANO >= 2023`
+- **Código Unidade Orçamentária** restrito às secretarias do executivo **02.01.00 a 02.19.00**
+  (exclui a raiz `02.00.00` e o Legislativo `01.xx`).
+
+O fato (`FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO`) é tagueado no nível de sub-unidade (`02.XX.YY`),
+então o filtro é por faixa de `CD_UO` via subquery na `DIM_BIORC_INSTITUCIONAL`:
+
+```sql
+AND f.SK_INSTITUCIONAL IN (
+  SELECT i.SK_INSTITUCIONAL FROM pref_aruja_sp.DIM_BIORC_INSTITUCIONAL i
+  WHERE i.CD_UO >= '02.01.00' AND i.CD_UO <= '02.19.99')
+```
+
+Dotação (orçado) usa `SK_INSTITUCIONAL_EXECUCAO`; alteração e execução usam `SK_INSTITUCIONAL`.
+Sanidade 2026: Dotação Inicial 724 mi · Atualizada 802,25 mi · Empenho 545,82 · Liquidado 366,19 · Pago 360,6 mi.
+
+**Implementação:** `lib/despesa-filtros.ts` (`whereUO`, `ANO_MIN_DESPESA`, `whereExtra`),
+`app/api/despesa/{kpis,graficos,insights,liquidado-subelemento,fornecedores,secretarias}/route.ts`.
+
+---
+
 ## Restrições técnicas do agente IQ (transversais)
 
 - ✅ **MITO DERRUBADO (2026-07):** o agente NÃO rejeita literal de texto, `<`, `>`, `<=`, `<>`, `HAVING`,
