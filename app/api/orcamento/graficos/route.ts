@@ -70,7 +70,8 @@ export async function GET(req: NextRequest) {
     for (let a = anoIniPorAno; a <= fimAno; a++) anosPorAno.push(a)
     const porAno = anosPorAno.map(ano => {
       let arrecadado = 0
-      for (let m = 1; m <= 12; m++) arrecadado += get(ano, m)
+      if (f.mes) arrecadado = get(ano, f.mes) // mês selecionado: só aquele mês por ano
+      else for (let m = 1; m <= 12; m++) arrecadado += get(ano, m)
       return { ano, arrecadado, previsto: loa.get(ano) ?? 0 }
     })
 
@@ -134,13 +135,15 @@ export async function GET(req: NextRequest) {
       .map(r => ({ cat: String(r[0] ?? '').trim(), ori: String(r[1] ?? '').trim(), esp: String(r[2] ?? '').trim(), ali: String(r[3] ?? '').trim(), nat: String(r[4] ?? '').trim(), v: Number(r[5]) || 0 }))
       .filter(t => t.v !== 0)
 
-    // 5) Histórico mensal (4 últimos anos presentes, espécie filtrada)
-    const anosHist = [...anos].sort((a, b) => a - b).slice(-4)
+    // 5) Histórico mensal — mesmos anos do gráfico por ano (respeita o ano) e,
+    // se um mês estiver selecionado, mostra só a linha daquele mês.
+    const anosHist = anosPorAno.slice()
+    const mesesHist = f.mes ? [f.mes] : Array.from({ length: 12 }, (_, i) => i + 1)
     const historico = {
       anos: anosHist,
-      linhas: Array.from({ length: 12 }, (_, i) => ({
-        mes: MESES[i + 1],
-        vals: anosHist.map(a => get(a, i + 1)),
+      linhas: mesesHist.map(m => ({
+        mes: MESES[m],
+        vals: anosHist.map(a => get(a, m)),
       })),
     }
 

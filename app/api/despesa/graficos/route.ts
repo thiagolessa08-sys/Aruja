@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, whereExtra, indCol } from '@/lib/despesa-filtros'
+import { lerFiltros, whereExtra, indCol, ANO_MIN_DESPESA } from '@/lib/despesa-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -36,8 +36,15 @@ export async function GET(req: NextRequest) {
     const ano = f.ano || anoMax
     const anoAnt = ano - 1
 
-    const anosAno = [ano - 3, ano - 2, ano - 1, ano]
-    const porAno = anosAno.map(a => ({ ano: a, pago: totalAno.get(a) ?? 0 }))
+    const anoIni = Math.max(ano - 3, ANO_MIN_DESPESA)
+    const anosAno: number[] = []
+    for (let a = anoIni; a <= ano; a++) anosAno.push(a)
+    const porAno = anosAno.map(a => {
+      let pago = 0
+      if (f.mes) pago = val.get(`${a}-${f.mes}`) ?? 0 // mês selecionado: só aquele mês por ano
+      else pago = totalAno.get(a) ?? 0
+      return { ano: a, pago }
+    })
 
     const porMes = []
     for (let m = 1; m <= 12; m++) {
