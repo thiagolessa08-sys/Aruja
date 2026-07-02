@@ -451,29 +451,44 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(da.total)}</div>
           {daDrill ? (() => {
-            const cor = donut.find(s => s.nome === daDrill)?.cor ?? '#283e93'
             const nats = (da.tree ?? []).filter(n => n.bucket === daDrill).sort((a, b) => b.v - a.v)
-            const maxN = Math.max(1, ...nats.map(n => n.v))
+            const totalN = nats.reduce((s, n) => s + n.v, 0)
+            const paleta = ['#283e93', '#1fa463', '#e8962e', '#8094d6', '#aab8e3', '#5870c4', '#d6a24a']
+            let offN = 0
+            const segN = nats.map((n, i) => {
+              const len = totalN ? (n.v / totalN) * donutC : 0
+              const seg = { nat: n.nat, v: n.v, cor: paleta[i % paleta.length], len, off: -offN, pct: totalN ? (n.v / totalN) * 100 : 0 }
+              offN += len
+              return seg
+            })
             return (
               <>
-                <button onClick={() => setDaDrill(null)} title={daDrill} style={{ marginTop: 12, maxWidth: '100%', border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 10px', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>‹ {daDrill}</button>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 14 }}>
-                  {nats.map((n, i) => {
-                    const w = Math.max(6, 100 * n.v / maxN)
-                    return (
-                      <div key={i}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 4 }}>
-                          <span title={n.nat} style={{ color: '#3a4256', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.nat}</span>
-                          <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtCompact(n.v)}</span>
-                        </div>
-                        <div style={{ height: 14, borderRadius: 7, background: '#eef1f7', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 7, background: cor }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {!nats.length ? <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Sem naturezas neste nível.</div> : null}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10 }}>
+                  <span title={daDrill} style={{ fontSize: 11, fontWeight: 600, color: '#5b6477', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{daDrill}</span>
+                  <button onClick={() => setDaDrill(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
                 </div>
+                {segN.length ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                      <svg viewBox="0 0 200 200" width="200" height="200">
+                        <g transform="rotate(-90 100 100)">
+                          {segN.map((s, i) => (
+                            <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
+                          ))}
+                        </g>
+                      </svg>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 16 }}>
+                      {segN.map((s, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                          <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                          <span title={s.nat} style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nat}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44', flex: 'none' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem naturezas neste nível.</div>}
               </>
             )
           })() : (
