@@ -377,7 +377,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                 </div>
 
                 {/* Barras horizontais clicáveis */}
-                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {vis.map((it, i) => {
                     const w = Math.max(6, 100 * it.v / maxV)
                     return (
@@ -386,8 +386,8 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                           <span title={it.label} style={{ color: '#3a4256', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
                           <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtM(it.v)}</span>
                         </div>
-                        <div style={{ height: 14, borderRadius: 7, background: '#eef1f7', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 7, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)' }} />
+                        <div style={{ height: 22, borderRadius: 11, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 11, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)' }} />
                         </div>
                       </div>
                     )
