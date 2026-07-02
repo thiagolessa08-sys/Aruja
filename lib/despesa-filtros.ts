@@ -28,14 +28,15 @@ export function indCol(indicador: string | null | undefined): string {
 export interface Filtros {
   ano: number | null
   mes: number | null
-  secretaria: number | null
+  secretaria: string | null // prefixo da UO da secretaria, ex '02.04' (todas as sub-unidades dela)
   indicador: string | null
 }
 
 export function lerFiltros(sp: URLSearchParams): Filtros {
   const ano = Number(sp.get('ano')) || null
   const mes = Number(sp.get('mes')) || null
-  const secretaria = Number(sp.get('secretaria')) || null
+  const sec = sp.get('secretaria')
+  const secretaria = sec && /^[0-9.]+$/.test(sec) ? sec : null // só dígitos/pontos (evita injeção)
   const indicador = sp.get('indicador')
   return { ano, mes, secretaria, indicador }
 }
@@ -45,6 +46,7 @@ export function lerFiltros(sp: URLSearchParams): Filtros {
 export function whereExtra(f: Filtros): string {
   let w = ` AND d.NO_ANO >= ${ANO_MIN_DESPESA}` + whereUO('f.SK_INSTITUCIONAL')
   if (f.mes) w += ` AND d.NO_MES = ${f.mes}`
-  if (f.secretaria) w += ` AND f.SK_INSTITUCIONAL = ${f.secretaria}`
+  // Secretaria selecionada = todas as sub-unidades cujo CD_UO começa com o prefixo (ex '02.04.%')
+  if (f.secretaria) w += ` AND f.SK_INSTITUCIONAL IN (SELECT i.SK_INSTITUCIONAL FROM ${SCHEMA}.DIM_BIORC_INSTITUCIONAL i WHERE i.CD_UO LIKE '${f.secretaria}.%')`
   return w
 }

@@ -131,6 +131,16 @@ const FALLBACK_SUBELEMENTO: SubElementoData = {
   ],
 }
 
+// Liquidado por Categoria / Grupo — árvore para drill de 1 nível (Categoria → Grupo)
+interface CatGrupo { cat: string; grupo: string; v: number }
+const FALLBACK_CATTREE: CatGrupo[] = [
+  { cat: 'DESPESAS CORRENTES', grupo: 'PESSOAL E ENCARGOS SOCIAIS', v: 210000000 },
+  { cat: 'DESPESAS CORRENTES', grupo: 'OUTRAS DESPESAS CORRENTES', v: 180000000 },
+  { cat: 'DESPESAS CORRENTES', grupo: 'JUROS E ENCARGOS DA DÍVIDA', v: 3000000 },
+  { cat: 'DESPESAS DE CAPITAL', grupo: 'INVESTIMENTOS', v: 14480000 },
+  { cat: 'DESPESAS DE CAPITAL', grupo: 'AMORTIZAÇÃO DA DÍVIDA', v: 3490000 },
+]
+
 // Geometria — gráfico de linha "Arrecadação por Ano"
 function geomLinha(d: PorAno[]) {
   const mi = (v: number) => v / 1e6
@@ -223,11 +233,16 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   const [despesaAno, setDespesaAno] = useState<PorAno[]>(FALLBACK_DESPESA_ANO)
   const [despesaMes, setDespesaMes] = useState<PorMes[]>(FALLBACK_DESPESA_MES)
   const [despesaCategoria, setDespesaCategoria] = useState({ correntes: 309320000, capital: 16980000 })
+  const [catTree, setCatTree] = useState<CatGrupo[]>(FALLBACK_CATTREE)
+  const [catDrill, setCatDrill] = useState<string | null>(null) // categoria selecionada (drill p/ grupo)
   const [fornecedores, setFornecedores] = useState<FornecedoresData>(FALLBACK_FORNECEDORES)
   const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
   const [elementoSel, setElementoSel] = useState('TODOS')
 
   const qs = buildQS(filtros)
+
+  // Ao trocar filtros, volta o drill da rosca para a raiz
+  useEffect(() => { setCatDrill(null) }, [qs])
 
   useEffect(() => {
     fetch(`/api/despesa/fornecedores${qs}`)
@@ -256,6 +271,9 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
         }
         if (d?.categoria) {
           setDespesaCategoria(d.categoria)
+        }
+        if (d?.categoriaTree?.length) {
+          setCatTree(d.categoriaTree)
         }
       })
       .catch(() => { /* mantém fallback */ })
@@ -473,31 +491,80 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
           </div>
         </div>
 
-        {/* Liquidado por Categoria/Grupo */}
+        {/* Liquidado por Categoria/Grupo — com DRILL de 1 nível (Categoria → Grupo) */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Liquidado por Categoria / Grupo</span>
-            <span style={dots}>···</span>
+            <span style={{ ...dots, fontSize: 11, color: '#aeb6c6', fontWeight: 600, letterSpacing: 0 }}>{catDrill ? 'Grupo' : 'Categoria'}</span>
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(catTotal)}</div>
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
-            <svg viewBox="0 0 200 200" width="210" height="210">
-              <g transform="rotate(-90 100 100)">
-                {donut.map((s, i) => (
-                  <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
-                ))}
-              </g>
-            </svg>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 16 }}>
-            {donut.map((s, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+          {catDrill ? (() => {
+            const grupos = catTree.filter(n => n.cat === catDrill).sort((a, b) => b.v - a.v)
+            const totalG = grupos.reduce((s, n) => s + n.v, 0)
+            const paleta = ['#283e93', '#e8962e', '#1fa463', '#8094d6', '#aab8e3', '#5870c4', '#d6a24a']
+            let offG = 0
+            const segG = grupos.map((n, i) => {
+              const len = totalG ? (n.v / totalG) * donutC : 0
+              const seg = { grupo: n.grupo, v: n.v, cor: paleta[i % paleta.length], len, off: -offG, pct: totalG ? (n.v / totalG) * 100 : 0 }
+              offG += len
+              return seg
+            })
+            return (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10 }}>
+                  <span title={catDrill} style={{ fontSize: 11, fontWeight: 600, color: '#5b6477', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{catDrill}</span>
+                  <button onClick={() => setCatDrill(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
+                </div>
+                {segG.length ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                      <svg viewBox="0 0 200 200" width="200" height="200">
+                        <g transform="rotate(-90 100 100)">
+                          {segG.map((s, i) => (
+                            <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
+                          ))}
+                        </g>
+                      </svg>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 16 }}>
+                      {segG.map((s, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                          <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                          <span title={s.grupo} style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.grupo}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44', flex: 'none' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem grupos neste nível.</div>}
+              </>
+            )
+          })() : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
+                <svg viewBox="0 0 200 200" width="210" height="210">
+                  <g transform="rotate(-90 100 100)">
+                    {donut.map((s, i) => (
+                      <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
+                    ))}
+                  </g>
+                </svg>
               </div>
-            ))}
-          </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 16 }}>
+                {donut.map((s, i) => {
+                  const temGrupo = catTree.some(n => n.cat === s.nome)
+                  return (
+                    <div key={i} onClick={() => { if (temGrupo) setCatDrill(s.nome) }} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: temGrupo ? 'pointer' : 'default' }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                    </div>
+                  )
+                })}
+              </div>
+              {catTree.length ? <div style={{ marginTop: 12, fontSize: 10.5, color: '#aeb6c6' }}>Clique numa categoria para ver os grupos</div> : null}
+            </>
+          )}
         </div>
       </div>
 

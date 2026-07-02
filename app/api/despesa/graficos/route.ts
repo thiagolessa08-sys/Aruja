@@ -47,25 +47,30 @@ export async function GET(req: NextRequest) {
       porMes.push({ mes: m, nome: MESES[m], anoAnterior: ant, anoAtual: atu, pct })
     }
 
-    // Categoria econômica (Correntes x Capital) — respeita ano + mês + secretaria
+    // Categoria econômica x Grupo (drill 1 nível) — respeita ano + mês + secretaria
     const categoriaR = await agentQuery(`
-      SELECT gd.DS_CATEGORIA AS categoria, SUM(f.${col}) AS v
+      SELECT gd.DS_CATEGORIA AS categoria, gd.DS_GRUPO AS grupo, SUM(f.${col}) AS v
       FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
       JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_DESPESA nd ON f.SK_NATUREZA_DESPESA = nd.SK_NATUREZA_DESPESA
       JOIN ${SCHEMA}.DIM_BIORC_GRUPO_DESPESA gd ON nd.SK_GRUPO_DESPESA = gd.SK_GRUPO_DESPESA
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO
       WHERE d.NO_ANO = ${ano}${weSecMes}
-      GROUP BY gd.DS_CATEGORIA`, 50)
+      GROUP BY gd.DS_CATEGORIA, gd.DS_GRUPO`, 100)
 
     let correntes = 0, capital = 0
+    const categoriaTree: { cat: string; grupo: string; v: number }[] = []
     for (const r of categoriaR.rows) {
-      const cat = String(r[0] ?? '').trim().toUpperCase()
-      const v = Number(r[1]) || 0
+      const catRaw = String(r[0] ?? '').trim()
+      const cat = catRaw.toUpperCase()
+      const grupo = String(r[1] ?? '').trim()
+      const v = Number(r[2]) || 0
+      const bucket = cat.includes('CAPITAL') ? 'DESPESAS DE CAPITAL' : 'DESPESAS CORRENTES'
       if (cat.includes('CORRENTE')) correntes += v
       else if (cat.includes('CAPITAL')) capital += v
+      if (v !== 0 && grupo) categoriaTree.push({ cat: bucket, grupo, v })
     }
 
-    return NextResponse.json({ porAno, porMes, categoria: { correntes, capital } })
+    return NextResponse.json({ porAno, porMes, categoria: { correntes, capital }, categoriaTree })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

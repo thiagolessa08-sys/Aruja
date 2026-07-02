@@ -15,7 +15,7 @@ export default function DashboardPage() {
   const [saudacao, setSaudacao] = useState('Bom dia')
 
   // Opções e estado dos filtros (painel de Despesa)
-  const [opts, setOpts] = useState<{ anos: number[]; secretarias: { sk: number; nome: string }[] }>({ anos: [], secretarias: [] })
+  const [opts, setOpts] = useState<{ anos: number[]; secretarias: { uo: string; nome: string }[] }>({ anos: [], secretarias: [] })
   const [fAno, setFAno] = useState<number | ''>('')
   const [fMes, setFMes] = useState('')
   const [fSec, setFSec] = useState('')
@@ -164,7 +164,7 @@ export default function DashboardPage() {
                 </select>
                 <select aria-label="Secretaria" value={fSec} onChange={e => setFSec(e.target.value)} style={selectPill}>
                   <option value="">Secretaria: Todas</option>
-                  {opts.secretarias.map(s => <option key={s.sk} value={s.sk}>{s.nome}</option>)}
+                  {opts.secretarias.map(s => <option key={s.uo} value={s.uo}>{s.nome}</option>)}
                 </select>
                 <select aria-label="Indicador" value={fInd} onChange={e => setFInd(e.target.value)} style={selectPill}>
                   {INDICADORES.map(ind => <option key={ind} value={ind}>{ind}</option>)}

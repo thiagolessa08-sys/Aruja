@@ -23,22 +23,18 @@ export async function GET() {
       ORDER BY ano DESC`, 50)
     const anos = anosR.rows.map(r => Number(r[0])).filter(a => a >= ANO_MIN_DESPESA)
 
-    // Secretarias que realmente têm execução no fato (poder executivo, CD_ORGAO=1).
-    // O filtro CD_ORGAO='1' é feito em JS porque o agente do IQ quebra com string em WHERE.
+    // Secretarias oficiais = unidades de nível .00 (02.01.00 a 02.19.00), direto da dimensão.
+    // Valor do filtro = prefixo '02.XX' (seleciona todas as sub-unidades da secretaria).
     const secR = await agentQuery(`
-      SELECT i.SK_INSTITUCIONAL AS sk, i.CD_ORGAO AS orgao, i.DS_UO AS uo, i.DS_ORGAO AS dsorgao, i.CD_UO AS cduo
-      FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
-      JOIN ${SCHEMA}.DIM_BIORC_INSTITUCIONAL i ON f.SK_INSTITUCIONAL = i.SK_INSTITUCIONAL
-      GROUP BY i.SK_INSTITUCIONAL, i.CD_ORGAO, i.DS_UO, i.DS_ORGAO, i.CD_UO`, 500)
+      SELECT DISTINCT i.CD_UO AS cduo, i.DS_UO AS nome
+      FROM ${SCHEMA}.DIM_BIORC_INSTITUCIONAL i
+      WHERE i.CD_UO >= '02.01.00' AND i.CD_UO <= '02.19.00'
+      ORDER BY i.CD_UO`, 200)
 
-    // Só unidades orçamentárias oficiais (02.01.00 a 02.19.00 — órgão executivo, exclui raiz/legislativo)
     const secretarias = secR.rows
-      .filter(r => {
-        const cduo = String(r[4] ?? '').trim()
-        return cduo >= '02.01.00' && cduo <= '02.19.99' && String(r[2] ?? '').trim() !== String(r[3] ?? '').trim()
-      })
-      .map(r => ({ sk: Number(r[0]), nome: String(r[2] ?? '').trim() }))
-      .filter(s => s.nome)
+      .map(r => ({ cduo: String(r[0] ?? '').trim(), nome: String(r[1] ?? '').trim() }))
+      .filter(s => s.cduo.endsWith('.00') && s.nome)
+      .map(s => ({ uo: s.cduo.slice(0, 5), nome: s.nome }))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 
     const data = { anos, secretarias }
