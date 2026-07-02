@@ -97,14 +97,14 @@ export async function GET(req: NextRequest) {
     const arrecYtd = ytd(anoAtual, mesAtual)
     const arrecYtdAnt = ytd(anoAnt, mesAtual)
     const arrecMesAnterior = get(mesAntAno, mesAntMes)
-    const arrecMesAnteriorAnt = get(mesAntAno - 1, mesAntMes)
 
     const kpis: Kpi[] = [
       { label: 'Orçado', value: fmtMi(orcAtual), subLabel: 'Ano Anterior', subValue: fmtMi(orcAnt), ...variacao(orcAtual, orcAnt) },
       { label: 'Orçado Atualizado', value: fmtMi(orcAtualizadoAtual), subLabel: 'Ano Anterior', subValue: fmtMi(orcAtualizadoAnt), ...variacao(orcAtualizadoAtual, orcAtualizadoAnt) },
       { label: 'Arrecadação Mês', value: fmtMi(arrecMes), subLabel: `${MESES[mesAtual]}/${String(anoAnt).slice(2)}`, subValue: fmtMi(arrecMesAnt), ...variacao(arrecMes, arrecMesAnt) },
       { label: 'Arrecadação Até o Mês', value: fmtMi(arrecYtd), subLabel: 'Ano Anterior', subValue: fmtMi(arrecYtdAnt), ...variacao(arrecYtd, arrecYtdAnt) },
-      { label: 'Arrecadação Mês Anterior', value: fmtMi(arrecMesAnterior), subLabel: `${MESES[mesAntMes]}/${String(mesAntAno - 1).slice(2)}`, subValue: fmtMi(arrecMesAnteriorAnt), ...variacao(arrecMesAnterior, arrecMesAnteriorAnt) },
+      // "Mês Anterior" agora compara com o MÊS ATUAL (não com o mesmo mês do ano passado)
+      { label: 'Arrecadação Mês Anterior', value: fmtMi(arrecMesAnterior), subLabel: `${MESES[mesAtual]}/${String(anoAtual).slice(2)}`, subValue: fmtMi(arrecMes), ...variacao(arrecMes, arrecMesAnterior) },
     ]
 
     return NextResponse.json({ kpis, referencia: { ano: anoAtual, mes: mesAtual, mesNome: MESES[mesAtual] } })

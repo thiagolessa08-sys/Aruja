@@ -157,7 +157,7 @@ const KPIS_FALLBACK: KpiCard[] = [
   { label: 'Orçado Atualizado', value: '879,68 mi', subLabel: 'Ano Anterior', subValue: '816,64 mi', pct: '7,72%', dir: 'up' },
   { label: 'Arrecadação Mês', value: '0,40 mi', subLabel: 'Julho/25', subValue: '66,52 mi', pct: '-99,40%', dir: 'down' },
   { label: 'Arrecadação Até o Mês', value: '413,48 mi', subLabel: 'Ano Anterior', subValue: '420,51 mi', pct: '-1,67%', dir: 'down' },
-  { label: 'Arrecadação Mês Anterior', value: '71,06 mi', subLabel: 'Junho/25', subValue: '53,13 mi', pct: '33,74%', dir: 'up' },
+  { label: 'Arrecadação Mês Anterior', value: '71,06 mi', subLabel: 'Julho/26', subValue: '0,40 mi', pct: '-99,44%', dir: 'down' },
 ]
 
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
