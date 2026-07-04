@@ -397,7 +397,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                   {vis.map((it, i) => {
                     const w = Math.max(6, 100 * it.v / maxV)
                     return (
-                      <div key={i} onClick={() => { if (canDrill) setDrill([...drill, it.label]) }} style={{ cursor: canDrill ? 'pointer' : 'default' }}>
+                      <div key={i} onClick={() => { if (canDrill) setDrill([...drill, it.label]) }} title={`${it.label}: ${fmtM(it.v)}`} style={{ cursor: canDrill ? 'pointer' : 'default' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 4 }}>
                           <span title={it.label} style={{ color: '#3a4256', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
                           <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtM(it.v)}</span>
@@ -442,8 +442,6 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                 <linearGradient id="arrAtu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
               </defs>
               <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-              <line x1="8" y1={gb.yMedia.toFixed(1)} x2="1072" y2={gb.yMedia.toFixed(1)} stroke="#c9d6ee" strokeWidth="1.6" strokeDasharray="5 5" />
-              <text x="1066" y={(gb.yMedia - 7).toFixed(1)} fontSize="12" fill="#5b6477" style={axisFont} textAnchor="end">Média {fmtMi(gb.media)}</text>
               {gb.bars.map((b, i) => (
                 <g key={i}>
                   <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill="url(#arrAnt)" />
@@ -491,7 +489,9 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                       <svg viewBox="0 0 200 200" width="200" height="200">
                         <g transform="rotate(-90 100 100)">
                           {segN.map((s, i) => (
-                            <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
+                            <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}>
+                              <title>{`${s.nat}: ${fmtReais(s.v)} (${fmtPct(s.pct)})`}</title>
+                            </circle>
                           ))}
                         </g>
                       </svg>
@@ -519,7 +519,9 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                       return (
                         <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30"
                           strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
-                          onClick={() => { if (temNat) setDaDrill(s.nome) }} style={{ cursor: temNat ? 'pointer' : 'default' }} />
+                          onClick={() => { if (temNat) setDaDrill(s.nome) }} style={{ cursor: temNat ? 'pointer' : 'default' }}>
+                          <title>{`${s.nome}: ${fmtReais(s.v)} (${fmtPct(s.pct)})`}</title>
+                        </circle>
                       )
                     })}
                   </g>

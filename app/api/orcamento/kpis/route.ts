@@ -19,6 +19,14 @@ function fmtMi(v: number): string {
   return (v / 1_000_000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
 }
 
+// Formato adaptativo pelo valor da base: mi p/ milhões, K p/ milhares, senão o número cru.
+function fmtAdapt(v: number): string {
+  const a = Math.abs(v)
+  if (a >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
+  if (a >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' K'
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+}
+
 function variacao(atual: number, anterior: number): { pct: string; dir: 'up' | 'down' | 'flat' } {
   if (!anterior) return { pct: '0,00%', dir: 'flat' }
   const r = ((atual - anterior) / Math.abs(anterior)) * 100
@@ -98,13 +106,16 @@ export async function GET(req: NextRequest) {
     const arrecYtdAnt = ytd(anoAnt, mesAtual)
     const arrecMesAnterior = get(mesAntAno, mesAntMes)
 
+    // Com filtro de mês, valores menores → usa K/mi conforme a base (Receita item 1)
+    const fmt = f.mes ? fmtAdapt : fmtMi
+
     const kpis: Kpi[] = [
-      { label: 'Orçado', value: fmtMi(orcAtual), subLabel: 'Ano Anterior', subValue: fmtMi(orcAnt), ...variacao(orcAtual, orcAnt) },
-      { label: 'Orçado Atualizado', value: fmtMi(orcAtualizadoAtual), subLabel: 'Ano Anterior', subValue: fmtMi(orcAtualizadoAnt), ...variacao(orcAtualizadoAtual, orcAtualizadoAnt) },
-      { label: 'Arrecadação Mês', value: fmtMi(arrecMes), subLabel: `${MESES[mesAtual]}/${String(anoAnt).slice(2)}`, subValue: fmtMi(arrecMesAnt), ...variacao(arrecMes, arrecMesAnt) },
-      { label: 'Arrecadação Até o Mês', value: fmtMi(arrecYtd), subLabel: 'Ano Anterior', subValue: fmtMi(arrecYtdAnt), ...variacao(arrecYtd, arrecYtdAnt) },
+      { label: 'Orçado', value: fmt(orcAtual), subLabel: 'Ano Anterior', subValue: fmt(orcAnt), ...variacao(orcAtual, orcAnt) },
+      { label: 'Orçado Atualizado', value: fmt(orcAtualizadoAtual), subLabel: 'Ano Anterior', subValue: fmt(orcAtualizadoAnt), ...variacao(orcAtualizadoAtual, orcAtualizadoAnt) },
+      { label: 'Arrecadação Mês', value: fmt(arrecMes), subLabel: `${MESES[mesAtual]}/${String(anoAnt).slice(2)}`, subValue: fmt(arrecMesAnt), ...variacao(arrecMes, arrecMesAnt) },
+      { label: 'Arrecadação Até o Mês', value: fmt(arrecYtd), subLabel: 'Ano Anterior', subValue: fmt(arrecYtdAnt), ...variacao(arrecYtd, arrecYtdAnt) },
       // "Mês Anterior" agora compara com o MÊS ATUAL (não com o mesmo mês do ano passado)
-      { label: 'Arrecadação Mês Anterior', value: fmtMi(arrecMesAnterior), subLabel: `${MESES[mesAtual]}/${String(anoAtual).slice(2)}`, subValue: fmtMi(arrecMes), ...variacao(arrecMes, arrecMesAnterior) },
+      { label: 'Arrecadação Mês Anterior', value: fmt(arrecMesAnterior), subLabel: `${MESES[mesAtual]}/${String(anoAtual).slice(2)}`, subValue: fmt(arrecMes), ...variacao(arrecMes, arrecMesAnterior) },
     ]
 
     return NextResponse.json({ kpis, referencia: { ano: anoAtual, mes: mesAtual, mesNome: MESES[mesAtual] } })

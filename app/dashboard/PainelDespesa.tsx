@@ -341,8 +341,10 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
     <svg key="0" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17.5" cy="9" r="2.3" /><path d="M16 19a4.5 4.5 0 0 1 5.5-4.4" /></svg>,
     <svg key="1" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5" y="3" width="11" height="18" rx="1" /><path d="M8 7h2M12 7h1.5M8 11h2M12 11h1.5M8 15h2M12 15h1.5" /><path d="M16 21h3V11h-3" /></svg>,
     <svg key="2" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><ellipse cx="12" cy="6.5" rx="7" ry="3" /><path d="M5 6.5v5c0 1.6 3.1 3 7 3s7-1.4 7-3v-5" /><path d="M5 11.5v5c0 1.6 3.1 3 7 3s7-1.4 7-3v-5" /></svg>,
-    <svg key="3" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 11a8 8 0 1 0-.5 4" /><path d="M20 5v6h-6" /></svg>,
-    <svg key="4" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>,
+    // Liquidado — documento/fatura com check (valor liquidado/apurado)
+    <svg key="3" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 2h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" /><path d="M14 2v5h5" /><path d="M8.5 14l2.2 2.2L15.5 12" /></svg>,
+    // Pago — cédula/dinheiro com moeda (pagamento efetuado)
+    <svg key="4" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.7" /><path d="M5.5 9.5v5M18.5 9.5v5" /></svg>,
   ]
 
   return (
@@ -476,8 +478,6 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                 <linearGradient id="arrAtu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
               </defs>
               <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-              <line x1="8" y1={gb.yMedia.toFixed(1)} x2="1072" y2={gb.yMedia.toFixed(1)} stroke="#c9d6ee" strokeWidth="1.6" strokeDasharray="5 5" />
-              <text x="1066" y={(gb.yMedia - 7).toFixed(1)} fontSize="12" fill="#5b6477" style={axisFont} textAnchor="end">Média {fmtMi(gb.media)}</text>
               {gb.bars.map((b, i) => (
                 <g key={i}>
                   <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill="url(#arrAnt)" />
@@ -525,7 +525,9 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                       <svg viewBox="0 0 200 200" width="200" height="200">
                         <g transform="rotate(-90 100 100)">
                           {segG.map((s, i) => (
-                            <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />
+                            <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}>
+                              <title>{`${s.grupo}: ${fmtReais(s.v)} (${fmtPct(s.pct)})`}</title>
+                            </circle>
                           ))}
                         </g>
                       </svg>
@@ -553,7 +555,9 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                       return (
                         <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30"
                           strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
-                          onClick={() => { if (temGrupo) setCatDrill(s.nome) }} style={{ cursor: temGrupo ? 'pointer' : 'default' }} />
+                          onClick={() => { if (temGrupo) setCatDrill(s.nome) }} style={{ cursor: temGrupo ? 'pointer' : 'default' }}>
+                          <title>{`${s.nome}: ${fmtReais(s.v)} (${fmtPct(s.pct)})`}</title>
+                        </circle>
                       )
                     })}
                   </g>
