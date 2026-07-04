@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { abaVisivel, lerPerfilCookie, type Perfil } from '@/lib/perfil'
 
 export type AbaTopo = 'orcamento' | 'contribuinte' | 'imobiliario' | 'mobiliario' | 'outros' | 'divida' | 'cobranca' | 'reforma' | 'chat'
 
@@ -19,6 +21,9 @@ const ABAS: { id: AbaTopo; label: string; href: string }[] = [
 
 export default function TopNav({ ativo }: { ativo: AbaTopo }) {
   const router = useRouter()
+  const [perfil, setPerfil] = useState<Perfil>('admin')
+  useEffect(() => { setPerfil(lerPerfilCookie()) }, [])
+  const abas = ABAS.filter(a => abaVisivel(perfil, a.id))
   const navTab: React.CSSProperties = { padding: '9px 14px', borderRadius: 24, color: '#5b6477', fontSize: 13.5, fontWeight: 500, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }
   const navAtivo: React.CSSProperties = { padding: '9px 16px', borderRadius: 24, background: '#283e93', color: '#ffffff', fontSize: 13.5, fontWeight: 500, boxShadow: '0 6px 14px rgba(40,62,147,0.35)', whiteSpace: 'nowrap' }
 
@@ -34,7 +39,7 @@ export default function TopNav({ ativo }: { ativo: AbaTopo }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: '#f4f7fc', borderRadius: 30, padding: 5, flexWrap: 'wrap', justifyContent: 'center' }}>
-        {ABAS.map(a => a.id === ativo
+        {abas.map(a => a.id === ativo
           ? <span key={a.id} style={navAtivo}>{a.label}</span>
           : <Link key={a.id} href={a.href} style={navTab}>{a.label}</Link>
         )}

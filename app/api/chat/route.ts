@@ -5,6 +5,37 @@ import { agentQuery } from '@/lib/agent'
 import { getSchemaContext } from '@/lib/schema-cache'
 import { getCatalog, catalogToPromptContext } from '@/lib/catalog-cache'
 import { REGRAS_NEGOCIO } from '@/lib/regras-negocio'
+import type { Perfil } from '@/lib/perfil'
+
+// Restrição de tópicos conforme o perfil do usuário
+function restricaoChat(perfil: Perfil): string {
+  if (perfil === 'orcamentario') {
+    return `
+
+══════════════════════════════════════════
+RESTRIÇÃO DE PERFIL — ORÇAMENTÁRIO (OBRIGATÓRIA):
+══════════════════════════════════════════
+Você SÓ pode responder sobre ORÇAMENTO/orçamentário: receita e despesa orçamentária,
+LOA, dotação, previsão, alteração e execução orçamentária (tabelas FATO_BIORC_* / DIM_BIORC_*).
+Se a pergunta for sobre tributos cadastrais (IPTU/ISS/ITBI por imóvel/contribuinte), contribuintes,
+dívida ativa, cobrança, mobiliário/imobiliário ou reforma tributária, RECUSE educadamente:
+"Meu perfil atende apenas assuntos orçamentários. Para tributos, use o perfil tributário." NÃO consulte
+essas tabelas nem tente responder.`
+  }
+  if (perfil === 'tributario') {
+    return `
+
+══════════════════════════════════════════
+RESTRIÇÃO DE PERFIL — TRIBUTÁRIO (OBRIGATÓRIA):
+══════════════════════════════════════════
+Você pode responder sobre TODOS os assuntos EXCETO orçamento/orçamentário. Se a pergunta for sobre
+receita/despesa ORÇAMENTÁRIA, LOA, dotação, previsão ou execução orçamentária (tabelas FATO_BIORC_* /
+DIM_BIORC_*), RECUSE educadamente: "Meu perfil não atende assuntos orçamentários. Para orçamento, use o
+perfil orçamentário." NÃO consulte essas tabelas nem tente responder. Tributos, contribuintes, dívida
+ativa, cobrança e reforma são liberados normalmente.`
+  }
+  return ''
+}
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -122,7 +153,7 @@ export async function POST(req: NextRequest) {
       const schemaContext = await getSchemaContext(forceRefreshSchema ?? false)
       const catalog = getCatalog()
       const catalogContext = catalog ? catalogToPromptContext(catalog) : ''
-      const systemPrompt = buildSystemPrompt(schemaContext, catalogContext)
+      const systemPrompt = buildSystemPrompt(schemaContext, catalogContext) + restricaoChat(session!.role)
 
       const msgs: Anthropic.MessageParam[] = [...messages]
       let queryCount = 0

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PainelMobiliario, { type FiltrosMobiliario } from './PainelMobiliario'
+import TopNav from '../_components/TopNav'
 import PainelTributo from '../tributo/PainelTributo'
 import { SITUACOES, type SituacaoOpt } from '@/lib/mobiliario-filtros'
 
@@ -72,37 +73,8 @@ export default function MobiliarioPage() {
     <div style={{ minHeight: '100vh', background: '#eef2f9', padding: '26px 14px', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>
       <div style={{ maxWidth: 1560, margin: '0 auto' }}>
 
-        {/* ===== TOP NAV ===== */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderRadius: 20, padding: '12px 18px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="/logo-aruja.png" alt="Prefeitura Municipal de Arujá" style={{ height: 46, width: 'auto', display: 'block' }} />
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
-            <Link href="/dashboard" style={navTab}>Orçamento</Link>
-            <Link href="/contribuinte" style={navTab}>Contribuintes</Link>
-            <Link href="/imobiliario" style={navTab}>Imobiliário</Link>
-            <span style={navAtivo}>Mobiliário</span>
-            <Link href="/outros-tributos" style={navTab}>Outros Tributos</Link>
-            <Link href="/divida-ativa" style={navTab}>Dívida Ativa</Link>
-            <Link href="/cobranca" style={navTab}>Cobrança</Link>
-            <Link href="/reforma-tributaria" style={navTab}>Reforma Tributária</Link>
-            <Link href="/chat" style={navTab}>Chat</Link>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <Link href="/catalogo" title="Catálogo de dados" style={{ width: 42, height: 42, borderRadius: '50%', background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><circle cx="12" cy="12" r="3.2" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.88 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.88.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z" /></svg>
-            </Link>
-            <div style={{ position: 'relative', width: 42, height: 42, borderRadius: '50%', background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
-              <span style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#283e93', border: '2px solid #e9edf8' }}></span>
-            </div>
-            <button onClick={handleLogout} title="Sair" style={{ width: 42, height: 42, borderRadius: '50%', overflow: 'hidden', border: '2px solid #ffffff', boxShadow: '0 0 0 1px #e3e9f5', padding: 0, cursor: 'pointer', background: 'transparent' }}>
-              <svg viewBox="0 0 40 40" width="40" height="40"><rect width="40" height="40" fill="#cdd9ee" /><circle cx="20" cy="15" r="8" fill="#9fb2d4" /><path d="M5 40 a15 13 0 0 1 30 0" fill="#9fb2d4" /></svg>
-            </button>
-          </div>
-        </div>
+        {/* ===== TOP NAV (abas filtradas por perfil) ===== */}
+        <TopNav ativo="mobiliario" />
 
         {/* ===== GREETING + SUB-ABAS ===== */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 4px 0', flexWrap: 'wrap', gap: 12 }}>

@@ -25,7 +25,7 @@ export default function LoginPage() {
         setErro(data.error || 'Erro ao fazer login')
         return
       }
-      router.push('/dashboard')
+      router.push(data.home || '/dashboard')
     } catch {
       setErro('Erro de conexão')
     } finally {

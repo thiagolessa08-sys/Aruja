@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { signToken } from '@/lib/auth'
+import { homeDoPerfil, type Perfil } from '@/lib/perfil'
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@prefeitura.com'
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
+// Usuários (credenciais via env, com defaults). Cada um tem um perfil de acesso.
+const USUARIOS: { id: number; email: string; senha: string; role: Perfil; nome: string }[] = [
+  { id: 1, email: process.env.ADMIN_EMAIL || 'admin@prefeitura.com', senha: process.env.ADMIN_PASSWORD || 'admin123', role: 'admin', nome: 'Administrador' },
+  { id: 2, email: process.env.ORCAMENTO_EMAIL || 'orcamento@prefeitura.com', senha: process.env.ORCAMENTO_PASSWORD || 'orcamento123', role: 'orcamentario', nome: 'Orçamentário' },
+  { id: 3, email: process.env.TRIBUTARIO_EMAIL || 'tributario@prefeitura.com', senha: process.env.TRIBUTARIO_PASSWORD || 'tributario123', role: 'tributario', nome: 'Tributário' },
+]
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,15 +16,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email e senha obrigatórios' }, { status: 400 })
     }
 
-    if (email !== ADMIN_EMAIL || senha !== ADMIN_PASSWORD) {
+    const u = USUARIOS.find(x => x.email === email && x.senha === senha)
+    if (!u) {
       return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 })
     }
 
-    const token = signToken({ userId: 1, email: ADMIN_EMAIL, nome: 'Administrador' })
+    const token = signToken({ userId: u.id, email: u.email, nome: u.nome, role: u.role })
+    const home = homeDoPerfil(u.role)
 
-    const res = NextResponse.json({ ok: true, nome: 'Administrador' })
+    const res = NextResponse.json({ ok: true, nome: u.nome, role: u.role, home })
     res.cookies.set('auth_token', token, {
       httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    })
+    // Cookie legível (não sensível) só para a UI decidir o que exibir
+    res.cookies.set('perfil', u.role, {
+      httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7,

@@ -1,17 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import PainelReceita, { type FiltrosReceita } from './PainelReceita'
 import PainelDespesa, { type FiltrosDespesa } from './PainelDespesa'
 import ImpostoTaxaSelect from '../_components/ImpostoTaxaSelect'
+import TopNav from '../_components/TopNav'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const INDICADORES = ['Dotação Inicial', 'Dotação Atualizada', 'Empenhado', 'Liquidado', 'Pago']
 
 export default function DashboardPage() {
-  const router = useRouter()
   const [tipo, setTipo] = useState<'receita' | 'despesa'>('receita')
   const [saudacao, setSaudacao] = useState('Bom dia')
 
@@ -65,12 +63,6 @@ export default function DashboardPage() {
     window.history.replaceState(null, '', `?v=${op}`)
   }
 
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
-  }
-
-  const navTab: React.CSSProperties = { padding: '9px 14px', borderRadius: 24, color: '#5b6477', fontSize: 13.5, fontWeight: 500, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }
   const toolPill: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 22, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: '#3a4256', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }
   const chevron = (cor: string) => `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${cor}' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`
   const selectBase: React.CSSProperties = {
@@ -90,37 +82,8 @@ export default function DashboardPage() {
     <div style={{ minHeight: '100vh', background: '#eef2f9', padding: '26px 14px', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>
       <div style={{ maxWidth: 1560, margin: '0 auto' }}>
 
-        {/* ===== TOP NAV ===== */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderRadius: 20, padding: '12px 18px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="/logo-aruja.png" alt="Prefeitura Municipal de Arujá" style={{ height: 46, width: 'auto', display: 'block' }} />
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
-            <span style={{ padding: '9px 16px', borderRadius: 24, background: '#283e93', color: '#ffffff', fontSize: 13.5, fontWeight: 500, boxShadow: '0 6px 14px rgba(40,62,147,0.35)', whiteSpace: 'nowrap' }}>Orçamento</span>
-            <Link href="/contribuinte" style={navTab}>Contribuintes</Link>
-            <Link href="/imobiliario" style={navTab}>Imobiliário</Link>
-            <Link href="/mobiliario" style={navTab}>Mobiliário</Link>
-            <Link href="/outros-tributos" style={navTab}>Outros Tributos</Link>
-            <Link href="/divida-ativa" style={navTab}>Dívida Ativa</Link>
-            <Link href="/cobranca" style={navTab}>Cobrança</Link>
-            <Link href="/reforma-tributaria" style={navTab}>Reforma Tributária</Link>
-            <Link href="/chat" style={navTab}>Chat</Link>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <Link href="/catalogo" title="Catálogo de dados" style={{ width: 42, height: 42, borderRadius: '50%', background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><circle cx="12" cy="12" r="3.2" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.88 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.88.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z" /></svg>
-            </Link>
-            <div style={{ position: 'relative', width: 42, height: 42, borderRadius: '50%', background: '#e9edf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
-              <span style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#283e93', border: '2px solid #e9edf8' }}></span>
-            </div>
-            <button onClick={handleLogout} title="Sair" style={{ width: 42, height: 42, borderRadius: '50%', overflow: 'hidden', border: '2px solid #ffffff', boxShadow: '0 0 0 1px #e3e9f5', padding: 0, cursor: 'pointer', background: 'transparent' }}>
-              <svg viewBox="0 0 40 40" width="40" height="40"><rect width="40" height="40" fill="#cdd9ee" /><circle cx="20" cy="15" r="8" fill="#9fb2d4" /><path d="M5 40 a15 13 0 0 1 30 0" fill="#9fb2d4" /></svg>
-            </button>
-          </div>
-        </div>
+        {/* ===== TOP NAV (abas filtradas por perfil) ===== */}
+        <TopNav ativo="orcamento" />
 
         {/* ===== GREETING ROW ===== */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 4px 0' }}>

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { abaVisivel, lerPerfilCookie, type Perfil } from '@/lib/perfil'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ReferenceLine,
   AreaChart, Area, ResponsiveContainer,
@@ -774,6 +775,8 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [schemaLoaded, setSchemaLoaded] = useState(false)
+  const [perfil, setPerfil] = useState<Perfil>('admin')
+  useEffect(() => { setPerfil(lerPerfilCookie()) }, [])
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -898,14 +901,18 @@ export default function ChatPage() {
           <img src="/logo-aruja.png" alt="Prefeitura Municipal de Arujá" className="kc-nav-logo" />
 
           <div className="kc-tabs">
-            <Link href="/dashboard" className="kc-tab">Orçamento</Link>
-            <Link href="/contribuinte" className="kc-tab">Contribuintes</Link>
-            <Link href="/imobiliario" className="kc-tab">Imobiliário</Link>
-            <Link href="/mobiliario" className="kc-tab">Mobiliário</Link>
-            <Link href="/outros-tributos" className="kc-tab">Outros Tributos</Link>
-            <Link href="/divida-ativa" className="kc-tab">Dívida Ativa</Link>
-            <Link href="/cobranca" className="kc-tab">Cobrança</Link>
-            <Link href="/reforma-tributaria" className="kc-tab">Reforma Tributária</Link>
+            {[
+              { id: 'orcamento', href: '/dashboard', label: 'Orçamento' },
+              { id: 'contribuinte', href: '/contribuinte', label: 'Contribuintes' },
+              { id: 'imobiliario', href: '/imobiliario', label: 'Imobiliário' },
+              { id: 'mobiliario', href: '/mobiliario', label: 'Mobiliário' },
+              { id: 'outros', href: '/outros-tributos', label: 'Outros Tributos' },
+              { id: 'divida', href: '/divida-ativa', label: 'Dívida Ativa' },
+              { id: 'cobranca', href: '/cobranca', label: 'Cobrança' },
+              { id: 'reforma', href: '/reforma-tributaria', label: 'Reforma Tributária' },
+            ].filter(t => abaVisivel(perfil, t.id)).map(t => (
+              <Link key={t.id} href={t.href} className="kc-tab">{t.label}</Link>
+            ))}
             <span className="kc-tab active">Chat</span>
           </div>
 

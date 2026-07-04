@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
+import type { Perfil } from '@/lib/perfil'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_change_me'
 
@@ -7,6 +8,7 @@ export interface JWTPayload {
   userId: number
   email: string
   nome: string
+  role: Perfil
 }
 
 export function signToken(payload: JWTPayload): string {
