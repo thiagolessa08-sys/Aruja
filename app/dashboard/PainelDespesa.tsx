@@ -257,7 +257,10 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
   const [elementoSel, setElementoSel] = useState('TODOS')
   const [carregando, setCarregando] = useState(false)
+  const [top10, setTop10] = useState(false)        // filtra os 10 maiores fornecedores
+  const [buscaForn, setBuscaForn] = useState('')   // busca de fornecedor
 
+  const ind = filtros.indicador || 'Liquidado'     // indicador selecionado (reflete nos títulos)
   const qs = buildQS(filtros)
 
   // Ao trocar filtros, volta o drill da rosca para a raiz
@@ -378,14 +381,14 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
         {/* Arrecadação por Ano */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Despesas por Ano</span>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>{ind} por Ano</span>
             <span style={reportBadge}>Anual</span>
           </div>
           <div style={{ marginTop: 16, height: 240 }}>
             <AreaSerie
               data={despesaAno.map(p => ({ ano: p.ano, valor: p.arrecadado }))}
               cor="#283e93"
-              nome="Pago"
+              nome={ind}
               fmtValor={fmtMi}
               fmtEixoY={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
             />
@@ -422,7 +425,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
         {/* Liquidado por SubElemento */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Liquidado por SubElemento</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>{ind} por SubElemento</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 11, color: '#9098a8' }}>Elemento:</span>
               <select
@@ -465,7 +468,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
         {/* Liquidado por Mês */}
         <div style={{ position: 'relative', background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Liquidado por Mês</span>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>{ind} por Mês</span>
             <div style={{ display: 'flex', gap: 22, fontSize: 12, color: '#5b6477' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Ano Anterior</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>Ano Atual</span>
@@ -499,7 +502,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
         {/* Liquidado por Categoria/Grupo — com DRILL de 1 nível (Categoria → Grupo) */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Liquidado por Categoria / Grupo</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>{ind} por Categoria / Grupo</span>
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(catTotal)}</div>
           {catDrill ? (() => {
@@ -581,42 +584,63 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
         </div>
       </div>
 
-      {/* ===== Fornecedores - Valor de Liquidado (tabela) ===== */}
+      {/* ===== Fornecedores (busca + Top 10 + rolagem) ===== */}
       <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Fornecedores - Valor de Liquidado</span>
-          <span style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, borderRadius: 14, padding: '6px 16px' }}>Top 10</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Fornecedores - Valor de {ind}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '6px 10px' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+              <input value={buscaForn} onChange={e => setBuscaForn(e.target.value)} placeholder="Pesquisar fornecedor…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 190, fontFamily: 'inherit' }} />
+            </div>
+            <button onClick={() => setTop10(v => !v)} title="Mostrar apenas os 10 maiores"
+              style={{ border: top10 ? 'none' : '1.5px solid #cdd5ef', background: top10 ? '#283e93' : '#fff', color: top10 ? '#fff' : '#283e93', fontSize: 12, fontWeight: 700, borderRadius: 14, padding: '6px 16px', cursor: 'pointer' }}>Top 10</button>
+          </div>
         </div>
-        <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Fornecedores', 'Empenhado', 'Liquidado', 'Pago'].map((h, i) => (
-                  <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {fornecedores.itens.map((f, ri) => {
-                const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
-                return (
-                  <tr key={f.doc}>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{f.doc} {f.nome}</td>
-                    {[f.empenhado, f.liquidado, f.pago].map((v, ci) => (
-                      <td key={ci} style={{ background: cellBg, color: v === 0 ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{v === 0 ? '—' : fmtReais(v)}</td>
-                    ))}
-                  </tr>
-                )
-              })}
-              <tr>
-                <td style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Total</td>
-                {[fornecedores.total.empenhado, fornecedores.total.liquidado, fornecedores.total.pago].map((v, ci) => (
-                  <td key={ci} style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{fmtReais(v)}</td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {(() => {
+          const q = buscaForn.trim().toLowerCase()
+          let lista = fornecedores.itens
+          if (q) lista = lista.filter(f => f.nome.toLowerCase().includes(q) || f.doc.toLowerCase().includes(q))
+          if (top10) lista = lista.slice(0, 10)
+          return (
+            <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      {['Fornecedores', 'Empenhado', 'Liquidado', 'Pago'].map((h, i) => (
+                        <th key={h} style={{ position: 'sticky', top: 0, zIndex: 1, background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lista.length === 0 ? (
+                      <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', fontSize: 12, color: '#9098a8' }}>Nenhum fornecedor encontrado.</td></tr>
+                    ) : lista.map((f, ri) => {
+                      const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
+                      return (
+                        <tr key={f.doc + '-' + ri}>
+                          <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{f.doc} {f.nome}</td>
+                          {[f.empenhado, f.liquidado, f.pago].map((v, ci) => (
+                            <td key={ci} style={{ background: cellBg, color: v === 0 ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{v === 0 ? '—' : fmtReais(v)}</td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td style={{ position: 'sticky', bottom: 0, background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Total</td>
+                      {[fornecedores.total.empenhado, fornecedores.total.liquidado, fornecedores.total.pago].map((v, ci) => (
+                        <td key={ci} style={{ position: 'sticky', bottom: 0, background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{fmtReais(v)}</td>
+                      ))}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
