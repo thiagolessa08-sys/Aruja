@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay from '../_components/LoadingOverlay'
 
 // Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
@@ -444,25 +445,30 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           </div>
         </div>
         {diario && diario.dias.length ? (() => {
-          const d = diario.dias
-          const mx = Math.max(1, ...d.map(x => x.valor))
-          const W = 1000, H = 200, xL = 8, xR = 992, yT = 12, yB = 176
-          const X = (i: number) => d.length <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (d.length - 1)
-          const Y = (val: number) => yB - (val / mx) * (yB - yT)
-          const linha = d.map((x, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(x.valor).toFixed(1)}`).join(' ')
-          const area = `${linha} L${X(d.length - 1).toFixed(1)} ${yB} L${X(0).toFixed(1)} ${yB} Z`
-          // ticks: 1º de cada mês presente
-          const ticks = d.map((x, i) => ({ i, dia: x.dia })).filter(t => t.dia.slice(8) === '01')
+          const data = diario.dias.map(x => ({ t: new Date(x.dia + 'T00:00:00').getTime(), valor: x.valor }))
+          // ticks: 1º de cada mês dentro do intervalo (eixo consistente)
+          const ticks: number[] = []
+          if (de && ate) {
+            let cur = new Date(de + 'T00:00:00'); cur = new Date(cur.getFullYear(), cur.getMonth(), 1)
+            const fim = new Date(ate + 'T00:00:00')
+            while (cur <= fim) { ticks.push(cur.getTime()); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1) }
+          }
           return (
-            <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', marginTop: 14 }}>
-              <defs><linearGradient id="diaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" stopOpacity="0.25" /><stop offset="100%" stopColor="#283e93" stopOpacity="0" /></linearGradient></defs>
-              <line x1={xL} y1={yB} x2={xR} y2={yB} stroke="#e3e8f1" strokeWidth="1.5" />
-              <path d={area} fill="url(#diaGrad)" />
-              <path d={linha} fill="none" stroke="#283e93" strokeWidth="1.6" />
-              {ticks.map(t => (
-                <text key={t.i} x={X(t.i).toFixed(1)} y="194" fontSize="11" fill="#9098a8" textAnchor="middle">{MESES[Number(t.dia.slice(5, 7)) - 1]}</text>
-              ))}
-            </svg>
+            <div style={{ marginTop: 14, height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs><linearGradient id="diaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" stopOpacity="0.25" /><stop offset="100%" stopColor="#283e93" stopOpacity="0" /></linearGradient></defs>
+                  <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} ticks={ticks.length ? ticks : undefined}
+                    tickFormatter={(t: number) => MESES[new Date(t).getMonth()]} tick={{ fontSize: 11, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} minTickGap={0} />
+                  <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    labelFormatter={(t) => new Date(t as number).toLocaleDateString('pt-BR')}
+                    formatter={(v) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'Arrecadado'] as [string, string]}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                  <Area dataKey="valor" stroke="#283e93" strokeWidth={1.8} fill="url(#diaGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           )
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
       </div>
