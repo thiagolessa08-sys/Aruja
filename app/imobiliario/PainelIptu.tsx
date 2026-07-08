@@ -27,11 +27,22 @@ const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'inadimplencia', label: 'Inadimplência', cor: '#d64545' },
 ]
 
+interface Resumo {
+  resumo: { comIptu: number; comItbi: number; comTca: number; comEmpresa: number; iptuSemTca: number; tcaSemIptu: number }
+  situacao: { situacao: string; qt: number }[]
+  pagamento: { status: string; qt: number; cor: string }[]
+}
+interface Diario { de: string; ate: string; dias: { dia: string; valor: number }[]; total: number }
+
 export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [v, setV] = useState<Visao | null>(null)
   const [carregando, setCarregando] = useState(false)
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [drillAno, setDrillAno] = useState<number | null>(null) // ano em drill mensal na evolução
+  const [res, setRes] = useState<Resumo | null>(null)
+  const [diario, setDiario] = useState<Diario | null>(null)
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
 
   const qs = ano ? `?ano=${ano}` : ''
   useEffect(() => {
@@ -40,8 +51,21 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     fetch(`/api/imobiliario/iptu-visao${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setV(d) })
       .finally(() => { if (vivo) setCarregando(false) })
+    fetch(`/api/imobiliario/iptu-resumo${qs}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
   }, [qs])
+
+  // Ao trocar o ano, define o intervalo padrão da arrecadação diária (jan→dez do ano)
+  useEffect(() => { if (ano) { setDe(`${ano}-01-01`); setAte(`${ano}-12-31`) } }, [ano])
+
+  useEffect(() => {
+    if (!de || !ate) return
+    let vivo = true
+    fetch(`/api/imobiliario/iptu-diario?ano=${ano}&de=${de}&ate=${ate}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (vivo && d && !d.error) setDiario(d) })
+    return () => { vivo = false }
+  }, [ano, de, ate])
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 20, padding: 18, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
@@ -198,6 +222,93 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           })()}
         </div>
       ) : null}
+
+      {/* ===== ONDA 2: Resumo de imóveis ===== */}
+      {res ? (
+        <div style={{ ...card, marginTop: 18 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Resumo de Imóveis</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12, marginTop: 14 }}>
+            {[
+              { l: 'Com IPTU', val: res.resumo.comIptu, c: '#283e93' },
+              { l: 'Com ITBI', val: res.resumo.comItbi, c: '#1fa463' },
+              { l: 'Com empresa no endereço', val: res.resumo.comEmpresa, c: '#e8962e' },
+              { l: 'Com TCA', val: res.resumo.comTca, c: '#8094d6' },
+              { l: 'IPTU sem TCA', val: res.resumo.iptuSemTca, c: '#d64545' },
+              { l: 'TCA sem IPTU', val: res.resumo.tcaSemIptu, c: '#5b6477' },
+            ].map(x => (
+              <div key={x.l} style={{ background: '#f7f9fd', borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ fontSize: 21, fontWeight: 700, color: x.c, letterSpacing: '-.5px' }}>{x.val.toLocaleString('pt-BR')}</div>
+                <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3, lineHeight: 1.25 }}>{x.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* ===== ONDA 2: Quadros situação × status de pagamento ===== */}
+      {res ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 18 }}>
+          {[
+            { titulo: 'Imóveis por situação da guia', itens: res.situacao.map(s => ({ rot: s.situacao, qt: s.qt, cor: '#283e93' })) },
+            { titulo: 'Imóveis por status de pagamento', itens: res.pagamento.map(p => ({ rot: p.status, qt: p.qt, cor: p.cor })) },
+          ].map(bloco => {
+            const mx = Math.max(1, ...bloco.itens.map(i => i.qt))
+            return (
+              <div key={bloco.titulo} style={card}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{bloco.titulo}</span>
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                  {bloco.itens.map((it, i) => (
+                    <div key={i}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                        <span style={{ color: '#3a4256', fontWeight: 600 }}>{it.rot}</span>
+                        <span style={{ color: it.cor, fontWeight: 700 }}>{it.qt.toLocaleString('pt-BR')}</span>
+                      </div>
+                      <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.max(3, 100 * it.qt / mx).toFixed(1)}%`, borderRadius: 8, background: it.cor }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {/* ===== ONDA 2: Arrecadação diária ===== */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Arrecadação Diária {diario ? `· ${fmtMi(diario.total)}` : ''}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5b6477' }}>
+            <span>De</span>
+            <input type="date" value={de} onChange={e => setDe(e.target.value)} style={{ border: '1.5px solid #e3e9f5', borderRadius: 10, padding: '5px 8px', fontSize: 12, color: '#283e93', fontFamily: 'inherit' }} />
+            <span>até</span>
+            <input type="date" value={ate} onChange={e => setAte(e.target.value)} style={{ border: '1.5px solid #e3e9f5', borderRadius: 10, padding: '5px 8px', fontSize: 12, color: '#283e93', fontFamily: 'inherit' }} />
+          </div>
+        </div>
+        {diario && diario.dias.length ? (() => {
+          const d = diario.dias
+          const mx = Math.max(1, ...d.map(x => x.valor))
+          const W = 1000, H = 200, xL = 8, xR = 992, yT = 12, yB = 176
+          const X = (i: number) => d.length <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (d.length - 1)
+          const Y = (val: number) => yB - (val / mx) * (yB - yT)
+          const linha = d.map((x, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(x.valor).toFixed(1)}`).join(' ')
+          const area = `${linha} L${X(d.length - 1).toFixed(1)} ${yB} L${X(0).toFixed(1)} ${yB} Z`
+          // ticks: 1º de cada mês presente
+          const ticks = d.map((x, i) => ({ i, dia: x.dia })).filter(t => t.dia.slice(8) === '01')
+          return (
+            <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', marginTop: 14 }}>
+              <defs><linearGradient id="diaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" stopOpacity="0.25" /><stop offset="100%" stopColor="#283e93" stopOpacity="0" /></linearGradient></defs>
+              <line x1={xL} y1={yB} x2={xR} y2={yB} stroke="#e3e8f1" strokeWidth="1.5" />
+              <path d={area} fill="url(#diaGrad)" />
+              <path d={linha} fill="none" stroke="#283e93" strokeWidth="1.6" />
+              {ticks.map(t => (
+                <text key={t.i} x={X(t.i).toFixed(1)} y="194" fontSize="11" fill="#9098a8" textAnchor="middle">{MESES[Number(t.dia.slice(5, 7)) - 1]}</text>
+              ))}
+            </svg>
+          )
+        })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
+      </div>
     </div>
   )
 }
