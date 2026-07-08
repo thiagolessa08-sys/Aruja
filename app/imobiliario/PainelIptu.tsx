@@ -38,6 +38,8 @@ interface ImovelDet {
   cd: number; inscricao: string; numero: string; endereco: string; cep: string; proprietario: string; cpfCnpj: string
   flags: { itbi: boolean; isscc: boolean; tca: boolean; espolio: boolean; semNumero: boolean }
   anos: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }[]
+  anoParcela: number
+  parcelas: { parcela: number; vencimento: string; lancado: number; pago: number; saldo: number }[]
 }
 interface Tendencia {
   anoRef: number
@@ -561,6 +563,32 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
                   </tbody>
                 </table>
               </div>
+              {/* Parcelas do exercício mais recente (item 15: por parcela) */}
+              {d.parcelas.length ? (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 8 }}>Parcelas · exercício {d.anoParcela}</div>
+                  <div style={{ border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+                    <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr>{['Parcela', 'Vencimento', 'Lançado', 'Pago', 'Saldo'].map((h, i) => (
+                          <th key={h} style={{ position: 'sticky', top: 0, background: '#3a55ad', color: '#fff', fontSize: 11.5, fontWeight: 600, padding: '8px 12px', textAlign: i <= 1 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                        ))}</tr></thead>
+                        <tbody>
+                          {d.parcelas.map((pc, i) => (
+                            <tr key={i}>
+                              <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', color: '#1f2a44', fontWeight: 600, borderBottom: '1px solid #eef1f7' }}>{pc.parcela === 0 ? 'Cota única' : pc.parcela}</td>
+                              <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', color: '#5b6477', borderBottom: '1px solid #eef1f7' }}>{pc.vencimento ? pc.vencimento.split('-').reverse().join('/') : '—'}</td>
+                              {[pc.lancado, pc.pago, pc.saldo].map((val, ci) => (
+                                <td key={ci} style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', textAlign: 'right', color: ci === 2 && val > 0 ? '#d64545' : '#5b6477', fontWeight: ci === 2 && val > 0 ? 700 : 500, borderBottom: '1px solid #eef1f7' }}>{val ? 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}

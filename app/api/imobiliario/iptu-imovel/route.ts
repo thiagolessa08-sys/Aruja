@@ -26,7 +26,7 @@ async function buscar(q: string) {
 
 // Detalhe completo do imóvel + 5 anos + flags.
 async function detalhe(id: number) {
-  const [infoR, itbiR, isscR, tcaR, lancR, arrecR, saldoR] = await Promise.all([
+  const [infoR, itbiR, isscR, tcaR, lancR, arrecR, saldoR, parcR] = await Promise.all([
     agentQuery(`SELECT i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, c.ds_endereco, c.nm_bairro, c.no_cep, cp.nm_rsocial, cp.no_cpf_cnpj
       FROM ${S}.tb_dsod_imovel_urbano i
       LEFT JOIN ${S}.tb_dsod_cep c ON i.cd_cep = c.cd_cep
@@ -48,6 +48,12 @@ async function detalhe(id: number) {
       FROM ${S}.tb_dsod_guias g JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela=p.cd_parcelas
       WHERE g.cd_origem=${id} AND g.cd_tributo IN (1,25) AND p.no_parcela NOT IN (0) AND g.ds_situacao NOT IN ('Recalculo','Validacao')
       GROUP BY g.no_exercicio_lancamento`, 60),
+    // Parcelas do exercício mais recente do imóvel (item 15: por parcela)
+    agentQuery(`SELECT g.no_exercicio_lancamento ex, p.no_parcela, DATEFORMAT(p.dt_vencimento,'yyyy-mm-dd') venc, pp.vl_lancto, pp.vl_pagto, pp.vl_saldo
+      FROM ${S}.tb_dsod_guias g JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela=p.cd_parcelas
+      WHERE g.cd_origem=${id} AND g.cd_tributo IN (1,25) AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+        AND g.no_exercicio_lancamento = (SELECT MAX(no_exercicio_lancamento) FROM ${S}.tb_dsod_guias WHERE cd_origem=${id} AND cd_tributo IN (1,25))
+      ORDER BY p.no_parcela`, 60),
   ])
   const info = infoR.rows[0] ?? []
   const numero = String(info[2] ?? '').trim()
@@ -61,6 +67,12 @@ async function detalhe(id: number) {
   const anos = []
   for (let a = anoMax - 4; a <= anoMax; a++) anos.push({ ano: a, ...g(a) })
 
+  const anoParcela = num(parcR.rows[0]?.[0])
+  const parcelas = parcR.rows.map(r => ({
+    parcela: num(r[1]), vencimento: String(r[2] ?? '').slice(0, 10),
+    lancado: num(r[3]), pago: num(r[4]), saldo: num(r[5]),
+  })).sort((a, b) => a.parcela - b.parcela)
+
   return {
     cd: num(info[0]), inscricao: String(info[1] ?? '').trim(), numero,
     endereco: `${String(info[3] ?? '').trim()}${numero ? ', ' + numero : ''}${String(info[4] ?? '').trim() ? ' — ' + String(info[4]).trim() : ''}`,
@@ -72,7 +84,7 @@ async function detalhe(id: number) {
       espolio: /ESP[ÓO]LIO/i.test(nome),
       semNumero: !numero || numero === '0',
     },
-    anos,
+    anos, anoParcela, parcelas,
   }
 }
 
