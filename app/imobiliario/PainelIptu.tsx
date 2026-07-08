@@ -3,6 +3,18 @@
 import { useState, useEffect, useRef } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
 
+// Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
+async function fetchJson(url: string, tries = 3): Promise<any | null> {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url)
+      if (r.ok) { const d = await r.json(); if (d && !d.error) return d }
+    } catch { /* rede — tenta de novo */ }
+    if (i < tries - 1) await new Promise(res => setTimeout(res, 1200 * (i + 1)))
+  }
+  return null
+}
+
 // Dispara true quando o elemento entra na viewport (lazy-load de seções pesadas).
 function useOnScreen<T extends Element>() {
   const ref = useRef<T | null>(null)
@@ -113,7 +125,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   useEffect(() => {
     let vivo = true
     setCarregando(true); setDrillAno(null)
-    fetch(`/api/imobiliario/iptu-visao${qs}${bairroQ}`).then(r => r.ok ? r.json() : null)
+    fetchJson(`/api/imobiliario/iptu-visao${qs}${bairroQ}`)
       .then(d => { if (vivo && d && !d.error) setV(d) })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
@@ -123,7 +135,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   useEffect(() => {
     if (!obsResumo.visible) return
     let vivo = true
-    fetch(`/api/imobiliario/iptu-resumo${qs}${bairroQ}`).then(r => r.ok ? r.json() : null)
+    fetchJson(`/api/imobiliario/iptu-resumo${qs}${bairroQ}`)
       .then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
   }, [qs, bairroQ, obsResumo.visible])
@@ -132,7 +144,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   useEffect(() => {
     if (!obsTend.visible) return
     let vivo = true
-    fetch(`/api/imobiliario/iptu-tendencia${qs}`).then(r => r.ok ? r.json() : null)
+    fetchJson(`/api/imobiliario/iptu-tendencia${qs}`)
       .then(d => { if (vivo && d && !d.error) setTend(d) })
     return () => { vivo = false }
   }, [qs, obsTend.visible])
@@ -143,7 +155,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   useEffect(() => {
     if (!de || !ate || !obsDiario.visible) return
     let vivo = true
-    fetch(`/api/imobiliario/iptu-diario?ano=${ano}&de=${de}&ate=${ate}${bairroQ}`).then(r => r.ok ? r.json() : null)
+    fetchJson(`/api/imobiliario/iptu-diario?ano=${ano}&de=${de}&ate=${ate}${bairroQ}`)
       .then(d => { if (vivo && d && !d.error) setDiario(d) })
     return () => { vivo = false }
   }, [ano, de, ate, bairroQ, obsDiario.visible])
@@ -157,7 +169,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     if (espolio) p.set('espolio', '1')
     if (semNumero) p.set('semnumero', '1')
     if (bairroSel) p.set('bairro', bairroSel)
-    fetch(`/api/imobiliario/iptu-bairros?${p}`).then(r => r.ok ? r.json() : null)
+    fetchJson(`/api/imobiliario/iptu-bairros?${p}`)
       .then(d => { if (vivo && d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) } })
       .finally(() => { if (vivo) setCarregandoBairros(false) })
     return () => { vivo = false }
@@ -168,7 +180,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     if (!ano || !obsRank.visible) return
     let vivo = true
     setCarregandoRank(true)
-    fetch(`/api/imobiliario/iptu-ranking?ano=${ano}&tipo=${rankTipo}&metrica=${rankMetrica}${bairroQ}`).then(r => r.ok ? r.json() : null)
+    fetchJson(`/api/imobiliario/iptu-ranking?ano=${ano}&tipo=${rankTipo}&metrica=${rankMetrica}${bairroQ}`)
       .then(d => { if (vivo && d && !d.error) setRankItens(d.itens ?? []) })
       .finally(() => { if (vivo) setCarregandoRank(false) })
     return () => { vivo = false }
@@ -180,7 +192,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     if (q.length < 2) { setMatches([]); return }
     let vivo = true
     const t = setTimeout(() => {
-      fetch(`/api/imobiliario/iptu-imovel?q=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : null)
+      fetchJson(`/api/imobiliario/iptu-imovel?q=${encodeURIComponent(q)}`)
         .then(d => { if (vivo && d?.matches) setMatches(d.matches) })
     }, 350)
     return () => { vivo = false; clearTimeout(t) }
@@ -188,7 +200,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
 
   function abrirImovel(cd: number) {
     setCarregandoDet(true); setMatches([])
-    fetch(`/api/imobiliario/iptu-imovel?id=${cd}`).then(r => r.ok ? r.json() : null)
+    fetchJson(`/api/imobiliario/iptu-imovel?id=${cd}`)
       .then(d => { if (d?.detalhe) setImovelDet(d.detalhe) })
       .finally(() => setCarregandoDet(false))
   }
