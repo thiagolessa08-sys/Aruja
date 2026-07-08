@@ -1,7 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
+
+// Dispara true quando o elemento entra na viewport (lazy-load de seções pesadas).
+function useOnScreen<T extends Element>() {
+  const ref = useRef<T | null>(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || visible) return
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect() } }, { rootMargin: '250px' })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [visible])
+  return { ref, visible }
+}
 
 interface Cmp { atual: number; ant: number; pct: number }
 interface Visao {
@@ -85,44 +99,58 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [carregandoDet, setCarregandoDet] = useState(false)
   // Onda 5 — tendência
   const [tend, setTend] = useState<Tendencia | null>(null)
+  // Lazy-load das seções pesadas (só busca quando aparecem na tela)
+  const obsDiario = useOnScreen<HTMLDivElement>()
+  const obsBairros = useOnScreen<HTMLDivElement>()
+  const obsRank = useOnScreen<HTMLDivElement>()
+  const obsResumo = useOnScreen<HTMLDivElement>()
+  const obsTend = useOnScreen<HTMLDivElement>()
 
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
 
-  // Visão geral + resumo: refletem o bairro selecionado (tela toda)
+  // Visão geral (carrega já — é o topo da tela); reflete o bairro selecionado
   useEffect(() => {
     let vivo = true
     setCarregando(true); setDrillAno(null)
     fetch(`/api/imobiliario/iptu-visao${qs}${bairroQ}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setV(d) })
       .finally(() => { if (vivo) setCarregando(false) })
-    fetch(`/api/imobiliario/iptu-resumo${qs}${bairroQ}`).then(r => r.ok ? r.json() : null)
-      .then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
   }, [qs, bairroQ])
 
-  // Tendência (projeção) — global, independe do bairro
+  // Resumo — lazy (abaixo da dobra)
   useEffect(() => {
+    if (!obsResumo.visible) return
+    let vivo = true
+    fetch(`/api/imobiliario/iptu-resumo${qs}${bairroQ}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (vivo && d && !d.error) setRes(d) })
+    return () => { vivo = false }
+  }, [qs, bairroQ, obsResumo.visible])
+
+  // Tendência (projeção) — lazy e global
+  useEffect(() => {
+    if (!obsTend.visible) return
     let vivo = true
     fetch(`/api/imobiliario/iptu-tendencia${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setTend(d) })
     return () => { vivo = false }
-  }, [qs])
+  }, [qs, obsTend.visible])
 
   // Ao trocar o ano, define o intervalo padrão da arrecadação diária (jan→dez do ano)
   useEffect(() => { if (ano) { setDe(`${ano}-01-01`); setAte(`${ano}-12-31`) } }, [ano])
 
   useEffect(() => {
-    if (!de || !ate) return
+    if (!de || !ate || !obsDiario.visible) return
     let vivo = true
     fetch(`/api/imobiliario/iptu-diario?ano=${ano}&de=${de}&ate=${ate}${bairroQ}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setDiario(d) })
     return () => { vivo = false }
-  }, [ano, de, ate, bairroQ])
+  }, [ano, de, ate, bairroQ, obsDiario.visible])
 
-  // Bairros (ou ruas quando há bairro selecionado) — query pesada, com loading próprio
+  // Bairros (ou ruas quando há bairro selecionado) — query pesada, lazy + loading próprio
   useEffect(() => {
-    if (!ano) return
+    if (!ano || !obsBairros.visible) return
     let vivo = true
     setCarregandoBairros(true)
     const p = new URLSearchParams({ ano: String(ano) })
@@ -133,18 +161,18 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       .then(d => { if (vivo && d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) } })
       .finally(() => { if (vivo) setCarregandoBairros(false) })
     return () => { vivo = false }
-  }, [ano, espolio, semNumero, bairroSel])
+  }, [ano, espolio, semNumero, bairroSel, obsBairros.visible])
 
-  // Rankings (100 maiores imóveis / proprietários)
+  // Rankings (100 maiores imóveis / proprietários) — lazy
   useEffect(() => {
-    if (!ano) return
+    if (!ano || !obsRank.visible) return
     let vivo = true
     setCarregandoRank(true)
     fetch(`/api/imobiliario/iptu-ranking?ano=${ano}&tipo=${rankTipo}&metrica=${rankMetrica}${bairroQ}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setRankItens(d.itens ?? []) })
       .finally(() => { if (vivo) setCarregandoRank(false) })
     return () => { vivo = false }
-  }, [ano, rankTipo, rankMetrica, bairroQ])
+  }, [ano, rankTipo, rankMetrica, bairroQ, obsRank.visible])
 
   // Busca de imóvel (debounce simples)
   useEffect(() => {
@@ -329,7 +357,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         </div>
       ) : null}
 
-      {/* ===== ONDA 2: Resumo de imóveis ===== */}
+      {/* ===== ONDA 2: Resumo de imóveis (lazy) ===== */}
+      <div ref={obsResumo.ref}>
       {res ? (
         <div style={{ ...card, marginTop: 18 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Resumo de Imóveis</span>
@@ -349,7 +378,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
             ))}
           </div>
         </div>
-      ) : null}
+      ) : (obsResumo.visible ? <div style={{ ...card, marginTop: 18, fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 20 }}>Carregando resumo…</div> : null)}
+      </div>
 
       {/* ===== ONDA 2: Quadros situação × status de pagamento ===== */}
       {res ? (
@@ -382,7 +412,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       ) : null}
 
       {/* ===== ONDA 2: Arrecadação diária ===== */}
-      <div style={{ ...card, marginTop: 18 }}>
+      <div ref={obsDiario.ref} style={{ ...card, marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Arrecadação Diária {diario ? `· ${fmtMi(diario.total)}` : ''}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5b6477' }}>
@@ -417,7 +447,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       </div>
 
       {/* ===== ONDA 3: IPTU por bairro (com drill por rua e filtros) ===== */}
-      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+      <div ref={obsBairros.ref} style={{ ...card, marginTop: 18, position: 'relative' }}>
         {carregandoBairros ? <LoadingOverlay label="Agregando por bairro…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
@@ -470,7 +500,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       </div>
 
       {/* ===== ONDA 4: 100 maiores imóveis / proprietários ===== */}
-      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+      <div ref={obsRank.ref} style={{ ...card, marginTop: 18, position: 'relative' }}>
         {carregandoRank ? <LoadingOverlay label="Calculando ranking…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
@@ -611,7 +641,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}
       </div>
 
-      {/* ===== ONDA 5: Tendência / Previsão ===== */}
+      {/* ===== ONDA 5: Tendência / Previsão (lazy) ===== */}
+      <div ref={obsTend.ref}>
       {tend ? (
         <div style={{ ...card, marginTop: 18 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Tendência e Previsão</span>
@@ -655,7 +686,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
             )
           })()}
         </div>
-      ) : null}
+      ) : (obsTend.visible ? <div style={{ ...card, marginTop: 18, fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 20 }}>Carregando previsão…</div> : null)}
+      </div>
     </div>
   )
 }
