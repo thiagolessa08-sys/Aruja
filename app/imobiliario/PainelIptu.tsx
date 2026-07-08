@@ -27,6 +27,13 @@ const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'inadimplencia', label: 'Inadimplência', cor: '#d64545' },
 ]
 
+type Metrica4 = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia'
+const METRICAS4: { id: Metrica4; label: string }[] = [
+  { id: 'lancado', label: 'Lançado' }, { id: 'arrecadado', label: 'Arrecadado' },
+  { id: 'emAberto', label: 'Em aberto' }, { id: 'inadimplencia', label: 'Inadimplência' },
+]
+interface RankItem { chave: string; nome: string; endereco: string; extra: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
+
 interface Resumo {
   resumo: { comIptu: number; comItbi: number; comTca: number; comEmpresa: number; iptuSemTca: number; tcaSemIptu: number }
   situacao: { situacao: string; qt: number }[]
@@ -51,6 +58,11 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [semNumero, setSemNumero] = useState(false)
   const [metricaBairro, setMetricaBairro] = useState<Metrica>('lancado')
   const [carregandoBairros, setCarregandoBairros] = useState(false)
+  // Onda 4 — rankings
+  const [rankTipo, setRankTipo] = useState<'imovel' | 'proprietario'>('imovel')
+  const [rankMetrica, setRankMetrica] = useState<Metrica4>('lancado')
+  const [rankItens, setRankItens] = useState<RankItem[]>([])
+  const [carregandoRank, setCarregandoRank] = useState(false)
 
   const qs = ano ? `?ano=${ano}` : ''
   useEffect(() => {
@@ -89,6 +101,17 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       .finally(() => { if (vivo) setCarregandoBairros(false) })
     return () => { vivo = false }
   }, [ano, espolio, semNumero, bairroSel])
+
+  // Rankings (100 maiores imóveis / proprietários)
+  useEffect(() => {
+    if (!ano) return
+    let vivo = true
+    setCarregandoRank(true)
+    fetch(`/api/imobiliario/iptu-ranking?ano=${ano}&tipo=${rankTipo}&metrica=${rankMetrica}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (vivo && d && !d.error) setRankItens(d.itens ?? []) })
+      .finally(() => { if (vivo) setCarregandoRank(false) })
+    return () => { vivo = false }
+  }, [ano, rankTipo, rankMetrica])
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 20, padding: 18, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
@@ -384,6 +407,57 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           )
         })()}
         {nivelBairro === 'bairro' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div> : null}
+      </div>
+
+      {/* ===== ONDA 4: 100 maiores imóveis / proprietários ===== */}
+      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+        {carregandoRank ? <LoadingOverlay label="Calculando ranking…" /> : null}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
+            {([['imovel', '100 Maiores Imóveis'], ['proprietario', '100 Maiores Proprietários']] as const).map(([id, lbl]) => (
+              <button key={id} onClick={() => setRankTipo(id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '6px 14px', fontSize: 12.5, fontWeight: 600, background: rankTipo === id ? '#283e93' : 'transparent', color: rankTipo === id ? '#fff' : '#5b6477' }}>{lbl}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
+            {METRICAS4.map(m => (
+              <button key={m.id} onClick={() => setRankMetrica(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: rankMetrica === m.id ? '#283e93' : 'transparent', color: rankMetrica === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ maxHeight: 460, overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['#', rankTipo === 'imovel' ? 'Imóvel' : 'Proprietário', 'Lançado', 'Arrecadado', 'Em aberto', 'Inadimpl.'].map((h, i) => (
+                    <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 600, padding: '10px 12px', textAlign: i <= 1 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rankItens.length === 0 ? (
+                  <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', fontSize: 12, color: '#9098a8' }}>Sem dados.</td></tr>
+                ) : rankItens.map((it, i) => {
+                  const bg = i % 2 === 0 ? '#fff' : '#f7f9fd'
+                  const cel = (val: number, m: Metrica4) => (
+                    <td style={{ background: bg, color: rankMetrica === m ? '#283e93' : '#5b6477', fontWeight: rankMetrica === m ? 700 : 500, fontSize: 11.5, padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtNum(val)}</td>
+                  )
+                  return (
+                    <tr key={it.chave + i}>
+                      <td style={{ background: bg, color: '#9098a8', fontSize: 11.5, padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid #eef1f7' }}>{i + 1}</td>
+                      <td style={{ background: bg, fontSize: 11.5, padding: '8px 12px', borderBottom: '1px solid #eef1f7', maxWidth: 320 }}>
+                        <div style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.extra || it.nome}</div>
+                        <div style={{ color: '#9098a8', fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rankTipo === 'imovel' ? `${it.nome}${it.endereco ? ' · ' + it.endereco : ''}` : it.extra}</div>
+                      </td>
+                      {cel(it.lancado, 'lancado')}{cel(it.arrecadado, 'arrecadado')}{cel(it.emAberto, 'emAberto')}{cel(it.inadimplencia, 'inadimplencia')}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>Valores em milhões (R$). Ordenado por {METRICAS4.find(m => m.id === rankMetrica)?.label}.</div>
       </div>
     </div>
   )
