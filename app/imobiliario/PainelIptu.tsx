@@ -33,6 +33,12 @@ const METRICAS4: { id: Metrica4; label: string }[] = [
   { id: 'emAberto', label: 'Em aberto' }, { id: 'inadimplencia', label: 'Inadimplência' },
 ]
 interface RankItem { chave: string; nome: string; endereco: string; extra: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
+interface ImovelMatch { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string }
+interface ImovelDet {
+  cd: number; inscricao: string; numero: string; endereco: string; cep: string; proprietario: string; cpfCnpj: string
+  flags: { itbi: boolean; isscc: boolean; tca: boolean; espolio: boolean; semNumero: boolean }
+  anos: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }[]
+}
 
 interface Resumo {
   resumo: { comIptu: number; comItbi: number; comTca: number; comEmpresa: number; iptuSemTca: number; tcaSemIptu: number }
@@ -63,6 +69,11 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [rankMetrica, setRankMetrica] = useState<Metrica4>('lancado')
   const [rankItens, setRankItens] = useState<RankItem[]>([])
   const [carregandoRank, setCarregandoRank] = useState(false)
+  // Onda 4 — pesquisa de imóvel
+  const [buscaImovel, setBuscaImovel] = useState('')
+  const [matches, setMatches] = useState<ImovelMatch[]>([])
+  const [imovelDet, setImovelDet] = useState<ImovelDet | null>(null)
+  const [carregandoDet, setCarregandoDet] = useState(false)
 
   const qs = ano ? `?ano=${ano}` : ''
   useEffect(() => {
@@ -112,6 +123,25 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       .finally(() => { if (vivo) setCarregandoRank(false) })
     return () => { vivo = false }
   }, [ano, rankTipo, rankMetrica])
+
+  // Busca de imóvel (debounce simples)
+  useEffect(() => {
+    const q = buscaImovel.trim()
+    if (q.length < 2) { setMatches([]); return }
+    let vivo = true
+    const t = setTimeout(() => {
+      fetch(`/api/imobiliario/iptu-imovel?q=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : null)
+        .then(d => { if (vivo && d?.matches) setMatches(d.matches) })
+    }, 350)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [buscaImovel])
+
+  function abrirImovel(cd: number) {
+    setCarregandoDet(true); setMatches([])
+    fetch(`/api/imobiliario/iptu-imovel?id=${cd}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.detalhe) setImovelDet(d.detalhe) })
+      .finally(() => setCarregandoDet(false))
+  }
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 20, padding: 18, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
@@ -458,6 +488,71 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           </div>
         </div>
         <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>Valores em milhões (R$). Ordenado por {METRICAS4.find(m => m.id === rankMetrica)?.label}.</div>
+      </div>
+
+      {/* ===== ONDA 4: Pesquisa de imóvel devedor ===== */}
+      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+        {carregandoDet ? <LoadingOverlay label="Carregando imóvel…" /> : null}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Pesquisa de Imóvel</span>
+          <div style={{ position: 'relative', width: 340, maxWidth: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+              <input value={buscaImovel} onChange={e => setBuscaImovel(e.target.value)} placeholder="Inscrição, código ou proprietário…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+            </div>
+            {matches.length ? (
+              <div style={{ position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', left: 0, right: 0, maxHeight: 280, overflowY: 'auto', background: '#fff', borderRadius: 12, border: '1px solid #e3e9f5', boxShadow: '0 12px 30px rgba(20,40,90,0.18)', padding: 5 }}>
+                {matches.map(m => (
+                  <div key={m.cd} onClick={() => abrirImovel(m.cd)} style={{ padding: '7px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
+                    <div style={{ color: '#1f2a44', fontWeight: 600 }}>{m.proprietario || `Imóvel ${m.cd}`}</div>
+                    <div style={{ color: '#9098a8', fontSize: 11 }}>Insc. {m.inscricao || m.cd} · {m.endereco}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {imovelDet ? (() => {
+          const d = imovelDet
+          const FLAGS = [
+            { on: d.flags.itbi, label: 'ITBI' }, { on: d.flags.isscc, label: 'ISSCC' }, { on: d.flags.tca, label: 'TCA' },
+            { on: d.flags.espolio, label: 'Espólio' }, { on: d.flags.semNumero, label: 'Sem número' },
+          ]
+          return (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{d.proprietario || `Imóvel ${d.cd}`}</div>
+                  <div style={{ fontSize: 12, color: '#5b6477', marginTop: 3 }}>Código {d.cd} · Inscrição {d.inscricao || '—'} · {d.cpfCnpj}</div>
+                  <div style={{ fontSize: 12, color: '#5b6477' }}>{d.endereco}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-start' }}>
+                  {FLAGS.map(f => (
+                    <span key={f.label} style={{ fontSize: 11, fontWeight: 600, borderRadius: 14, padding: '5px 12px', background: f.on ? '#e9f6ee' : '#f4f7fc', color: f.on ? '#1fa463' : '#aeb6c6', border: `1px solid ${f.on ? '#bfe6cd' : '#e3e9f5'}` }}>{f.on ? '✓ ' : '– '}{f.label}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>{['Ano', 'Lançado', 'Arrecadado', 'Em aberto', 'Inadimplência'].map((h, i) => (
+                    <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 600, padding: '9px 12px', textAlign: i === 0 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {d.anos.map((a, i) => (
+                      <tr key={a.ano}>
+                        <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', color: '#1f2a44', fontWeight: 600, fontSize: 12, padding: '8px 12px', borderBottom: '1px solid #eef1f7' }}>{a.ano}</td>
+                        {[a.lancado, a.arrecadado, a.emAberto, a.inadimplencia].map((val, ci) => (
+                          <td key={ci} style={{ background: i % 2 ? '#f7f9fd' : '#fff', color: ci === 3 && val > 0 ? '#d64545' : '#5b6477', fontWeight: ci === 3 && val > 0 ? 700 : 500, fontSize: 12, padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{val ? 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}
       </div>
     </div>
   )
