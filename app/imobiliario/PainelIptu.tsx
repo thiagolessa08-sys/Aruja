@@ -37,7 +37,6 @@ interface Visao {
   cards: { lancado: number; arrecadado: number; inadimplencia: number; emAberto: number; isento: number; suspenso: number }
   comparativo: { anoRef: number; anoAnt: number; lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp }
   evolucao: { ano: number; lancado: number; arrecadado: number; inadimplencia: number }[]
-  mensal: { mes: number; lancado: number; arrecadado: number; inadimplencia: number }[]
 }
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -87,6 +86,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [carregando, setCarregando] = useState(false)
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [drillAno, setDrillAno] = useState<number | null>(null) // ano em drill mensal na evolução
+  const [mensalData, setMensalData] = useState<{ mes: number; lancado: number; arrecadado: number; inadimplencia: number }[]>([])
   const [res, setRes] = useState<Resumo | null>(null)
   const [diario, setDiario] = useState<Diario | null>(null)
   const [de, setDe] = useState('')
@@ -148,6 +148,15 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       .then(d => { if (vivo && d && !d.error) setTend(d) })
     return () => { vivo = false }
   }, [qs, obsTend.visible])
+
+  // Série mensal só quando o usuário clica num ano na evolução (drill)
+  useEffect(() => {
+    if (!drillAno) { setMensalData([]); return }
+    let vivo = true
+    fetchJson(`/api/imobiliario/iptu-mensal?ano=${drillAno}`)
+      .then(d => { if (vivo && d?.mensal) setMensalData(d.mensal) })
+    return () => { vivo = false }
+  }, [drillAno])
 
   // Ao trocar o ano, define o intervalo padrão da arrecadação diária (jan→dez do ano)
   useEffect(() => { if (ano) { setDe(`${ano}-01-01`); setAte(`${ano}-12-31`) } }, [ano])
@@ -221,7 +230,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
 
   // Evolução (5 anos) ou mensal (drill)
   const serie = v ? (drillAno
-    ? v.mensal.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, inadimplencia: m.inadimplencia }))
+    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, inadimplencia: m.inadimplencia }))
     : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, inadimplencia: e.inadimplencia }))
   ) : []
   const maxSerie = Math.max(1, ...serie.map(s => Math.max(s.lancado, s.arrecadado, s.inadimplencia)))

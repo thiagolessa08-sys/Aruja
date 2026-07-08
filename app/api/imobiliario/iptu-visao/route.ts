@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { bucketsIptu, bucketsIptuBairro, dataAtualizacaoIptu, serieMensalIptu, type BucketsIptuAno } from '@/lib/tributo-engine'
+import { bucketsIptu, bucketsIptuBairro, dataAtualizacaoIptu, type BucketsIptuAno } from '@/lib/tributo-engine'
 
 const ANO_MIN = 2020
 
@@ -47,10 +47,7 @@ export async function GET(req: NextRequest) {
       evolucao.push({ ano: a, lancado: b.lancado, arrecadado: b.arrecadado, inadimplencia: b.inadimplente })
     }
 
-    // Série mensal do ano selecionado (drill) — só na visão geral (não por bairro)
-    const mensal = bairro ? [] : await serieMensalIptu(anoRef)
-
-    return NextResponse.json({ dataAtualizacao, anos, anoRef, cards, comparativo, evolucao, mensal, bairro })
+    return NextResponse.json({ dataAtualizacao, anos, anoRef, cards, comparativo, evolucao, bairro })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
