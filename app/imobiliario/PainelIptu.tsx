@@ -39,6 +39,13 @@ interface ImovelDet {
   flags: { itbi: boolean; isscc: boolean; tca: boolean; espolio: boolean; semNumero: boolean }
   anos: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }[]
 }
+interface Tendencia {
+  anoRef: number
+  historico: { ano: number; lancado: number; arrecadado: number; inadimplencia: number }[]
+  previsao: { ano: number; lancado: number; arrecadado: number; inadimplencia: number }
+  mensalAtual: { mes: number; arrecReal: number; arrecPrev: number; inadPrev: number }[]
+  taxaArrec: number
+}
 
 interface Resumo {
   resumo: { comIptu: number; comItbi: number; comTca: number; comEmpresa: number; iptuSemTca: number; tcaSemIptu: number }
@@ -74,6 +81,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [matches, setMatches] = useState<ImovelMatch[]>([])
   const [imovelDet, setImovelDet] = useState<ImovelDet | null>(null)
   const [carregandoDet, setCarregandoDet] = useState(false)
+  // Onda 5 — tendência
+  const [tend, setTend] = useState<Tendencia | null>(null)
 
   const qs = ano ? `?ano=${ano}` : ''
   useEffect(() => {
@@ -84,6 +93,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       .finally(() => { if (vivo) setCarregando(false) })
     fetch(`/api/imobiliario/iptu-resumo${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setRes(d) })
+    fetch(`/api/imobiliario/iptu-tendencia${qs}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (vivo && d && !d.error) setTend(d) })
     return () => { vivo = false }
   }, [qs])
 
@@ -554,6 +565,52 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           )
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}
       </div>
+
+      {/* ===== ONDA 5: Tendência / Previsão ===== */}
+      {tend ? (
+        <div style={{ ...card, marginTop: 18 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Tendência e Previsão</span>
+          {/* Previsão do próximo ano */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 12 }}>
+            {[
+              { l: `Lançado previsto ${tend.previsao.ano}`, val: tend.previsao.lancado, c: '#283e93' },
+              { l: `Arrecadação prevista ${tend.previsao.ano}`, val: tend.previsao.arrecadado, c: '#1fa463' },
+              { l: `Inadimplência prevista ${tend.previsao.ano}`, val: tend.previsao.inadimplencia, c: '#d64545' },
+            ].map(x => (
+              <div key={x.l} style={{ background: '#f7f9fd', borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ fontSize: 19, fontWeight: 700, color: x.c }}>{fmtMi(x.val)}</div>
+                <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3 }}>{x.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 6 }}>Projeção por tendência (regressão dos últimos 5 anos). Taxa média de arrecadação: {(tend.taxaArrec * 100).toFixed(1)}%.</div>
+
+          {/* Previsão mensal do ano atual (sazonalidade) */}
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44', marginTop: 18 }}>Previsão mês a mês · {tend.anoRef}</div>
+          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477', marginTop: 6 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 3, background: '#1fa463', display: 'inline-block' }} />Arrecadado real</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 0, borderTop: '2px dashed #1fa463', display: 'inline-block' }} />Arrecadado previsto</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 0, borderTop: '2px dashed #d64545', display: 'inline-block' }} />Inadimplência prevista</span>
+          </div>
+          {(() => {
+            const d = tend.mensalAtual
+            const mx = Math.max(1, ...d.flatMap(m => [m.arrecReal, m.arrecPrev, m.inadPrev]))
+            const W = 700, H = 220, xL = 8, xR = 692, yT = 12, yB = 188
+            const X = (i: number) => xL + (i * (xR - xL)) / 11
+            const Y = (v: number) => yB - (v / mx) * (yB - yT)
+            const path = (sel: (m: typeof d[0]) => number) => d.map((m, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(sel(m)).toFixed(1)}`).join(' ')
+            return (
+              <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', marginTop: 12 }}>
+                <line x1={xL} y1={yB} x2={xR} y2={yB} stroke="#e3e8f1" strokeWidth="1.5" />
+                <path d={path(m => m.arrecReal)} fill="none" stroke="#1fa463" strokeWidth="2.2" />
+                <path d={path(m => m.arrecPrev)} fill="none" stroke="#1fa463" strokeWidth="1.8" strokeDasharray="5 4" opacity="0.8" />
+                <path d={path(m => m.inadPrev)} fill="none" stroke="#d64545" strokeWidth="1.8" strokeDasharray="5 4" opacity="0.8" />
+                {d.map((m, i) => <text key={i} x={X(i).toFixed(1)} y="206" fontSize="10.5" fill="#9098a8" textAnchor="middle">{MESES[m.mes - 1]}</text>)}
+              </svg>
+            )
+          })()}
+        </div>
+      ) : null}
     </div>
   )
 }
