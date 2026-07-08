@@ -3,11 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import PainelImobiliario, { type FiltrosImobiliario } from './PainelImobiliario'
+import PainelIptu from './PainelIptu'
 import TopNav from '../_components/TopNav'
 import PainelItbi, { type FiltrosItbiUI } from './PainelItbi'
 import PainelTributo from '../tributo/PainelTributo'
-import { FAIXAS_VENAL } from '@/lib/imobiliario-filtros'
 
 type Tributo = 'iptu' | 'itbi' | 'isscc'
 interface NaturezaOpt { id: string; label: string }
@@ -20,7 +19,6 @@ export default function ImobiliarioPage() {
   // IPTU
   const [optsIptu, setOptsIptu] = useState<{ anos: number[] }>({ anos: [] })
   const [pAno, setPAno] = useState<number | ''>('')
-  const [pFaixa, setPFaixa] = useState<number | ''>('')
 
   // ITBI
   const [optsItbi, setOptsItbi] = useState<{ anos: number[]; naturezas: NaturezaOpt[] }>({ anos: [], naturezas: [] })
@@ -36,7 +34,10 @@ export default function ImobiliarioPage() {
 
   useEffect(() => {
     fetch('/api/imobiliario/filtros').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && !d.error) { setOptsIptu({ anos: d.anos ?? [] }); if (d.anos?.length) setPAno(d.anos[0]) }
+      if (d && !d.error) {
+        const anos = (d.anos ?? []).filter((a: number) => a >= 2020) // IPTU a partir de 2020
+        setOptsIptu({ anos }); if (anos.length) setPAno(anos[0])
+      }
     }).catch(() => {})
     fetch('/api/itbi/filtros').then(r => r.ok ? r.json() : null).then(d => {
       if (d && !d.error) { setOptsItbi({ anos: d.anos ?? [], naturezas: d.naturezas ?? [] }); if (d.anos?.length) setIAno(d.anos[0]) }
@@ -65,7 +66,6 @@ export default function ImobiliarioPage() {
     backgroundRepeat: 'no-repeat', backgroundPosition: 'right 11px center', backgroundImage: chevron('%23283e93'),
   }
 
-  const filtrosIptu: FiltrosImobiliario = { ano: pAno, faixa: pFaixa }
   const filtrosItbi: FiltrosItbiUI = { ano: iAno, natureza: iNat }
 
   const TRIBUTOS: { id: Tributo; label: string }[] = [
@@ -118,10 +118,6 @@ export default function ImobiliarioPage() {
                 <select aria-label="Exercício" value={pAno} onChange={e => setPAno(Number(e.target.value))} style={selectPill}>
                   {optsIptu.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
                 </select>
-                <select aria-label="Faixa de Valor Venal" value={pFaixa} onChange={e => setPFaixa(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
-                  <option value="">Faixa: Todas</option>
-                  {FAIXAS_VENAL.map(fx => <option key={fx.id} value={fx.id}>{fx.label}</option>)}
-                </select>
               </>
             )}
             {tributo === 'itbi' && (
@@ -153,7 +149,7 @@ export default function ImobiliarioPage() {
         </div>
 
         {/* ===== PAINEL ===== */}
-        {tributo === 'iptu' && <PainelImobiliario filtros={filtrosIptu} />}
+        {tributo === 'iptu' && <PainelIptu ano={pAno} />}
         {tributo === 'itbi' && <PainelItbi filtros={filtrosItbi} />}
         {tributo === 'isscc' && <PainelTributo grupo="isscc" titulo="ISS Construção Civil" />}
 

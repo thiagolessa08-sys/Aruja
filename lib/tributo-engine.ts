@@ -251,6 +251,65 @@ async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
 }
 
 /**
+ * Data de atualização dos dados = MAX(dt_alter_ods) das guias (data de carga da origem).
+ * Retorna string 'YYYY-MM-DD' ou null.
+ */
+export async function dataAtualizacaoIptu(): Promise<string | null> {
+  return cached('dataAtualizIptu', TTL_15MIN, async () => {
+    const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${SCHEMA}.tb_dsod_guias`, 1)
+    const v = r.rows[0]?.[0]
+    if (!v) return null
+    return String(v).slice(0, 10) // 'YYYY-MM-DD'
+  })
+}
+
+/**
+ * Série MENSAL do IPTU de um exercício (para o drill "por mês"):
+ *  • lancado  = SUM(vl_movimento) mov 1,2,3 por MÊS de vencimento da parcela
+ *  • arrecadado = SUM(vl_movimento) baixas 11,14 por MÊS da baixa (pagamento)
+ *  • inadimplencia = acumulado(lancado) − acumulado(arrecadado) até o mês (proxy do vencido)
+ */
+export interface IptuMes { mes: number; lancado: number; arrecadado: number; inadimplencia: number }
+
+export async function serieMensalIptu(ano: number): Promise<IptuMes[]> {
+  return cached(`iptuMensal:${ano}`, TTL_15MIN, async () => {
+    const [lancR, arrecR] = await Promise.all([
+      agentQuery(`
+        SELECT MONTH(p.dt_vencimento) AS m, SUM(pm.vl_movimento) AS vl
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (${ano})
+          AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela NOT IN (0)
+          AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+        GROUP BY MONTH(p.dt_vencimento)`, 40),
+      agentQuery(`
+        SELECT MONTH(pb.dt_baixa) AS m, SUM(pm.vl_movimento) AS vl
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+        WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (${ano})
+          AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
+          AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
+          AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+        GROUP BY MONTH(pb.dt_baixa)`, 40),
+    ])
+    const lanc = new Map<number, number>(), arr = new Map<number, number>()
+    for (const r of lancR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) lanc.set(m, num(r[1])) }
+    for (const r of arrecR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) arr.set(m, num(r[1])) }
+    const out: IptuMes[] = []
+    let cumL = 0, cumA = 0
+    for (let m = 1; m <= 12; m++) {
+      cumL += lanc.get(m) ?? 0
+      cumA += arr.get(m) ?? 0
+      out.push({ mes: m, lancado: lanc.get(m) ?? 0, arrecadado: arr.get(m) ?? 0, inadimplencia: Math.max(0, cumL - cumA) })
+    }
+    return out
+  })
+}
+
+/**
  * Quantidade de imóveis lançados de IPTU por exercício = COUNT(DISTINCT cd_guia) na base oficial
  * de lançamento (cd_tributo 1, no_parcela<>0, exclui guia Recalculo/Validacao).
  */
