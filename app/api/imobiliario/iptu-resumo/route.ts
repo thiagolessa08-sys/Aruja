@@ -7,18 +7,19 @@ import { cached, TTL_15MIN } from '@/lib/cache'
 const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 
-async function resumo(ano: number) {
-  return cached(`iptuResumo:${ano}`, TTL_15MIN, async () => {
+async function resumo(ano: number, bairro: string | null) {
+  return cached(`iptuResumo:${ano}:${bairro ?? ''}`, TTL_15MIN, async () => {
+    // Join de bairro (via cd_origem→imóvel→cep) para as consultas por guia;
+    // e um IN de imóveis do bairro para as tabelas de ITBI/empresa.
+    const jb = bairro ? `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem=iu.cd_imovel_urbano JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep AND ce.nm_bairro='${bairro.replace(/'/g, "''")}'` : ''
+    const inBairro = bairro ? `AND cd_imovel_urbano IN (SELECT iu.cd_imovel_urbano FROM ${S}.tb_dsod_imovel_urbano iu JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep WHERE ce.nm_bairro='${bairro.replace(/'/g, "''")}')` : ''
     const [sitR, tcaR, itbiR, empR, semTcaR, semIptuR, forma] = await Promise.all([
-      // Situação da guia + total de imóveis com IPTU no ano
-      agentQuery(`SELECT ds_situacao, COUNT(DISTINCT cd_origem) FROM ${S}.tb_dsod_guias WHERE cd_tributo IN (1,25) AND no_exercicio_lancamento=${ano} GROUP BY ds_situacao`, 20),
-      agentQuery(`SELECT COUNT(DISTINCT cd_origem) FROM ${S}.tb_dsod_guias WHERE cd_tributo=67 AND no_exercicio_lancamento=${ano}`, 1),
-      agentQuery(`SELECT COUNT(DISTINCT cd_imovel_urbano) FROM ${S}.tb_dsod_itbi_imovel_urbano`, 1),
-      agentQuery(`SELECT COUNT(DISTINCT cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico`, 1),
-      // IPTU sem TCA (imóveis com IPTU no ano que não têm TCA no ano)
-      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g WHERE g.cd_tributo IN (1,25) AND g.no_exercicio_lancamento=${ano} AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo=67 AND t.no_exercicio_lancamento=${ano})`, 1),
-      // TCA sem IPTU
-      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo IN (1,25) AND t.no_exercicio_lancamento=${ano})`, 1),
+      agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo IN (1,25) AND g.no_exercicio_lancamento=${ano} GROUP BY g.ds_situacao`, 20),
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano}`, 1),
+      agentQuery(`SELECT COUNT(DISTINCT cd_imovel_urbano) FROM ${S}.tb_dsod_itbi_imovel_urbano WHERE 1=1 ${inBairro}`, 1),
+      agentQuery(`SELECT COUNT(DISTINCT cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico WHERE 1=1 ${inBairro}`, 1),
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo IN (1,25) AND g.no_exercicio_lancamento=${ano} AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo=67 AND t.no_exercicio_lancamento=${ano})`, 1),
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo IN (1,25) AND t.no_exercicio_lancamento=${ano})`, 1),
       formaPagamentoIptu(),
     ])
 
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   try {
     const ano = Number(req.nextUrl.searchParams.get('ano')) || new Date().getFullYear()
-    return NextResponse.json(await resumo(ano))
+    return NextResponse.json(await resumo(ano, req.nextUrl.searchParams.get('bairro') || null))
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

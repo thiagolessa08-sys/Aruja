@@ -8,39 +8,40 @@ const num = (v: unknown) => Number(v) || 0
 type Metrica = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia'
 
 // FROM + WHERE por métrica (o agente limita ~5000 linhas → usamos TOP no SQL).
-function medidaSQL(chave: string, metrica: Metrica, base: string, extraWhere = '') {
+function medidaSQL(chave: string, metrica: Metrica, base: string, jb: string, extraWhere = '') {
   const w = `${base}${extraWhere}`
-  if (metrica === 'lancado') return `SELECT ${chave} k, SUM(pm.vl_movimento) v FROM ${S}.tb_dsod_guias g
+  if (metrica === 'lancado') return `SELECT ${chave} k, SUM(pm.vl_movimento) v FROM ${S}.tb_dsod_guias g ${jb}
     JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
     JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
     WHERE ${w} AND pm.cd_tipo_movimento IN (1,2,3) GROUP BY ${chave}`
-  if (metrica === 'arrecadado') return `SELECT ${chave} k, SUM(pm.vl_movimento) v FROM ${S}.tb_dsod_guias g
+  if (metrica === 'arrecadado') return `SELECT ${chave} k, SUM(pm.vl_movimento) v FROM ${S}.tb_dsod_guias g ${jb}
     JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
     JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
     JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa=pm.cd_parcela_baixa
     WHERE ${w} AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28) GROUP BY ${chave}`
   const venc = metrica === 'inadimplencia' ? ' AND p.dt_vencimento < getdate()' : ''
-  return `SELECT ${chave} k, SUM(pp.vl_saldo) v FROM ${S}.tb_dsod_guias g
+  return `SELECT ${chave} k, SUM(pp.vl_saldo) v FROM ${S}.tb_dsod_guias g ${jb}
     JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
     JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela=p.cd_parcelas
     WHERE ${w}${venc} GROUP BY ${chave}`
 }
 
-async function ranking(tipo: 'imovel' | 'proprietario', ano: number, metrica: Metrica) {
-  return cached(`iptuRank:${tipo}:${ano}:${metrica}`, TTL_15MIN, async () => {
+async function ranking(tipo: 'imovel' | 'proprietario', ano: number, metrica: Metrica, bairro: string | null) {
+  return cached(`iptuRank:${tipo}:${ano}:${metrica}:${bairro ?? ''}`, TTL_15MIN, async () => {
     const chave = tipo === 'imovel' ? 'g.cd_origem' : 'g.cd_contr'
+    const jb = bairro ? `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem=iu.cd_imovel_urbano JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep AND ce.nm_bairro='${bairro.replace(/'/g, "''")}'` : ''
     const base = `g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND p.no_parcela NOT IN (0)`
 
     // 1) Top 100 chaves pela métrica (TOP + ORDER BY no SQL)
-    const topR = await agentQuery(`SELECT TOP 100 * FROM (${medidaSQL(chave, metrica, base)}) t ORDER BY v DESC`, 120)
+    const topR = await agentQuery(`SELECT TOP 100 * FROM (${medidaSQL(chave, metrica, base, jb)}) t ORDER BY v DESC`, 120)
     const keys = topR.rows.map(r => String(r[0])).filter(k => k && k !== '0')
     if (!keys.length) return []
     const inKeys = `${chave} IN (${keys.join(',')})`
 
-    // 2) As 4 medidas só para essas chaves (rápido)
+    // 2) As 4 medidas só para essas chaves (já restritas ao bairro pela etapa 1)
     const [lancR, arrecR, saldoR] = await Promise.all([
-      agentQuery(medidaSQL(chave, 'lancado', base, ` AND ${inKeys}`), 200),
-      agentQuery(medidaSQL(chave, 'arrecadado', base, ` AND ${inKeys}`), 200),
+      agentQuery(medidaSQL(chave, 'lancado', base, '', ` AND ${inKeys}`), 200),
+      agentQuery(medidaSQL(chave, 'arrecadado', base, '', ` AND ${inKeys}`), 200),
       agentQuery(`SELECT ${chave} k, SUM(pp.vl_saldo) aberto, SUM(CASE WHEN p.dt_vencimento < getdate() THEN pp.vl_saldo ELSE 0 END) vencido
         FROM ${S}.tb_dsod_guias g JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
         JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela=p.cd_parcelas
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
     const tipo = sp.get('tipo') === 'proprietario' ? 'proprietario' : 'imovel'
     const ano = Number(sp.get('ano')) || new Date().getFullYear()
     const metrica = (['lancado', 'arrecadado', 'emAberto', 'inadimplencia'] as const).find(m => m === sp.get('metrica')) ?? 'lancado'
-    return NextResponse.json({ tipo, metrica, itens: await ranking(tipo, ano, metrica) })
+    return NextResponse.json({ tipo, metrica, itens: await ranking(tipo, ano, metrica, sp.get('bairro') || null) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

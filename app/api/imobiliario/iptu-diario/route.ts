@@ -8,11 +8,12 @@ const num = (v: unknown) => Number(v) || 0
 const isData = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
 const proxDia = (s: string) => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10) }
 
-async function diario(de: string, ate: string) {
-  return cached(`iptuDiario:${de}:${ate}`, TTL_15MIN, async () => {
+async function diario(de: string, ate: string, bairro: string | null) {
+  return cached(`iptuDiario:${de}:${ate}:${bairro ?? ''}`, TTL_15MIN, async () => {
+    const jb = bairro ? `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem=iu.cd_imovel_urbano JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep AND ce.nm_bairro='${bairro.replace(/'/g, "''")}'` : ''
     const r = await agentQuery(`
       SELECT DATEFORMAT(pb.dt_baixa,'yyyy-mm-dd') AS dia, SUM(pm.vl_movimento) AS vl
-      FROM ${S}.tb_dsod_guias g
+      FROM ${S}.tb_dsod_guias g ${jb}
       JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
       JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
     let ate = sp.get('ate') || `${ano}-12-31`
     if (!isData(de)) de = `${ano}-01-01`
     if (!isData(ate)) ate = `${ano}-12-31`
-    const dias = await diario(de, ate)
+    const dias = await diario(de, ate, sp.get('bairro') || null)
     const total = dias.reduce((s, d) => s + d.valor, 0)
     return NextResponse.json({ de, ate, dias, total })
   } catch (e) {

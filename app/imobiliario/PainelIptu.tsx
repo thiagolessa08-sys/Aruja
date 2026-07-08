@@ -87,14 +87,23 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [tend, setTend] = useState<Tendencia | null>(null)
 
   const qs = ano ? `?ano=${ano}` : ''
+  const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
+
+  // Visão geral + resumo: refletem o bairro selecionado (tela toda)
   useEffect(() => {
     let vivo = true
     setCarregando(true); setDrillAno(null)
-    fetch(`/api/imobiliario/iptu-visao${qs}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/imobiliario/iptu-visao${qs}${bairroQ}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setV(d) })
       .finally(() => { if (vivo) setCarregando(false) })
-    fetch(`/api/imobiliario/iptu-resumo${qs}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/imobiliario/iptu-resumo${qs}${bairroQ}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setRes(d) })
+    return () => { vivo = false }
+  }, [qs, bairroQ])
+
+  // Tendência (projeção) — global, independe do bairro
+  useEffect(() => {
+    let vivo = true
     fetch(`/api/imobiliario/iptu-tendencia${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setTend(d) })
     return () => { vivo = false }
@@ -106,10 +115,10 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   useEffect(() => {
     if (!de || !ate) return
     let vivo = true
-    fetch(`/api/imobiliario/iptu-diario?ano=${ano}&de=${de}&ate=${ate}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/imobiliario/iptu-diario?ano=${ano}&de=${de}&ate=${ate}${bairroQ}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setDiario(d) })
     return () => { vivo = false }
-  }, [ano, de, ate])
+  }, [ano, de, ate, bairroQ])
 
   // Bairros (ou ruas quando há bairro selecionado) — query pesada, com loading próprio
   useEffect(() => {
@@ -131,11 +140,11 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     if (!ano) return
     let vivo = true
     setCarregandoRank(true)
-    fetch(`/api/imobiliario/iptu-ranking?ano=${ano}&tipo=${rankTipo}&metrica=${rankMetrica}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/imobiliario/iptu-ranking?ano=${ano}&tipo=${rankTipo}&metrica=${rankMetrica}${bairroQ}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (vivo && d && !d.error) setRankItens(d.itens ?? []) })
       .finally(() => { if (vivo) setCarregandoRank(false) })
     return () => { vivo = false }
-  }, [ano, rankTipo, rankMetrica])
+  }, [ano, rankTipo, rankMetrica, bairroQ])
 
   // Busca de imóvel (debounce simples)
   useEffect(() => {
@@ -188,6 +197,14 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(v?.dataAtualizacao ?? null)}</b>
         </span>
       </div>
+
+      {/* Banner de filtro global por bairro */}
+      {bairroSel ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '8px 4px 0' }}>
+          <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>Toda a tela filtrada pelo bairro: <b>{bairroSel}</b></span>
+          <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>Limpar filtro</button>
+        </div>
+      ) : null}
 
       {/* 6 cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginTop: 14 }}>

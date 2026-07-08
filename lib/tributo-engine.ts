@@ -207,47 +207,96 @@ async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
       GROUP BY g.no_exercicio_lancamento`, 200),
   ])
 
+  return montarBuckets(lanc, arrecRows.rows, viRows.rows, isenRows.rows, suspRows.rows)
+}
+
+// Montagem dos buckets a partir das linhas cruas (compartilhado entre total e por bairro).
+function montarBuckets(lanc: Map<number, number>, arrecRows: unknown[][], viRows: unknown[][], isenRows: unknown[][], suspRows: unknown[][]): Map<number, BucketsIptuAno> {
   const now = new Date()
   const curY = now.getFullYear(), curM = now.getMonth() + 1
   const get = (m: Map<number, BucketsIptuAno>, ex: number) =>
     m.get(ex) ?? { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 }
   const map = new Map<number, BucketsIptuAno>()
 
-  // Lançado
   for (const [ex, v] of lanc) { const b = get(map, ex); b.lancado = v; map.set(ex, b) }
-  // Arrecadado (exclui Recalculo/Validacao)
-  for (const row of arrecRows.rows) {
+  for (const row of arrecRows) {
     const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
     if (LANC_SIT_EXCLUIR.has(String(row[1] ?? '').trim())) continue
     const b = get(map, ex); b.arrecadado += num(row[2]); map.set(ex, b)
   }
-  // Em Aberto (todos) + Inadimplente (vencidos)
-  for (const row of viRows.rows) {
+  for (const row of viRows) {
     const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
     const vy = num(row[1]), vm = num(row[2]), net = num(row[3])
-    const b = get(map, ex)
-    b.emAberto += net
+    const b = get(map, ex); b.emAberto += net
     if (vy < curY || (vy === curY && vm < curM)) b.inadimplente += net
     map.set(ex, b)
   }
-  // Isento (só setor 'Isencao')
-  for (const row of isenRows.rows) {
+  for (const row of isenRows) {
     const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
     if (String(row[1] ?? '').trim() !== 'Isencao') continue
     const b = get(map, ex); b.isento += num(row[2]); map.set(ex, b)
   }
-  // Suspenso (= -net, clamp >= 0)
-  for (const row of suspRows.rows) {
+  for (const row of suspRows) {
     const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
     const b = get(map, ex); b.suspenso = Math.max(0, -num(row[1])); map.set(ex, b)
   }
-
-  // Clamp de valores que não fazem sentido negativos
-  for (const b of map.values()) {
-    b.emAberto = Math.max(0, b.emAberto)
-    b.inadimplente = Math.max(0, b.inadimplente)
-  }
+  for (const b of map.values()) { b.emAberto = Math.max(0, b.emAberto); b.inadimplente = Math.max(0, b.inadimplente) }
   return map
+}
+
+/**
+ * Buckets do IPTU FILTRADOS por bairro (via cd_origem→imóvel→cep). Mesma lógica do
+ * bucketsIptu, mas com o JOIN de imóvel/cep e o bairro no WHERE. Como um bairro é um
+ * subconjunto pequeno, roda rápido. Usado no filtro "tela toda por bairro".
+ */
+export async function bucketsIptuBairro(bairro: string): Promise<Map<number, BucketsIptuAno>> {
+  return cached(`bucketsIptuBairro:${bairro}`, TTL_15MIN, async () => {
+    const jb = `JOIN ${SCHEMA}.tb_dsod_imovel_urbano iu ON g.cd_origem = iu.cd_imovel_urbano
+      JOIN ${SCHEMA}.tb_dsod_cep ce ON iu.cd_cep = ce.cd_cep AND ce.nm_bairro = '${bairro.replace(/'/g, "''")}'`
+    const [lancRows, arrecRows, viRows, isenRows, suspRows] = await Promise.all([
+      agentQuery(`SELECT g.no_exercicio_lancamento ex, g.ds_situacao sit, SUM(pm.vl_movimento) vl
+        FROM ${SCHEMA}.tb_dsod_guias g ${jb}
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela NOT IN (0)
+        GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 800),
+      agentQuery(`SELECT g.no_exercicio_lancamento ex, g.ds_situacao sit, SUM(pm.vl_movimento) vl
+        FROM ${SCHEMA}.tb_dsod_guias g ${jb}
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
+        JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa=pm.cd_parcela_baixa
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
+          AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
+        GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 800),
+      agentQuery(`SELECT g.no_exercicio_lancamento ex, YEAR(p.dt_vencimento) vy, MONTH(p.dt_vencimento) vm, SUM(pm.vl_movimento*pm.no_sinal) net
+        FROM ${SCHEMA}.tb_dsod_guias g ${jb}
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND p.no_parcela NOT IN (0) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+        GROUP BY g.no_exercicio_lancamento, YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 4000),
+      agentQuery(`SELECT g.no_exercicio_lancamento ex, pb.ds_setor_origem_baixa setor, SUM(pm.vl_movimento) vl
+        FROM ${SCHEMA}.tb_dsod_guias g ${jb}
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
+        JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa=pm.cd_parcela_baixa
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (12,5) AND pm.cd_tipo_lancamento IN (1) AND p.no_parcela NOT IN (0)
+        GROUP BY g.no_exercicio_lancamento, pb.ds_setor_origem_baixa`, 400),
+      agentQuery(`SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento*pm.no_sinal) net
+        FROM ${SCHEMA}.tb_dsod_guias g ${jb}
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (20) AND p.no_parcela NOT IN (0)
+        GROUP BY g.no_exercicio_lancamento`, 200),
+    ])
+    // Lançado do bairro (mesma regra do lancadoOficial: exclui Recalculo/Validacao)
+    const lancMap = new Map<number, number>()
+    for (const row of lancRows.rows) {
+      const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+      if (LANC_SIT_EXCLUIR.has(String(row[1] ?? '').trim())) continue
+      lancMap.set(ex, (lancMap.get(ex) ?? 0) + num(row[2]))
+    }
+    return montarBuckets(lancMap, arrecRows.rows, viRows.rows, isenRows.rows, suspRows.rows)
+  })
 }
 
 /**
