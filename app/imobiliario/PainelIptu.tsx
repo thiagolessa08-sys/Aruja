@@ -220,13 +220,14 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 20, padding: 18, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
+  const svg = (paths: React.ReactNode) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
   const cardsDef = v ? [
-    { label: 'Total Lançado', val: v.cards.lancado, cor: '#283e93' },
-    { label: 'Total Arrecadado', val: v.cards.arrecadado, cor: '#1fa463' },
-    { label: 'Total Inadimplência', val: v.cards.inadimplencia, cor: '#d64545' },
-    { label: 'Total em Aberto', val: v.cards.emAberto, cor: '#e8962e' },
-    { label: 'Total Isento', val: v.cards.isento, cor: '#8094d6' },
-    { label: 'Total Suspenso', val: v.cards.suspenso, cor: '#5b6477' },
+    { label: 'Total Lançado', val: v.cards.lancado, cor: '#283e93', icon: svg(<><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h6M9 11h6M9 15h4" /></>) },
+    { label: 'Total Arrecadado', val: v.cards.arrecadado, cor: '#1fa463', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M14.5 9a2.5 2 0 0 0-2.5-1.5c-1.4 0-2.5.7-2.5 1.8 0 2.6 5 1.4 5 4 0 1.2-1.1 1.9-2.5 1.9A2.6 2 0 0 1 9.4 15M12 6v1.5M12 16.5V18" /></>) },
+    { label: 'Total Inadimplência', val: v.cards.inadimplencia, cor: '#d64545', icon: svg(<><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>) },
+    { label: 'Total em Aberto', val: v.cards.emAberto, cor: '#e8962e', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>) },
+    { label: 'Total Isento', val: v.cards.isento, cor: '#8094d6', icon: svg(<><path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>) },
+    { label: 'Total Suspenso', val: v.cards.suspenso, cor: '#5b6477', icon: svg(<><rect x="7" y="6" width="3.2" height="12" rx="1" /><rect x="13.8" y="6" width="3.2" height="12" rx="1" /></>) },
   ] : []
 
   const cmpSel = v ? v.comparativo[metrica] : null
@@ -264,7 +265,10 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         {cardsDef.map(c => (
           <div key={c.label} style={card}>
             <span style={{ fontSize: 11.5, fontWeight: 600, color: '#5b6477', display: 'block' }}>{c.label}</span>
-            <div style={{ fontSize: 20, fontWeight: 700, color: c.cor, marginTop: 8, letterSpacing: '-.5px' }}>{fmtMi(c.val)}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: `${c.cor}1a`, color: c.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{c.icon}</div>
+              <span style={{ fontSize: 20, fontWeight: 700, color: c.cor, letterSpacing: '-.5px' }}>{fmtMi(c.val)}</span>
+            </div>
           </div>
         ))}
       </div>
