@@ -20,5 +20,7 @@ export function invalidate(prefix?: string) {
   for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k)
 }
 
-export const CACHE_TTL = 60 * 60 * 1000 // 1h — posições agregadas mudam devagar
-export const TTL_15MIN = CACHE_TTL // alias retrocompatível
+// Dado da origem é carregado 1x/dia → cache vive o dia todo; o warmup invalida e
+// reabastece nos horários agendados (8h e 12h). Ver lib/warmup.ts.
+export const CACHE_TTL = 24 * 60 * 60 * 1000 // 24h
+export const TTL_15MIN = CACHE_TTL // alias retrocompatível (nome legado)
