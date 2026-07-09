@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay from '../_components/LoadingOverlay'
 
 // Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
@@ -696,20 +696,22 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 0, borderTop: '2px dashed #d64545', display: 'inline-block' }} />Inadimplência prevista</span>
           </div>
           {(() => {
-            const d = tend.mensalAtual
-            const mx = Math.max(1, ...d.flatMap(m => [m.arrecReal, m.arrecPrev, m.inadPrev]))
-            const W = 700, H = 220, xL = 8, xR = 692, yT = 12, yB = 188
-            const X = (i: number) => xL + (i * (xR - xL)) / 11
-            const Y = (v: number) => yB - (v / mx) * (yB - yT)
-            const path = (sel: (m: typeof d[0]) => number) => d.map((m, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(sel(m)).toFixed(1)}`).join(' ')
+            const d = tend.mensalAtual.map(m => ({ mes: MESES[m.mes - 1], arrecReal: m.arrecReal, arrecPrev: m.arrecPrev, inadPrev: m.inadPrev }))
             return (
-              <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', marginTop: 12 }}>
-                <line x1={xL} y1={yB} x2={xR} y2={yB} stroke="#e3e8f1" strokeWidth="1.5" />
-                <path d={path(m => m.arrecReal)} fill="none" stroke="#1fa463" strokeWidth="2.2" />
-                <path d={path(m => m.arrecPrev)} fill="none" stroke="#1fa463" strokeWidth="1.8" strokeDasharray="5 4" opacity="0.8" />
-                <path d={path(m => m.inadPrev)} fill="none" stroke="#d64545" strokeWidth="1.8" strokeDasharray="5 4" opacity="0.8" />
-                {d.map((m, i) => <text key={i} x={X(i).toFixed(1)} y="206" fontSize="10.5" fill="#9098a8" textAnchor="middle">{MESES[m.mes - 1]}</text>)}
-              </svg>
+              <div style={{ marginTop: 12, height: 240 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={d} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                    <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      formatter={(v, name) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                    <Line type="monotone" dataKey="arrecReal" name="Arrecadado real" stroke="#1fa463" strokeWidth={2.4} dot={false} />
+                    <Line type="monotone" dataKey="arrecPrev" name="Arrecadado previsto" stroke="#1fa463" strokeWidth={1.8} strokeDasharray="5 4" dot={false} />
+                    <Line type="monotone" dataKey="inadPrev" name="Inadimplência prevista" stroke="#d64545" strokeWidth={1.8} strokeDasharray="5 4" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             )
           })()}
         </div>
