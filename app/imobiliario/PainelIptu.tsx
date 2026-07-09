@@ -88,6 +88,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [drillAno, setDrillAno] = useState<number | null>(null) // ano em drill mensal na evolução
   const [mensalData, setMensalData] = useState<{ mes: number; lancado: number; arrecadado: number; inadimplencia: number }[]>([])
+  const [carregandoMensal, setCarregandoMensal] = useState(false)
   const [res, setRes] = useState<Resumo | null>(null)
   const [diario, setDiario] = useState<Diario | null>(null)
   const [de, setDe] = useState('')
@@ -154,8 +155,10 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   useEffect(() => {
     if (!drillAno) { setMensalData([]); return }
     let vivo = true
+    setCarregandoMensal(true); setMensalData([])
     fetchJson(`/api/imobiliario/iptu-mensal?ano=${drillAno}`)
       .then(d => { if (vivo && d?.mensal) setMensalData(d.mensal) })
+      .finally(() => { if (vivo) setCarregandoMensal(false) })
     return () => { vivo = false }
   }, [drillAno])
 
@@ -304,7 +307,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         </div>
 
         {/* Evolução 5 anos (com drill mensal) */}
-        <div style={card}>
+        <div style={{ ...card, position: 'relative' }}>
+          {carregandoMensal ? <LoadingOverlay label="Carregando meses…" /> : null}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
               {drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução (5 anos)'}
