@@ -280,13 +280,13 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           {cmpSel && v ? (() => {
             const mx = Math.max(1, cmpSel.atual, cmpSel.ant)
             const bar = (val: number, lbl: string, forte: boolean) => (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
+              <div style={{ marginTop: 22 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 7 }}>
                   <span style={{ color: '#5b6477', fontWeight: 600 }}>{lbl}</span>
                   <span style={{ color: forte ? corSel : '#9098a8', fontWeight: 700 }}>{fmtMi(val)}</span>
                 </div>
-                <div style={{ height: 20, borderRadius: 10, background: '#eef1f7', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.max(4, 100 * val / mx).toFixed(1)}%`, borderRadius: 10, background: forte ? corSel : '#c3ccdd' }} />
+                <div style={{ height: 40, borderRadius: 14, background: '#eef1f7', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.max(4, 100 * val / mx).toFixed(1)}%`, borderRadius: 14, background: forte ? corSel : '#c3ccdd' }} />
                 </div>
               </div>
             )
