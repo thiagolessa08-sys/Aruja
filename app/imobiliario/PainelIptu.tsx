@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay from '../_components/LoadingOverlay'
 
 // Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
@@ -238,7 +238,6 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, inadimplencia: m.inadimplencia }))
     : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, inadimplencia: e.inadimplencia }))
   ) : []
-  const maxSerie = Math.max(1, ...serie.map(s => Math.max(s.lancado, s.arrecadado, s.inadimplencia)))
 
   return (
     <div style={{ position: 'relative', marginTop: 18 }}>
@@ -326,33 +325,25 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
               {drillAno ? <button onClick={() => setDrillAno(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button> : null}
             </div>
           </div>
-          <div style={{ marginTop: 16 }}>
-            <svg viewBox="0 0 640 240" width="100%" style={{ display: 'block' }}>
-              <line x1="8" y1="210" x2="632" y2="210" stroke="#e3e8f1" strokeWidth="1.5" />
-              {serie.map((s, i) => {
-                const gw = 624 / serie.length
-                const cx = 8 + i * gw + gw / 2
-                const grupos = [
-                  { v: s.lancado, cor: '#283e93' },
-                  { v: s.arrecadado, cor: '#1fa463' },
-                  { v: s.inadimplencia, cor: '#d64545' },
-                ]
-                const bw = Math.min(16, gw / 4)
-                const clickable = !drillAno && 'ano' in s
-                return (
-                  <g key={i} style={{ cursor: clickable ? 'pointer' : 'default' }} onClick={() => { if (clickable) setDrillAno((s as { ano: number }).ano) }}>
-                    {grupos.map((g, gi) => {
-                      const h = (g.v / maxSerie) * 180
-                      const x = cx - bw * 1.5 - 3 + gi * (bw + 2)
-                      return <rect key={gi} x={x.toFixed(1)} y={(210 - h).toFixed(1)} width={bw} height={Math.max(0, h).toFixed(1)} rx="3" fill={g.cor}><title>{`${s.rot} · ${['Lançado', 'Arrecadado', 'Inadimplência'][gi]}: ${fmtMi(g.v)}`}</title></rect>
-                    })}
-                    <text x={cx.toFixed(1)} y="228" fontSize="12" fill="#5b6477" textAnchor="middle" fontWeight={clickable ? 600 : 400}>{s.rot}</text>
-                  </g>
-                )
-              })}
-            </svg>
-            {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para ver a evolução mês a mês</div> : null}
+          <div style={{ marginTop: 16, height: 260, cursor: !drillAno ? 'pointer' : 'default' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%"
+                onClick={(e) => {
+                  const a = (e as unknown as { activePayload?: { payload?: { ano?: number } }[] })?.activePayload?.[0]?.payload?.ano
+                  if (!drillAno && a) setDrillAno(a)
+                }}>
+                <XAxis dataKey="rot" tick={{ fontSize: 12, fill: '#5b6477' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
+                  formatter={(v, name) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                <Bar dataKey="lancado" name="Lançado" fill="#283e93" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="arrecadado" name="Arrecadado" fill="#1fa463" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="inadimplencia" name="Inadimplência" fill="#d64545" radius={[3, 3, 0, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
+          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para ver a evolução mês a mês</div> : null}
         </div>
       </div>
 
