@@ -313,16 +313,17 @@ export async function dataAtualizacaoIptu(): Promise<string | null> {
 }
 
 /**
- * Série MENSAL do IPTU de um exercício (para o drill "por mês"):
+ * Série MENSAL do IPTU de um exercício (para o drill "por mês"), tudo por MÊS:
  *  • lancado  = SUM(vl_movimento) mov 1,2,3 por MÊS de vencimento da parcela
  *  • arrecadado = SUM(vl_movimento) baixas 11,14 por MÊS da baixa (pagamento)
- *  • inadimplencia = acumulado(lancado) − acumulado(arrecadado) até o mês (proxy do vencido)
+ *  • inadimplencia = saldo VENCIDO (dt_vencimento < hoje, em aberto) por MÊS de vencimento
+ *    — distribui a inadimplência no mês real em que a parcela venceu (consistente com o card anual).
  */
 export interface IptuMes { mes: number; lancado: number; arrecadado: number; inadimplencia: number }
 
 export async function serieMensalIptu(ano: number): Promise<IptuMes[]> {
   return cached(`iptuMensal:${ano}`, TTL_15MIN, async () => {
-    const [lancR, arrecR] = await Promise.all([
+    const [lancR, arrecR, inadR] = await Promise.all([
       agentQuery(`
         SELECT MONTH(p.dt_vencimento) AS m, SUM(pm.vl_movimento) AS vl
         FROM ${SCHEMA}.tb_dsod_guias g
@@ -343,16 +344,23 @@ export async function serieMensalIptu(ano: number): Promise<IptuMes[]> {
           AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
           AND g.ds_situacao NOT IN ('Recalculo','Validacao')
         GROUP BY MONTH(pb.dt_baixa)`, 40),
+      agentQuery(`
+        SELECT MONTH(p.dt_vencimento) AS m, SUM(pp.vl_saldo) AS vl
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (${ano})
+          AND p.no_parcela NOT IN (0) AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          AND p.dt_vencimento < getdate()
+        GROUP BY MONTH(p.dt_vencimento)`, 40),
     ])
-    const lanc = new Map<number, number>(), arr = new Map<number, number>()
+    const lanc = new Map<number, number>(), arr = new Map<number, number>(), inad = new Map<number, number>()
     for (const r of lancR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) lanc.set(m, num(r[1])) }
     for (const r of arrecR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) arr.set(m, num(r[1])) }
+    for (const r of inadR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) inad.set(m, Math.max(0, num(r[1]))) }
     const out: IptuMes[] = []
-    let cumL = 0, cumA = 0
     for (let m = 1; m <= 12; m++) {
-      cumL += lanc.get(m) ?? 0
-      cumA += arr.get(m) ?? 0
-      out.push({ mes: m, lancado: lanc.get(m) ?? 0, arrecadado: arr.get(m) ?? 0, inadimplencia: Math.max(0, cumL - cumA) })
+      out.push({ mes: m, lancado: lanc.get(m) ?? 0, arrecadado: arr.get(m) ?? 0, inadimplencia: inad.get(m) ?? 0 })
     }
     return out
   })
