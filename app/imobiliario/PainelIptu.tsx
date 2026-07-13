@@ -137,16 +137,22 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     return () => { vivo = false }
   }, [qs, bairroQ, obsResumo.visible])
 
-  // Série mensal só quando o usuário clica num ano na evolução (drill)
+  // Ano de previsão (barra clara na evolução) — drill dele mostra a projeção mês a mês
+  const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano ?? null
+  const drillPrevisto = drillAno != null && drillAno === anoPrevisto
+
+  // Série mensal só quando o usuário clica num ano na evolução (drill).
+  // No ano de previsão, busca a projeção mês a mês (sazonalidade); senão, a série real.
   useEffect(() => {
     if (!drillAno) { setMensalData([]); return }
     let vivo = true
     setCarregandoMensal(true); setMensalData([])
-    fetchJson(`/api/imobiliario/iptu-mensal?ano=${drillAno}`)
+    const prev = drillAno === anoPrevisto ? '&previsao=1' : ''
+    fetchJson(`/api/imobiliario/iptu-mensal?ano=${drillAno}${prev}`)
       .then(d => { if (vivo && d?.mensal) setMensalData(d.mensal) })
       .finally(() => { if (vivo) setCarregandoMensal(false) })
     return () => { vivo = false }
-  }, [drillAno])
+  }, [drillAno, anoPrevisto])
 
   // Ao trocar o ano, define o intervalo padrão da arrecadação diária (jan→dez do ano)
   useEffect(() => { if (ano) { setDe(`${ano}-01-01`); setAte(`${ano}-12-31`) } }, [ano])
@@ -220,7 +226,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
 
   // Evolução (5 anos + previsão) ou mensal (drill)
   const serie = v ? (drillAno
-    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, inadimplencia: m.inadimplencia, previsto: false, arrecPct: 0, inadPct: 0 }))
+    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, inadimplencia: m.inadimplencia, previsto: drillPrevisto, arrecPct: 0, inadPct: 0 }))
     : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, inadimplencia: e.inadimplencia, previsto: e.previsto, arrecPct: e.arrecPct, inadPct: e.inadPct }))
   ) : []
   const pctPorRot = new Map(serie.map(s => [s.rot, { arrecPct: s.arrecPct, inadPct: s.inadPct, previsto: s.previsto }]))
@@ -232,7 +238,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     const p = pctPorRot.get(rot)
     return (
       <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={13} textAnchor="middle" fontSize={12} fontWeight={p?.previsto ? 700 : 500} fill={p?.previsto ? '#8a97c9' : '#5b6477'}>{rot}{p?.previsto ? ' • prev' : ''}</text>
+        <text x={0} y={0} dy={13} textAnchor="middle" fontSize={12} fontWeight={p?.previsto ? 700 : 500} fill={p?.previsto ? '#8a97c9' : '#5b6477'}>{rot}{p?.previsto && !drillAno ? ' • prev' : ''}</text>
         {!drillAno && p ? <text x={0} y={0} dy={27} textAnchor="middle" fontSize={9.5} fill="#9098a8">Arr {p.arrecPct.toFixed(0)}% · Inad {p.inadPct.toFixed(0)}%</text> : null}
       </g>
     )
@@ -282,7 +288,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           {carregandoMensal ? <LoadingOverlay label="Carregando meses…" /> : null}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
-              {drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução (5 anos)'}
+              {drillAno ? `${drillPrevisto ? 'Previsão mensal' : 'Evolução mensal'} · ${drillAno}` : 'Evolução (5 anos)'}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
@@ -297,10 +303,9 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={serie} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
                 onClick={(e) => {
-                  const st = e as unknown as { activePayload?: { payload?: { ano?: number; previsto?: boolean } }[]; activeLabel?: string }
-                  const pl = st?.activePayload?.[0]?.payload
-                  const ano = pl?.ano ?? Number(st?.activeLabel)
-                  if (!drillAno && ano && !pl?.previsto) setDrillAno(ano)
+                  const st = e as unknown as { activePayload?: { payload?: { ano?: number } }[]; activeLabel?: string }
+                  const ano = st?.activePayload?.[0]?.payload?.ano ?? Number(st?.activeLabel)
+                  if (!drillAno && ano) setDrillAno(ano)
                 }}>
                 <XAxis dataKey="rot" interval={0} height={!drillAno ? 46 : 24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                 <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
@@ -311,8 +316,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
                   <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={28}
                     cursor={!drillAno ? 'pointer' : 'default'}
                     onClick={(d) => {
-                      const p = (d as unknown as { payload?: { ano?: number; previsto?: boolean } })?.payload
-                      if (!drillAno && p?.ano && !p?.previsto) setDrillAno(p.ano)
+                      const p = (d as unknown as { payload?: { ano?: number } })?.payload
+                      if (!drillAno && p?.ano) setDrillAno(p.ano)
                     }}>
                     {serie.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} />)}
                     <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
@@ -321,7 +326,8 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para detalhar por mês · Arrecadado somado até {mesRefLabel} (comparação justa); Inadimplência = saldo vencido · barras claras = previsão {v?.evolucao.find(e => e.previsto)?.ano ?? ''}</div> : null}
+          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para detalhar por mês · Arrecadado somado até {mesRefLabel} (comparação justa); Inadimplência = saldo vencido · barras claras = previsão {anoPrevisto ?? ''}</div> : null}
+          {drillPrevisto ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Projeção mês a mês de {drillAno} — totais previstos distribuídos pela sazonalidade dos anos anteriores.</div> : null}
         </div>
 
       {/* ===== ONDA 3: IPTU por bairro (logo após a Evolução) ===== */}

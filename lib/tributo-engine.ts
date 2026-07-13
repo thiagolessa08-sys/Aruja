@@ -421,6 +421,56 @@ export async function serieMensalIptu(ano: number): Promise<IptuMes[]> {
 }
 
 /**
+ * PREVISÃO mês a mês de um exercício futuro (ex.: 2027). Distribui os totais anuais
+ * projetados (regressão linear dos 5 anos reais, por métrica) pela SAZONALIDADE média
+ * dos 3 últimos anos reais (participação de cada mês no total do ano). Usado no drill do
+ * gráfico de Evolução ao clicar na barra de previsão.
+ */
+export async function previsaoMensalIptu(anoPrev: number): Promise<IptuMes[]> {
+  return cached(`iptuPrevMensal:${anoPrev}`, TTL_15MIN, async () => {
+    const anoMax = anoPrev - 1
+    const buckets = await bucketsIptu()
+    // Projeção anual (full year) por regressão linear simples dos 5 anos reais.
+    const histAnos: number[] = []
+    for (let a = anoMax - 4; a <= anoMax; a++) histAnos.push(a)
+    const zero = { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 }
+    const hist = histAnos.map(a => buckets.get(a) ?? zero)
+    const proj = (sel: (b: typeof zero) => number) => {
+      const pts = histAnos.map((x, i) => ({ x, y: sel(hist[i]) }))
+      const n = pts.length, sx = pts.reduce((s, p) => s + p.x, 0), sy = pts.reduce((s, p) => s + p.y, 0)
+      const sxx = pts.reduce((s, p) => s + p.x * p.x, 0), sxy = pts.reduce((s, p) => s + p.x * p.y, 0)
+      const den = n * sxx - sx * sx
+      if (!den) return sy / n
+      const b = (n * sxy - sx * sy) / den, a0 = (sy - b * sx) / n
+      return Math.max(0, a0 + b * anoPrev)
+    }
+    const annL = proj(b => b.lancado), annA = proj(b => b.arrecadado), annI = proj(b => b.inadimplente)
+
+    // Sazonalidade: média da participação mensal dos 3 últimos anos reais, por métrica.
+    const anosShare = [anoMax, anoMax - 1, anoMax - 2].filter(a => a >= 2005)
+    const series = await Promise.all(anosShare.map(a => serieMensalIptu(a)))
+    const shL = Array(12).fill(0), shA = Array(12).fill(0), shI = Array(12).fill(0)
+    let nL = 0, nA = 0, nI = 0
+    for (const s of series) {
+      const tL = s.reduce((x, m) => x + m.lancado, 0), tA = s.reduce((x, m) => x + m.arrecadado, 0), tI = s.reduce((x, m) => x + m.inadimplencia, 0)
+      if (tL > 0) { for (const m of s) shL[m.mes - 1] += m.lancado / tL; nL++ }
+      if (tA > 0) { for (const m of s) shA[m.mes - 1] += m.arrecadado / tA; nA++ }
+      if (tI > 0) { for (const m of s) shI[m.mes - 1] += m.inadimplencia / tI; nI++ }
+    }
+    const out: IptuMes[] = []
+    for (let m = 1; m <= 12; m++) {
+      out.push({
+        mes: m,
+        lancado: annL * (nL ? shL[m - 1] / nL : 1 / 12),
+        arrecadado: annA * (nA ? shA[m - 1] / nA : 1 / 12),
+        inadimplencia: annI * (nI ? shI[m - 1] / nI : 1 / 12),
+      })
+    }
+    return out
+  })
+}
+
+/**
  * Quantidade de imóveis lançados de IPTU por exercício = COUNT(DISTINCT cd_guia) na base oficial
  * de lançamento (cd_tributo 1, no_parcela<>0, exclui guia Recalculo/Validacao).
  */
