@@ -300,6 +300,35 @@ export async function bucketsIptuBairro(bairro: string): Promise<Map<number, Buc
 }
 
 /**
+ * ISENTO oficial (regra do usuário, 10/07/2026): SUM(vl_movimento) mov<=3, cd_tributo 1,
+ * parcela<>0, guia fora de Recalculo/Validacao, dos devedores com isenção ativa no exercício
+ * (dt_fim >= exercício) e ds_isencao que NÃO seja TCA/Não Incidência ITBI/TCA-Imóvel Locado.
+ * Fonte: tb_dsod_isencoes (por cd_origem = cd_devedor).
+ * ⚠️ Requer permissão de SELECT em tb_dsod_isencoes — se não houver, retorna null (fallback).
+ */
+export async function isentoIptu(ano: number): Promise<number | null> {
+  return cached(`iptuIsento:${ano}`, TTL_15MIN, async () => {
+    try {
+      const r = await agentQuery(`
+        SELECT SUM(pm.vl_movimento) AS vl
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON g.cd_guia = p.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (${ano})
+          AND pm.cd_tipo_movimento <= 3 AND p.no_parcela <> 0
+          AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          AND g.cd_devedor IN (
+            SELECT i.cd_origem FROM ${SCHEMA}.tb_dsod_isencoes i
+            WHERE YEAR(i.dt_fim) >= ${ano}
+              AND (i.ds_isencao NOT IN ('TCA','Não Incidência de ITBI','TCA - Imóvel Locado a Órgão Público') OR i.ds_isencao IS NULL))`, 1)
+      return num(r.rows[0]?.[0])
+    } catch {
+      return null // sem permissão na tabela de isenções → usa fallback (regra antiga)
+    }
+  })
+}
+
+/**
  * Data de atualização dos dados = MAX(dt_alter_ods) das guias (data de carga da origem).
  * Retorna string 'YYYY-MM-DD' ou null.
  */

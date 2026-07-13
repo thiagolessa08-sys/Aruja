@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, LineChart, Line, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay from '../_components/LoadingOverlay'
 
 // Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
@@ -35,9 +35,14 @@ interface Visao {
   dataAtualizacao: string | null
   anos: number[]
   anoRef: number
-  cards: { lancado: number; arrecadado: number; inadimplencia: number; emAberto: number; isento: number; suspenso: number }
-  comparativo: { anoRef: number; anoAnt: number; lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp }
-  evolucao: { ano: number; lancado: number; arrecadado: number; inadimplencia: number }[]
+  cards: { lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp }
+  evolucao: { ano: number; lancado: number; arrecadado: number; inadimplencia: number; previsto: boolean; arrecPct: number; inadPct: number }[]
+}
+// abreviação compacta (rótulos das barras): 67,6mi / 540K
+const fmtAbrev = (v: number) => {
+  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'mi'
+  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + 'K'
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -222,22 +227,33 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
 
   const svg = (paths: React.ReactNode) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
   const cardsDef = v ? [
-    { label: 'Total Lançado', val: v.cards.lancado, cor: '#283e93', icon: svg(<><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h6M9 11h6M9 15h4" /></>) },
-    { label: 'Total Arrecadado', val: v.cards.arrecadado, cor: '#1fa463', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M14.5 9a2.5 2 0 0 0-2.5-1.5c-1.4 0-2.5.7-2.5 1.8 0 2.6 5 1.4 5 4 0 1.2-1.1 1.9-2.5 1.9A2.6 2 0 0 1 9.4 15M12 6v1.5M12 16.5V18" /></>) },
-    { label: 'Total Inadimplência', val: v.cards.inadimplencia, cor: '#d64545', icon: svg(<><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>) },
-    { label: 'Total em Aberto', val: v.cards.emAberto, cor: '#e8962e', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>) },
-    { label: 'Total Isento', val: v.cards.isento, cor: '#8094d6', icon: svg(<><path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>) },
-    { label: 'Total Suspenso', val: v.cards.suspenso, cor: '#5b6477', icon: svg(<><rect x="7" y="6" width="3.2" height="12" rx="1" /><rect x="13.8" y="6" width="3.2" height="12" rx="1" /></>) },
+    { label: 'Total Lançado', cmp: v.cards.lancado, cor: '#283e93', icon: svg(<><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h6M9 11h6M9 15h4" /></>) },
+    { label: 'Total Arrecadado', cmp: v.cards.arrecadado, cor: '#1fa463', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M14.5 9a2.5 2 0 0 0-2.5-1.5c-1.4 0-2.5.7-2.5 1.8 0 2.6 5 1.4 5 4 0 1.2-1.1 1.9-2.5 1.9A2.6 2 0 0 1 9.4 15M12 6v1.5M12 16.5V18" /></>) },
+    { label: 'Total Inadimplência', cmp: v.cards.inadimplencia, cor: '#d64545', icon: svg(<><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>) },
+    { label: 'Total em Aberto', cmp: v.cards.emAberto, cor: '#e8962e', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>) },
+    { label: 'Total Isento', cmp: v.cards.isento, cor: '#8094d6', icon: svg(<><path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>) },
+    { label: 'Total Suspenso', cmp: v.cards.suspenso, cor: '#5b6477', icon: svg(<><rect x="7" y="6" width="3.2" height="12" rx="1" /><rect x="13.8" y="6" width="3.2" height="12" rx="1" /></>) },
   ] : []
 
-  const cmpSel = v ? v.comparativo[metrica] : null
-  const corSel = METRICAS.find(m => m.id === metrica)!.cor
-
-  // Evolução (5 anos) ou mensal (drill)
+  // Evolução (5 anos + previsão) ou mensal (drill)
   const serie = v ? (drillAno
-    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, inadimplencia: m.inadimplencia }))
-    : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, inadimplencia: e.inadimplencia }))
+    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, inadimplencia: m.inadimplencia, previsto: false, arrecPct: 0, inadPct: 0 }))
+    : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, inadimplencia: e.inadimplencia, previsto: e.previsto, arrecPct: e.arrecPct, inadPct: e.inadPct }))
   ) : []
+  const pctPorRot = new Map(serie.map(s => [s.rot, { arrecPct: s.arrecPct, inadPct: s.inadPct, previsto: s.previsto }]))
+  // cores por métrica (tom forte = real, tom claro = previsto)
+  const CORES = { lancado: ['#283e93', '#a9b6e2'], arrecadado: ['#1fa463', '#9adcbc'], inadimplencia: ['#d64545', '#eeaeae'] }
+  // tick do eixo X: ano/mês + (no anual) % arrecadado e inadimplência frente ao lançado
+  const EixoTick = (props: { x?: number; y?: number; payload?: { value?: string } }) => {
+    const x = props.x ?? 0, y = props.y ?? 0, rot = props.payload?.value ?? ''
+    const p = pctPorRot.get(rot)
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={13} textAnchor="middle" fontSize={12} fontWeight={p?.previsto ? 700 : 500} fill={p?.previsto ? '#8a97c9' : '#5b6477'}>{rot}{p?.previsto ? ' • prev' : ''}</text>
+        {!drillAno && p ? <text x={0} y={0} dy={27} textAnchor="middle" fontSize={9.5} fill="#9098a8">Arr {p.arrecPct.toFixed(0)}% · Inad {p.inadPct.toFixed(0)}%</text> : null}
+      </g>
+    )
+  }
 
   return (
     <div style={{ position: 'relative', marginTop: 18 }}>
@@ -259,58 +275,25 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         </div>
       ) : null}
 
-      {/* 6 cards */}
+      {/* 6 cards — valor, ano anterior e % de variação */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginTop: 14 }}>
         {cardsDef.map(c => (
           <div key={c.label} style={card}>
             <span style={{ fontSize: 11.5, fontWeight: 600, color: '#5b6477', display: 'block' }}>{c.label}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: `${c.cor}1a`, color: c.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{c.icon}</div>
-              <span style={{ fontSize: 20, fontWeight: 700, color: c.cor, letterSpacing: '-.5px' }}>{fmtMi(c.val)}</span>
+              <span style={{ fontSize: 20, fontWeight: 700, color: c.cor, letterSpacing: '-.5px' }}>{fmtMi(c.cmp.atual)}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
+              <span style={{ fontSize: 10.5, color: '#9098a8' }}>{v ? v.anoRef - 1 : ''} <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtMi(c.cmp.ant)}</span></span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: c.cmp.pct >= 0 ? '#1fa463' : '#d64545', flex: 'none' }}>{fmtPct(c.cmp.pct)}</span>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 18, marginTop: 18 }}>
-        {/* Comparativo ano x ano anterior */}
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Comparativo Anual</span>
-            <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
-              {METRICAS.map(m => (
-                <button key={m.id} onClick={() => setMetrica(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metrica === m.id ? '#283e93' : 'transparent', color: metrica === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
-              ))}
-            </div>
-          </div>
-          {cmpSel && v ? (() => {
-            const mx = Math.max(1, cmpSel.atual, cmpSel.ant)
-            const bar = (val: number, lbl: string, forte: boolean) => (
-              <div style={{ marginTop: 22 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 7 }}>
-                  <span style={{ color: '#5b6477', fontWeight: 600 }}>{lbl}</span>
-                  <span style={{ color: forte ? corSel : '#9098a8', fontWeight: 700 }}>{fmtMi(val)}</span>
-                </div>
-                <div style={{ height: 40, borderRadius: 14, background: '#eef1f7', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.max(4, 100 * val / mx).toFixed(1)}%`, borderRadius: 14, background: forte ? corSel : '#c3ccdd' }} />
-                </div>
-              </div>
-            )
-            return (
-              <>
-                {bar(cmpSel.atual, String(v.comparativo.anoRef), true)}
-                {bar(cmpSel.ant, String(v.comparativo.anoAnt), false)}
-                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: '#5b6477' }}>Variação {v.comparativo.anoAnt}→{v.comparativo.anoRef}:</span>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: cmpSel.pct >= 0 ? '#1fa463' : '#d64545' }}>{fmtPct(cmpSel.pct)}</span>
-                </div>
-              </>
-            )
-          })() : <div style={{ height: 120 }} />}
-        </div>
-
-        {/* Evolução 5 anos (com drill mensal) */}
-        <div style={{ ...card, position: 'relative' }}>
+      {/* Evolução (5 anos + previsão do próximo ano) — largura total */}
+      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
           {carregandoMensal ? <LoadingOverlay label="Carregando meses…" /> : null}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
@@ -325,58 +308,82 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
               {drillAno ? <button onClick={() => setDrillAno(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button> : null}
             </div>
           </div>
-          <div style={{ marginTop: 16, height: 260, cursor: !drillAno ? 'pointer' : 'default' }}>
+          <div style={{ marginTop: 16, height: 300, cursor: !drillAno ? 'pointer' : 'default' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%"
+              <BarChart data={serie} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
                 onClick={(e) => {
                   const a = (e as unknown as { activePayload?: { payload?: { ano?: number } }[] })?.activePayload?.[0]?.payload?.ano
                   if (!drillAno && a) setDrillAno(a)
                 }}>
-                <XAxis dataKey="rot" tick={{ fontSize: 12, fill: '#5b6477' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                <XAxis dataKey="rot" interval={0} height={!drillAno ? 46 : 24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                 <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                 <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
                   formatter={(v, name) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
-                <Bar dataKey="lancado" name="Lançado" fill="#283e93" radius={[3, 3, 0, 0]} maxBarSize={22} />
-                <Bar dataKey="arrecadado" name="Arrecadado" fill="#1fa463" radius={[3, 3, 0, 0]} maxBarSize={22} />
-                <Bar dataKey="inadimplencia" name="Inadimplência" fill="#d64545" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                {(['lancado', 'arrecadado', 'inadimplencia'] as const).map(dk => (
+                  <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={28}>
+                    {serie.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} />)}
+                    <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
+                  </Bar>
+                ))}
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para ver a evolução mês a mês</div> : null}
+          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para detalhar por mês · barras claras = previsão {v?.evolucao.find(e => e.previsto)?.ano ?? ''}</div> : null}
         </div>
-      </div>
 
-      {/* Em aberto do ano */}
-      {v ? (
-        <div style={{ ...card, marginTop: 18 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Valores em Aberto · {v.anoRef}</span>
-          {(() => {
-            const emAberto = v.cards.emAberto
-            const inad = v.cards.inadimplencia
-            const aVencer = Math.max(0, emAberto - inad)
-            const mx = Math.max(1, emAberto)
-            const linha = (lbl: string, val: number, cor: string) => (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
-                  <span style={{ color: '#5b6477', fontWeight: 600 }}>{lbl}</span>
-                  <span style={{ color: cor, fontWeight: 700 }}>{fmtMi(val)}</span>
-                </div>
-                <div style={{ height: 18, borderRadius: 9, background: '#eef1f7', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.max(3, 100 * val / mx).toFixed(1)}%`, borderRadius: 9, background: cor }} />
-                </div>
-              </div>
-            )
-            return (
-              <div style={{ marginTop: 6 }}>
-                {linha('Total em aberto', emAberto, '#e8962e')}
-                {linha('Inadimplência (vencido)', inad, '#d64545')}
-                {linha('A vencer', aVencer, '#1fa463')}
-              </div>
-            )
-          })()}
+      {/* ===== ONDA 3: IPTU por bairro (logo após a Evolução) ===== */}
+      <div ref={obsBairros.ref} style={{ ...card, marginTop: 18, position: 'relative' }}>
+        {carregandoBairros ? <LoadingOverlay label="Agregando por bairro…" /> : null}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
+            {nivelBairro === 'rua' ? `Ruas de ${bairroSel}` : 'IPTU por Bairro'}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {/* filtros */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#5b6477', cursor: 'pointer' }}>
+              <input type="checkbox" checked={espolio} onChange={e => setEspolio(e.target.checked)} /> Espólio
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#5b6477', cursor: 'pointer' }}>
+              <input type="checkbox" checked={semNumero} onChange={e => setSemNumero(e.target.checked)} /> Sem número
+            </label>
+            <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
+              {METRICAS.map(m => (
+                <button key={m.id} onClick={() => setMetricaBairro(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metricaBairro === m.id ? '#283e93' : 'transparent', color: metricaBairro === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
+              ))}
+            </div>
+            {bairroSel ? <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
+          </div>
         </div>
-      ) : null}
+        {(() => {
+          const mx = Math.max(1, ...bairros.map(b => b[metricaBairro]))
+          const corM = METRICAS.find(m => m.id === metricaBairro)!.cor
+          if (!bairros.length) return <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados para os filtros selecionados.</div>
+          return (
+            <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
+              {bairros.map((b, i) => {
+                const w = Math.max(2, 100 * b[metricaBairro] / mx)
+                const podeDrill = nivelBairro === 'bairro'
+                return (
+                  <div key={i} onClick={() => { if (podeDrill) setBairroSel(b.nome) }} style={{ cursor: podeDrill ? 'pointer' : 'default' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
+                      <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {b.imoveis.toLocaleString('pt-BR')} im.</span></span>
+                      <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtMi(b[metricaBairro])}</span>
+                    </div>
+                    <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 8, background: corM }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 14, fontSize: 10.5, color: '#9098a8', marginTop: 3 }}>
+                      <span>Lanç: {fmtNum(b.lancado)}</span><span>Arrec: {fmtNum(b.arrecadado)}</span><span>Inad: {fmtNum(b.inadimplencia)}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+        {nivelBairro === 'bairro' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div> : null}
+      </div>
 
       {/* ===== ONDA 2: Resumo de imóveis (lazy) ===== */}
       <div ref={obsResumo.ref}>
@@ -445,12 +452,13 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         </div>
         {diario && diario.dias.length ? (() => {
           const data = diario.dias.map(x => ({ t: new Date(x.dia + 'T00:00:00').getTime(), valor: x.valor }))
-          // ticks: 1º de cada mês dentro do intervalo (eixo consistente)
+          // ticks: ~8 datas reais distribuídas uniformemente pelo período
           const ticks: number[] = []
-          if (de && ate) {
-            let cur = new Date(de + 'T00:00:00'); cur = new Date(cur.getFullYear(), cur.getMonth(), 1)
-            const fim = new Date(ate + 'T00:00:00')
-            while (cur <= fim) { ticks.push(cur.getTime()); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1) }
+          if (data.length) {
+            const step = Math.max(1, Math.ceil(data.length / 8))
+            for (let i = 0; i < data.length; i += step) ticks.push(data[i].t)
+            const last = data[data.length - 1].t
+            if (ticks[ticks.length - 1] !== last) ticks.push(last)
           }
           return (
             <div style={{ marginTop: 14, height: 220 }}>
@@ -458,7 +466,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
                 <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <defs><linearGradient id="diaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" stopOpacity="0.25" /><stop offset="100%" stopColor="#283e93" stopOpacity="0" /></linearGradient></defs>
                   <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} ticks={ticks.length ? ticks : undefined}
-                    tickFormatter={(t: number) => MESES[new Date(t).getMonth()]} tick={{ fontSize: 11, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} minTickGap={0} />
+                    tickFormatter={(t: number) => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} minTickGap={0} />
                   <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                   <Tooltip
                     labelFormatter={(t) => new Date(t as number).toLocaleDateString('pt-BR')}
@@ -470,59 +478,6 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
             </div>
           )
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
-      </div>
-
-      {/* ===== ONDA 3: IPTU por bairro (com drill por rua e filtros) ===== */}
-      <div ref={obsBairros.ref} style={{ ...card, marginTop: 18, position: 'relative' }}>
-        {carregandoBairros ? <LoadingOverlay label="Agregando por bairro…" /> : null}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
-            {nivelBairro === 'rua' ? `Ruas de ${bairroSel}` : 'IPTU por Bairro'}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {/* filtros */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#5b6477', cursor: 'pointer' }}>
-              <input type="checkbox" checked={espolio} onChange={e => setEspolio(e.target.checked)} /> Espólio
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#5b6477', cursor: 'pointer' }}>
-              <input type="checkbox" checked={semNumero} onChange={e => setSemNumero(e.target.checked)} /> Sem número
-            </label>
-            <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
-              {METRICAS.map(m => (
-                <button key={m.id} onClick={() => setMetricaBairro(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metricaBairro === m.id ? '#283e93' : 'transparent', color: metricaBairro === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
-              ))}
-            </div>
-            {bairroSel ? <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
-          </div>
-        </div>
-        {(() => {
-          const mx = Math.max(1, ...bairros.map(b => b[metricaBairro]))
-          const corM = METRICAS.find(m => m.id === metricaBairro)!.cor
-          if (!bairros.length) return <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados para os filtros selecionados.</div>
-          return (
-            <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
-              {bairros.map((b, i) => {
-                const w = Math.max(2, 100 * b[metricaBairro] / mx)
-                const podeDrill = nivelBairro === 'bairro'
-                return (
-                  <div key={i} onClick={() => { if (podeDrill) setBairroSel(b.nome) }} style={{ cursor: podeDrill ? 'pointer' : 'default' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
-                      <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {b.imoveis.toLocaleString('pt-BR')} im.</span></span>
-                      <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtMi(b[metricaBairro])}</span>
-                    </div>
-                    <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 8, background: corM }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: 14, fontSize: 10.5, color: '#9098a8', marginTop: 3 }}>
-                      <span>Lanç: {fmtNum(b.lancado)}</span><span>Arrec: {fmtNum(b.arrecadado)}</span><span>Inad: {fmtNum(b.inadimplencia)}</span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })()}
-        {nivelBairro === 'bairro' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div> : null}
       </div>
 
       {/* ===== ONDA 4: 100 maiores imóveis / proprietários ===== */}
@@ -585,6 +540,12 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
               <input value={buscaImovel} onChange={e => setBuscaImovel(e.target.value)} placeholder="Inscrição, código ou proprietário…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+              {buscaImovel || imovelDet ? (
+                <button onClick={() => { setBuscaImovel(''); setMatches([]); setImovelDet(null) }} title="Limpar pesquisa"
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', display: 'flex', alignItems: 'center', padding: 0, flex: 'none' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              ) : null}
             </div>
             {matches.length ? (
               <div style={{ position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', left: 0, right: 0, maxHeight: 280, overflowY: 'auto', background: '#fff', borderRadius: 12, border: '1px solid #e3e9f5', boxShadow: '0 12px 30px rgba(20,40,90,0.18)', padding: 5 }}>
