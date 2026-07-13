@@ -10,6 +10,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
     "jsonwebtoken": "^9.0.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",

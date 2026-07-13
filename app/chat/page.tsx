@@ -737,115 +737,120 @@ function pedeRelatorioPdf(text: string): boolean {
   return /\bpdf\b/i.test(text)
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+// Remove marcações inline (**, *, `) para o texto puro do PDF.
+const stripInline = (s: string) => s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\*([^*]+)\*/g, '$1')
 
-function inlineMdToHtml(text: string): string {
-  let h = escapeHtml(text)
-  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-  h = h.replace(/`([^`]+)`/g, '<code>$1</code>')
-  h = h.replace(/\*([^*]+)\*/g, '<em>$1</em>')
-  return h
-}
+type Bloco =
+  | { tipo: 'h1' | 'h2' | 'h3' | 'p' | 'li'; texto: string }
+  | { tipo: 'gap' }
+  | { tipo: 'table'; linhas: string[][] }
 
-// Converte o markdown da resposta em HTML pronto para impressão (título, texto, tabelas).
-function markdownToReportHtml(md: string): string {
+// Quebra o markdown da resposta em blocos para renderizar no PDF.
+function parseBlocos(md: string): Bloco[] {
   const lines = md.split('\n')
-  const out: string[] = []
+  const out: Bloco[] = []
   let i = 0
-  let inList = false
-  const closeList = () => { if (inList) { out.push('</ul>'); inList = false } }
   while (i < lines.length) {
     const line = lines[i]
     if (line.startsWith('|')) {
-      closeList()
-      const tableLines: string[] = []
-      while (i < lines.length && lines[i].startsWith('|')) { tableLines.push(lines[i]); i++ }
-      const rows = tableLines
-        .filter(l => !l.match(/^\|[\s\-:|]+\|$/))
-        .map(l => l.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map(c => c.trim()))
-      if (rows.length) {
-        const [head, ...body] = rows
-        out.push('<table><thead><tr>' + head.map(c => `<th>${inlineMdToHtml(c)}</th>`).join('') + '</tr></thead><tbody>')
-        for (const r of body) out.push('<tr>' + r.map((c, ci) => `<td class="${ci === 0 ? 'lbl' : 'num'}">${inlineMdToHtml(c)}</td>`).join('') + '</tr>')
-        out.push('</tbody></table>')
-      }
+      const tl: string[] = []
+      while (i < lines.length && lines[i].startsWith('|')) { tl.push(lines[i]); i++ }
+      const linhas = tl.filter(l => !l.match(/^\|[\s\-:|]+\|$/))
+        .map(l => l.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map(c => stripInline(c.trim())))
+      if (linhas.length) out.push({ tipo: 'table', linhas })
       continue
     }
-    if (line.startsWith('```')) {
-      closeList(); i++
-      const code: string[] = []
-      while (i < lines.length && !lines[i].startsWith('```')) { code.push(lines[i]); i++ }
-      i++
-      out.push(`<pre>${escapeHtml(code.join('\n'))}</pre>`)
-      continue
-    }
-    if (line.startsWith('### ')) { closeList(); out.push(`<h3>${inlineMdToHtml(line.slice(4))}</h3>`) }
-    else if (line.startsWith('## ')) { closeList(); out.push(`<h2>${inlineMdToHtml(line.slice(3))}</h2>`) }
-    else if (line.startsWith('# ')) { closeList(); out.push(`<h1>${inlineMdToHtml(line.slice(2))}</h1>`) }
-    else if (line.match(/^[-*] /)) { if (!inList) { out.push('<ul>'); inList = true } out.push(`<li>${inlineMdToHtml(line.slice(2))}</li>`) }
-    else if (line.trim() === '') { closeList() }
-    else { closeList(); out.push(`<p>${inlineMdToHtml(line)}</p>`) }
+    if (line.startsWith('```')) { i++; while (i < lines.length && !lines[i].startsWith('```')) i++; i++; continue }
+    if (line.startsWith('### ')) out.push({ tipo: 'h3', texto: stripInline(line.slice(4)) })
+    else if (line.startsWith('## ')) out.push({ tipo: 'h2', texto: stripInline(line.slice(3)) })
+    else if (line.startsWith('# ')) out.push({ tipo: 'h1', texto: stripInline(line.slice(2)) })
+    else if (line.match(/^[-*] /)) out.push({ tipo: 'li', texto: stripInline(line.slice(2)) })
+    else if (line.trim() === '') out.push({ tipo: 'gap' })
+    else out.push({ tipo: 'p', texto: stripInline(line) })
     i++
   }
-  closeList()
-  return out.join('\n')
+  return out
 }
 
-const REPORT_PRINT_CSS = `
-@page { size: A4; margin: 18mm 15mm; }
-* { box-sizing: border-box; }
-body { font-family: 'Segoe UI', system-ui, Arial, sans-serif; color: #1f2a44; margin: 0; font-size: 12px; line-height: 1.55; }
-.rpt-head { display: flex; align-items: center; gap: 16px; border-bottom: 3px solid #283e93; padding-bottom: 14px; margin-bottom: 22px; }
-.rpt-head img { height: 60px; width: auto; }
-.rpt-org { font-size: 16px; font-weight: 700; color: #283e93; }
-.rpt-sub { font-size: 11px; color: #6b7488; margin-top: 2px; }
-.rpt-body h1 { font-size: 20px; color: #283e93; margin: 0 0 4px; }
-.rpt-body h2 { font-size: 15px; color: #283e93; margin: 18px 0 6px; }
-.rpt-body h3 { font-size: 13px; color: #3a4256; margin: 14px 0 4px; }
-.rpt-body p { margin: 0 0 7px; }
-.rpt-body ul { margin: 4px 0 10px; padding-left: 20px; }
-.rpt-body li { margin: 2px 0; }
-.rpt-body strong { color: #1f2a44; }
-.rpt-body code { background: #f1f4fb; color: #283e93; padding: 1px 5px; border-radius: 4px; font-family: 'Consolas', monospace; }
-.rpt-body pre { background: #f4f7fc; border: 1px solid #e3e9f5; border-radius: 8px; padding: 10px; overflow-x: auto; font-size: 11px; }
-.rpt-body table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 11px; page-break-inside: auto; }
-.rpt-body thead tr { background: #283e93; }
-.rpt-body th { color: #fff; text-align: left; padding: 8px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
-.rpt-body td { padding: 7px 10px; border-bottom: 1px solid #e8edf6; }
-.rpt-body td.num { text-align: right; font-family: 'Consolas', monospace; }
-.rpt-body td.lbl { font-weight: 600; }
-.rpt-body tbody tr:nth-child(even) td { background: #f7f9fd; }
-.rpt-body tr { page-break-inside: avoid; }
-.rpt-foot { margin-top: 26px; padding-top: 10px; border-top: 1px solid #e3e9f5; font-size: 9.5px; color: #9098a8; text-align: center; }
-@media print { .rpt-foot { position: fixed; bottom: 0; left: 0; right: 0; } }
-`
+// Carrega o logo da prefeitura como dataURL (para embutir no PDF). Null se falhar.
+async function carregarLogo(): Promise<string | null> {
+  try {
+    const res = await fetch('/logo-aruja.png')
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return await new Promise<string | null>(resolve => {
+      const r = new FileReader()
+      r.onload = () => resolve(typeof r.result === 'string' ? r.result : null)
+      r.onerror = () => resolve(null)
+      r.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
 
-// Abre uma janela com o relatório formatado e dispara a exportação de PDF do navegador.
-function baixarRelatorioPdf(markdown: string) {
-  const corpo = markdownToReportHtml(markdown)
-  const origin = window.location.origin
+// Gera o PDF do relatório e BAIXA direto (sem passar pela caixa de impressão).
+async function baixarRelatorioPdf(markdown: string) {
+  const { jsPDF } = await import('jspdf')
+  const autoTable = (await import('jspdf-autotable')).default
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const mx = 40
+  const maxY = pageH - 46
+  let y = 40
+
+  // Cabeçalho: logo + nome + data
+  const logo = await carregarLogo()
+  let headX = mx
+  if (logo) { try { doc.addImage(logo, 'PNG', mx, y, 50, 50); headX = mx + 62 } catch { /* logo opcional */ } }
+  doc.setTextColor(40, 62, 147); doc.setFont('helvetica', 'bold'); doc.setFontSize(15)
+  doc.text('Prefeitura Municipal de Arujá', headX, y + 20)
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120, 120, 140)
   const dataStr = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-  const win = window.open('', '_blank', 'width=920,height=1040')
-  if (!win) { alert('Permita pop-ups para baixar o PDF.'); return }
-  win.document.write(`<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8">
-<title>Relatório - Prefeitura de Arujá</title>
-<style>${REPORT_PRINT_CSS}</style>
-</head><body>
-<header class="rpt-head">
-  <img src="${origin}/logo-aruja.png" alt="Prefeitura de Arujá" onerror="this.style.display='none'" />
-  <div>
-    <div class="rpt-org">Prefeitura Municipal de Arujá</div>
-    <div class="rpt-sub">Relatório gerado pelo Assistente IA · ${dataStr}</div>
-  </div>
-</header>
-<main class="rpt-body">${corpo}</main>
-<footer class="rpt-foot">Documento gerado automaticamente a partir de dados do banco Sybase IQ — Prefeitura de Arujá.</footer>
-<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</script>
-</body></html>`)
-  win.document.close()
+  doc.text(`Relatório gerado pelo Assistente IA · ${dataStr}`, headX, y + 36)
+  y += 60
+  doc.setDrawColor(40, 62, 147); doc.setLineWidth(1.5); doc.line(mx, y, pageW - mx, y)
+  y += 20
+
+  const ensure = (h: number) => { if (y + h > maxY) { doc.addPage(); y = 40 } }
+  const addTexto = (texto: string, size: number, style: 'normal' | 'bold', cor: [number, number, number], gapAfter: number) => {
+    doc.setFont('helvetica', style); doc.setFontSize(size); doc.setTextColor(cor[0], cor[1], cor[2])
+    const lh = size * 1.35
+    for (const ln of doc.splitTextToSize(texto, pageW - 2 * mx)) { ensure(lh); doc.text(ln, mx, y); y += lh }
+    y += gapAfter
+  }
+
+  for (const b of parseBlocos(markdown)) {
+    if (b.tipo === 'gap') { y += 5 }
+    else if (b.tipo === 'h1') addTexto(b.texto, 16, 'bold', [40, 62, 147], 7)
+    else if (b.tipo === 'h2') addTexto(b.texto, 13, 'bold', [40, 62, 147], 4)
+    else if (b.tipo === 'h3') addTexto(b.texto, 11.5, 'bold', [58, 66, 86], 3)
+    else if (b.tipo === 'li') addTexto('•  ' + b.texto, 10.5, 'normal', [40, 42, 60], 2)
+    else if (b.tipo === 'p') addTexto(b.texto, 10.5, 'normal', [40, 42, 60], 5)
+    else if (b.tipo === 'table' && b.linhas.length) {
+      const [head, ...body] = b.linhas
+      ensure(50)
+      autoTable(doc, {
+        head: [head], body, startY: y, margin: { left: mx, right: mx },
+        styles: { fontSize: 9, cellPadding: 5, textColor: [40, 42, 60], lineColor: [230, 235, 245], lineWidth: 0.5 },
+        headStyles: { fillColor: [40, 62, 147], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [247, 249, 253] },
+        theme: 'grid',
+      })
+      y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14
+    }
+  }
+
+  // Rodapé + paginação em todas as páginas
+  const total = doc.getNumberOfPages()
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150, 150, 165)
+    doc.text('Documento gerado a partir de dados do banco Sybase IQ — Prefeitura de Arujá.', mx, pageH - 22)
+    doc.text(`${p}/${total}`, pageW - mx, pageH - 22, { align: 'right' })
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10)
+  doc.save(`Relatorio-Aruja-${stamp}.pdf`)
 }
 
 function ToolIndicator({ tool }: { tool: ToolEvent }) {
@@ -1145,7 +1150,7 @@ export default function ChatPage() {
                     {isAssistant && msg.content && i > 0 && messages[i - 1].role === 'user'
                       && pedeRelatorioPdf(messages[i - 1].content) && !(isLast && loading) && (
                       <div style={{ marginLeft: '44px' }}>
-                        <button className="kc-pdf-btn" onClick={() => baixarRelatorioPdf(msg.content)} title="Baixar este relatório em PDF">
+                        <button className="kc-pdf-btn" onClick={() => { baixarRelatorioPdf(msg.content).catch(() => alert('Não foi possível gerar o PDF. Tente novamente.')) }} title="Baixar este relatório em PDF">
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
                           </svg>
