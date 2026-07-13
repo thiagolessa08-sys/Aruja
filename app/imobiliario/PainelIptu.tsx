@@ -79,7 +79,7 @@ interface Resumo {
 }
 interface Diario { de: string; ate: string; dias: { dia: string; valor: number }[]; total: number }
 
-export default function PainelIptu({ ano }: { ano: number | '' }) {
+export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: number | '' }) {
   const [v, setV] = useState<Visao | null>(null)
   const [carregando, setCarregando] = useState(false)
   const [metrica, setMetrica] = useState<Metrica>('lancado')
@@ -117,16 +117,17 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
 
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
+  const mesQ = ano && mes ? `&mes=${mes}` : '' // mês selecionado → visão acumulada até o mês
 
-  // Visão geral (carrega já — é o topo da tela); reflete o bairro selecionado
+  // Visão geral (carrega já — é o topo da tela); reflete o bairro e o mês selecionados
   useEffect(() => {
     let vivo = true
     setCarregando(true); setDrillAno(null)
-    fetchJson(`/api/imobiliario/iptu-visao${qs}${bairroQ}`)
+    fetchJson(`/api/imobiliario/iptu-visao${qs}${bairroQ}${mesQ}`)
       .then(d => { if (vivo && d && !d.error) setV(d) })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
-  }, [qs, bairroQ])
+  }, [qs, bairroQ, mesQ])
 
   // Resumo — lazy (abaixo da dobra)
   useEffect(() => {
@@ -154,8 +155,17 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     return () => { vivo = false }
   }, [drillAno, anoPrevisto])
 
-  // Ao trocar o ano, define o intervalo padrão da arrecadação diária (jan→dez do ano)
-  useEffect(() => { if (ano) { setDe(`${ano}-01-01`); setAte(`${ano}-12-31`) } }, [ano])
+  // Intervalo padrão da arrecadação diária: jan→dez do ano, ou jan→fim do mês selecionado (acumulado)
+  useEffect(() => {
+    if (!ano) return
+    setDe(`${ano}-01-01`)
+    if (mes) {
+      const ld = new Date(Number(ano), Number(mes), 0).getDate() // último dia do mês
+      setAte(`${ano}-${String(mes).padStart(2, '0')}-${String(ld).padStart(2, '0')}`)
+    } else {
+      setAte(`${ano}-12-31`)
+    }
+  }, [ano, mes])
 
   useEffect(() => {
     if (!de || !ate || !obsDiario.visible) return
@@ -250,7 +260,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
 
       {/* Cabeçalho + data de atualização */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, margin: '0 4px 4px' }}>
-        <span style={{ fontSize: 18, fontWeight: 700, color: '#283e93' }}>Visão Geral do IPTU {v ? `· ${v.anoRef}` : ''}</span>
+        <span style={{ fontSize: 18, fontWeight: 700, color: '#283e93' }}>Visão Geral do IPTU {v ? `· ${v.anoRef}` : ''}{mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
         <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
           Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(v?.dataAtualizacao ?? null)}</b>
         </span>

@@ -10,6 +10,7 @@ import PainelTributo from '../tributo/PainelTributo'
 
 type Tributo = 'iptu' | 'itbi' | 'isscc'
 interface NaturezaOpt { id: string; label: string }
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 export default function ImobiliarioPage() {
   const router = useRouter()
@@ -19,6 +20,7 @@ export default function ImobiliarioPage() {
   // IPTU
   const [optsIptu, setOptsIptu] = useState<{ anos: number[] }>({ anos: [] })
   const [pAno, setPAno] = useState<number | ''>('')
+  const [pMes, setPMes] = useState<number | ''>('') // mês selecionado (acumulado); '' = ano todo
 
   // ITBI
   const [optsItbi, setOptsItbi] = useState<{ anos: number[]; naturezas: NaturezaOpt[] }>({ anos: [], naturezas: [] })
@@ -132,6 +134,10 @@ export default function ImobiliarioPage() {
                 <select aria-label="Exercício" value={pAno} onChange={e => setPAno(Number(e.target.value))} style={selectPill}>
                   {optsIptu.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
                 </select>
+                <select aria-label="Mês" value={pMes} onChange={e => setPMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
+                  <option value="">Mês: Ano todo</option>
+                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m} (acum.)</option>)}
+                </select>
               </>
             )}
             {tributo === 'itbi' && (
@@ -152,7 +158,7 @@ export default function ImobiliarioPage() {
         </div>
 
         {/* ===== PAINEL ===== */}
-        {tributo === 'iptu' && <PainelIptu ano={pAno} />}
+        {tributo === 'iptu' && <PainelIptu ano={pAno} mes={pMes} />}
         {tributo === 'itbi' && <PainelItbi filtros={filtrosItbi} />}
         {tributo === 'isscc' && <PainelTributo grupo="isscc" titulo="ISS Construção Civil" />}
 

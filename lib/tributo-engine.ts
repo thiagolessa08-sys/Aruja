@@ -367,6 +367,61 @@ export async function arrecadadoIptuMes(mesRef: number): Promise<Map<number, num
 }
 
 /**
+ * Buckets do IPTU ACUMULADOS até um mês (posição das parcelas com vencimento até `mes`),
+ * por exercício. Usado quando o usuário seleciona um mês no filtro — a tela reflete a
+ * posição "ano + mês acumulado":
+ *  • lancado    = SUM(mov 1,2,3) das parcelas venc mês<=ref (exclui Recalculo/Validacao)
+ *  • arrecadado = baixas 11,14 dessas parcelas
+ *  • emAberto   = saldo total (parcela_posicao) dessas parcelas (a receber)
+ *  • inadimplente = saldo vencido (dt_vencimento < hoje) dessas parcelas (atrasado)
+ */
+export interface BucketAteMesIptu { lancado: number; arrecadado: number; emAberto: number; inadimplente: number }
+
+export async function bucketsIptuAteMes(mes: number): Promise<Map<number, BucketAteMesIptu>> {
+  return cached(`bucketsIptuAteMes:${mes}`, TTL_15MIN, async () => {
+    const [lancR, arrecR, saldoR] = await Promise.all([
+      agentQuery(`
+        SELECT g.no_exercicio_lancamento ex, g.ds_situacao sit, SUM(pm.vl_movimento) vl
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela NOT IN (0)
+          AND MONTH(p.dt_vencimento) <= ${mes}
+        GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 800),
+      agentQuery(`
+        SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
+          AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
+          AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND MONTH(p.dt_vencimento) <= ${mes}
+        GROUP BY g.no_exercicio_lancamento`, 200),
+      agentQuery(`
+        SELECT g.no_exercicio_lancamento ex, SUM(pp.vl_saldo) aberto,
+               SUM(CASE WHEN p.dt_vencimento < getdate() THEN pp.vl_saldo ELSE 0 END) venc
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND p.no_parcela NOT IN (0)
+          AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND MONTH(p.dt_vencimento) <= ${mes}
+        GROUP BY g.no_exercicio_lancamento`, 200),
+    ])
+    const map = new Map<number, BucketAteMesIptu>()
+    const get = (ex: number) => map.get(ex) ?? { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0 }
+    for (const r of lancR.rows) {
+      const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+      if (LANC_SIT_EXCLUIR.has(String(r[1] ?? '').trim())) continue
+      const b = get(ex); b.lancado += num(r[2]); map.set(ex, b)
+    }
+    for (const r of arrecR.rows) { const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue; const b = get(ex); b.arrecadado = num(r[1]); map.set(ex, b) }
+    for (const r of saldoR.rows) { const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); b.inadimplente = Math.max(0, num(r[2])); map.set(ex, b) }
+    return map
+  })
+}
+
+/**
  * Série MENSAL do IPTU de um exercício (para o drill "por mês"), tudo por MÊS:
  *  • lancado  = SUM(vl_movimento) mov 1,2,3 por MÊS de vencimento da parcela
  *  • arrecadado = SUM(vl_movimento) baixas 11,14 por MÊS da baixa (pagamento)
