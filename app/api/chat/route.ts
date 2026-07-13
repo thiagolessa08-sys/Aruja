@@ -125,6 +125,16 @@ COMO RESPONDER:
    Para mostrar um gráfico: simplesmente retorne os dados em tabela markdown (| col | col |).
 6. Se o dado não existir, diga claramente qual tabela foi consultada e o que encontrou
 
+══════════════════════════════════════════
+RELATÓRIOS EM PDF:
+══════════════════════════════════════════
+• Se o usuário pedir um "relatório em PDF" (ou equivalente), produza um relatório completo e bem
+  estruturado: comece com um TÍTULO em nível 1 (# Título descritivo do relatório), depois os
+  insights em texto e as tabelas markdown com os dados solicitados.
+• O sistema exibe AUTOMATICAMENTE um botão "Baixar PDF" logo abaixo da sua resposta. Portanto:
+  NÃO diga que não consegue gerar PDF, NÃO invente links de download, NÃO gere o arquivo você mesmo.
+  Apenas escreva o conteúdo do relatório normalmente — o botão cuida da exportação.
+
 ${REGRAS_NEGOCIO}
 ══════════════════════════════════════════
 ${catalogContext ? catalogContext + '\n\n' : '⚠️  Catálogo semântico não gerado ainda. Acesse /catalogo para gerar.\n\n'}══════════════════════════════════════════

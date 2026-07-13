@@ -395,6 +395,18 @@ const CSS = `
 .kc-send-btn:active { transform: scale(.95); }
 .kc-send-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 
+/* Botão baixar PDF */
+.kc-pdf-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: #fff; color: #283e93;
+  border: 1.5px solid #cdd5ef; border-radius: 12px;
+  padding: 8px 14px; font-size: 12.5px; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(40,80,180,.06);
+  transition: background .12s, color .12s, border-color .12s;
+}
+.kc-pdf-btn:hover { background: #283e93; color: #fff; border-color: #283e93; }
+
 /* Spinner */
 @keyframes kc-spin { to { transform: rotate(360deg); } }
 .kc-spin { animation: kc-spin .8s linear infinite; }
@@ -719,6 +731,123 @@ function MarkdownText({ text }: { text: string }) {
   return <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>{elements}</div>
 }
 
+// ————————————— Relatório em PDF —————————————
+// Detecta pedido de relatório em PDF na mensagem do usuário.
+function pedeRelatorioPdf(text: string): boolean {
+  return /\bpdf\b/i.test(text)
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function inlineMdToHtml(text: string): string {
+  let h = escapeHtml(text)
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  h = h.replace(/`([^`]+)`/g, '<code>$1</code>')
+  h = h.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+  return h
+}
+
+// Converte o markdown da resposta em HTML pronto para impressão (título, texto, tabelas).
+function markdownToReportHtml(md: string): string {
+  const lines = md.split('\n')
+  const out: string[] = []
+  let i = 0
+  let inList = false
+  const closeList = () => { if (inList) { out.push('</ul>'); inList = false } }
+  while (i < lines.length) {
+    const line = lines[i]
+    if (line.startsWith('|')) {
+      closeList()
+      const tableLines: string[] = []
+      while (i < lines.length && lines[i].startsWith('|')) { tableLines.push(lines[i]); i++ }
+      const rows = tableLines
+        .filter(l => !l.match(/^\|[\s\-:|]+\|$/))
+        .map(l => l.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map(c => c.trim()))
+      if (rows.length) {
+        const [head, ...body] = rows
+        out.push('<table><thead><tr>' + head.map(c => `<th>${inlineMdToHtml(c)}</th>`).join('') + '</tr></thead><tbody>')
+        for (const r of body) out.push('<tr>' + r.map((c, ci) => `<td class="${ci === 0 ? 'lbl' : 'num'}">${inlineMdToHtml(c)}</td>`).join('') + '</tr>')
+        out.push('</tbody></table>')
+      }
+      continue
+    }
+    if (line.startsWith('```')) {
+      closeList(); i++
+      const code: string[] = []
+      while (i < lines.length && !lines[i].startsWith('```')) { code.push(lines[i]); i++ }
+      i++
+      out.push(`<pre>${escapeHtml(code.join('\n'))}</pre>`)
+      continue
+    }
+    if (line.startsWith('### ')) { closeList(); out.push(`<h3>${inlineMdToHtml(line.slice(4))}</h3>`) }
+    else if (line.startsWith('## ')) { closeList(); out.push(`<h2>${inlineMdToHtml(line.slice(3))}</h2>`) }
+    else if (line.startsWith('# ')) { closeList(); out.push(`<h1>${inlineMdToHtml(line.slice(2))}</h1>`) }
+    else if (line.match(/^[-*] /)) { if (!inList) { out.push('<ul>'); inList = true } out.push(`<li>${inlineMdToHtml(line.slice(2))}</li>`) }
+    else if (line.trim() === '') { closeList() }
+    else { closeList(); out.push(`<p>${inlineMdToHtml(line)}</p>`) }
+    i++
+  }
+  closeList()
+  return out.join('\n')
+}
+
+const REPORT_PRINT_CSS = `
+@page { size: A4; margin: 18mm 15mm; }
+* { box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, Arial, sans-serif; color: #1f2a44; margin: 0; font-size: 12px; line-height: 1.55; }
+.rpt-head { display: flex; align-items: center; gap: 16px; border-bottom: 3px solid #283e93; padding-bottom: 14px; margin-bottom: 22px; }
+.rpt-head img { height: 60px; width: auto; }
+.rpt-org { font-size: 16px; font-weight: 700; color: #283e93; }
+.rpt-sub { font-size: 11px; color: #6b7488; margin-top: 2px; }
+.rpt-body h1 { font-size: 20px; color: #283e93; margin: 0 0 4px; }
+.rpt-body h2 { font-size: 15px; color: #283e93; margin: 18px 0 6px; }
+.rpt-body h3 { font-size: 13px; color: #3a4256; margin: 14px 0 4px; }
+.rpt-body p { margin: 0 0 7px; }
+.rpt-body ul { margin: 4px 0 10px; padding-left: 20px; }
+.rpt-body li { margin: 2px 0; }
+.rpt-body strong { color: #1f2a44; }
+.rpt-body code { background: #f1f4fb; color: #283e93; padding: 1px 5px; border-radius: 4px; font-family: 'Consolas', monospace; }
+.rpt-body pre { background: #f4f7fc; border: 1px solid #e3e9f5; border-radius: 8px; padding: 10px; overflow-x: auto; font-size: 11px; }
+.rpt-body table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 11px; page-break-inside: auto; }
+.rpt-body thead tr { background: #283e93; }
+.rpt-body th { color: #fff; text-align: left; padding: 8px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.rpt-body td { padding: 7px 10px; border-bottom: 1px solid #e8edf6; }
+.rpt-body td.num { text-align: right; font-family: 'Consolas', monospace; }
+.rpt-body td.lbl { font-weight: 600; }
+.rpt-body tbody tr:nth-child(even) td { background: #f7f9fd; }
+.rpt-body tr { page-break-inside: avoid; }
+.rpt-foot { margin-top: 26px; padding-top: 10px; border-top: 1px solid #e3e9f5; font-size: 9.5px; color: #9098a8; text-align: center; }
+@media print { .rpt-foot { position: fixed; bottom: 0; left: 0; right: 0; } }
+`
+
+// Abre uma janela com o relatório formatado e dispara a exportação de PDF do navegador.
+function baixarRelatorioPdf(markdown: string) {
+  const corpo = markdownToReportHtml(markdown)
+  const origin = window.location.origin
+  const dataStr = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  const win = window.open('', '_blank', 'width=920,height=1040')
+  if (!win) { alert('Permita pop-ups para baixar o PDF.'); return }
+  win.document.write(`<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<title>Relatório - Prefeitura de Arujá</title>
+<style>${REPORT_PRINT_CSS}</style>
+</head><body>
+<header class="rpt-head">
+  <img src="${origin}/logo-aruja.png" alt="Prefeitura de Arujá" onerror="this.style.display='none'" />
+  <div>
+    <div class="rpt-org">Prefeitura Municipal de Arujá</div>
+    <div class="rpt-sub">Relatório gerado pelo Assistente IA · ${dataStr}</div>
+  </div>
+</header>
+<main class="rpt-body">${corpo}</main>
+<footer class="rpt-foot">Documento gerado automaticamente a partir de dados do banco Sybase IQ — Prefeitura de Arujá.</footer>
+<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</script>
+</body></html>`)
+  win.document.close()
+}
+
 function ToolIndicator({ tool }: { tool: ToolEvent }) {
   const [showSql, setShowSql] = useState(false)
 
@@ -1010,6 +1139,18 @@ export default function ChatPage() {
                     {isLast && isAssistant && toolEvents.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '44px' }}>
                         {toolEvents.map((t, ti) => <ToolIndicator key={ti} tool={t} />)}
+                      </div>
+                    )}
+
+                    {isAssistant && msg.content && i > 0 && messages[i - 1].role === 'user'
+                      && pedeRelatorioPdf(messages[i - 1].content) && !(isLast && loading) && (
+                      <div style={{ marginLeft: '44px' }}>
+                        <button className="kc-pdf-btn" onClick={() => baixarRelatorioPdf(msg.content)} title="Baixar este relatório em PDF">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
+                          </svg>
+                          Baixar PDF
+                        </button>
                       </div>
                     )}
                   </div>
