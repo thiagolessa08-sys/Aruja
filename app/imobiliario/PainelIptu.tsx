@@ -510,20 +510,32 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
               <button key={id} onClick={() => setRankTipo(id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '6px 14px', fontSize: 12.5, fontWeight: 600, background: rankTipo === id ? '#283e93' : 'transparent', color: rankTipo === id ? '#fff' : '#5b6477' }}>{lbl}</button>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
-            {METRICAS4.map(m => (
-              <button key={m.id} onClick={() => setRankMetrica(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: rankMetrica === m.id ? '#283e93' : 'transparent', color: rankMetrica === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
-            ))}
-          </div>
+          <span style={{ fontSize: 10.5, color: '#9098a8' }}>Clique numa coluna de valor para ordenar</span>
         </div>
         <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ maxHeight: 460, overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['#', rankTipo === 'imovel' ? 'Imóvel' : 'Proprietário', 'Lançado', 'Arrecadado', 'Em aberto', 'Inadimpl.'].map((h, i) => (
-                    <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 600, padding: '10px 12px', textAlign: i <= 1 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                  ))}
+                  {([
+                    { h: '#', m: null as Metrica4 | null },
+                    { h: rankTipo === 'imovel' ? 'Imóvel' : 'Proprietário', m: null as Metrica4 | null },
+                    { h: 'Lançado', m: 'lancado' as Metrica4 },
+                    { h: 'Arrecadado', m: 'arrecadado' as Metrica4 },
+                    { h: 'Em aberto', m: 'emAberto' as Metrica4 },
+                    { h: 'Inadimpl.', m: 'inadimplencia' as Metrica4 },
+                  ]).map((c, i) => {
+                    const ativo = !!c.m && rankMetrica === c.m
+                    return (
+                      <th key={c.h} onClick={() => { if (c.m) setRankMetrica(c.m) }} title={c.m ? 'Ordenar pelos maiores desta coluna' : undefined}
+                        style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 600, padding: '10px 12px', textAlign: i <= 1 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)', cursor: c.m ? 'pointer' : 'default', userSelect: 'none' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: i <= 1 ? 'flex-start' : 'flex-end' }}>
+                          {c.h}
+                          {c.m ? <span style={{ fontSize: 10, opacity: ativo ? 1 : 0.45 }}>{ativo ? '▼' : '↕'}</span> : null}
+                        </span>
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody>
