@@ -353,9 +353,11 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
           const mx = Math.max(1, ...bairros.map(b => b[metricaBairro]))
           const corM = METRICAS.find(m => m.id === metricaBairro)!.cor
           if (!bairros.length) return <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados para os filtros selecionados.</div>
+          // Ordena sempre pelo maior valor da métrica selecionada (Lançado/Arrecadado/Inadimplência)
+          const lista = [...bairros].sort((a, b) => b[metricaBairro] - a[metricaBairro])
           return (
             <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
-              {bairros.map((b, i) => {
+              {lista.map((b, i) => {
                 const w = Math.max(2, 100 * b[metricaBairro] / mx)
                 const podeDrill = nivelBairro === 'bairro'
                 return (
