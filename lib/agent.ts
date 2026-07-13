@@ -1,11 +1,20 @@
 const AGENT_URL = process.env.AGENT_URL!
 const AGENT_API_KEY = process.env.AGENT_API_KEY!
+// Service token do Cloudflare Access (quando o agente está atrás do Zero Trust).
+const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID
+const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET
 
 function headers() {
-  return {
+  const h: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-API-Key': AGENT_API_KEY,
   }
+  // Autentica no Cloudflare Access (se configurado) — senão o Access barra a requisição.
+  if (CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
+    h['CF-Access-Client-Id'] = CF_ACCESS_CLIENT_ID
+    h['CF-Access-Client-Secret'] = CF_ACCESS_CLIENT_SECRET
+  }
+  return h
 }
 
 export async function agentHealth(): Promise<{ status: string; db: string }> {
