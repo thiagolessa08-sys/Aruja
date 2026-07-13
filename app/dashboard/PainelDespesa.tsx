@@ -259,6 +259,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   const [carregando, setCarregando] = useState(false)
   const [top10, setTop10] = useState(false)        // filtra os 10 maiores fornecedores
   const [buscaForn, setBuscaForn] = useState('')   // busca de fornecedor
+  const [fornSort, setFornSort] = useState<{ col: 'empenhado' | 'liquidado' | 'pago'; dir: 'asc' | 'desc' } | null>(null)
 
   const ind = filtros.indicador || 'Liquidado'     // indicador selecionado (reflete nos títulos)
   const qs = buildQS(filtros)
@@ -601,16 +602,35 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
           const q = buscaForn.trim().toLowerCase()
           let lista = fornecedores.itens
           if (q) lista = lista.filter(f => f.nome.toLowerCase().includes(q) || f.doc.toLowerCase().includes(q))
+          if (fornSort) {
+            const { col, dir } = fornSort
+            lista = [...lista].sort((a, b) => dir === 'asc' ? a[col] - b[col] : b[col] - a[col])
+          }
           if (top10) lista = lista.slice(0, 10)
+          const COLS: { label: string; key: 'empenhado' | 'liquidado' | 'pago' }[] = [
+            { label: 'Empenhado', key: 'empenhado' }, { label: 'Liquidado', key: 'liquidado' }, { label: 'Pago', key: 'pago' },
+          ]
+          const clicarOrd = (key: 'empenhado' | 'liquidado' | 'pago') =>
+            setFornSort(s => s?.col === key ? (s.dir === 'desc' ? { col: key, dir: 'asc' } : null) : { col: key, dir: 'desc' })
           return (
             <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ maxHeight: 420, overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
-                      {['Fornecedores', 'Empenhado', 'Liquidado', 'Pago'].map((h, i) => (
-                        <th key={h} style={{ position: 'sticky', top: 0, zIndex: 1, background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                      ))}
+                      <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: 'left', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Fornecedores</th>
+                      {COLS.map(c => {
+                        const ativo = fornSort?.col === c.key
+                        return (
+                          <th key={c.key} onClick={() => clicarOrd(c.key)} title="Ordenar por esta coluna"
+                            style={{ position: 'sticky', top: 0, zIndex: 1, background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.18)', cursor: 'pointer', userSelect: 'none' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                              {c.label}
+                              <span style={{ fontSize: 10, opacity: ativo ? 1 : 0.45 }}>{ativo ? (fornSort!.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                            </span>
+                          </th>
+                        )
+                      })}
                     </tr>
                   </thead>
                   <tbody>
