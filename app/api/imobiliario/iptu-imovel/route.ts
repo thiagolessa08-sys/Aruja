@@ -6,12 +6,18 @@ const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 const esc = (s: string) => s.replace(/'/g, "''")
 
-// Busca de imóveis por inscrição/código (numérico) ou proprietário (texto).
-async function buscar(q: string) {
+// Busca de imóveis. `tipo` escolhe o campo: inscricao (alfanumérica, ex. NE11100612.000),
+// codigo (cd_imovel_urbano) ou nome (proprietário). Sem tipo → heurística automática.
+async function buscar(q: string, tipo: string) {
   const qn = q.replace(/\D/g, '')
-  const cond = /^\d+$/.test(q)
-    ? `(i.cd_imovel_urbano = ${qn || 0} OR i.no_inscricao_imovel LIKE '${qn}%')`
-    : `cp.nm_rsocial LIKE '%${esc(q.toUpperCase())}%'`
+  const escQ = esc(q.toUpperCase())
+  let cond: string
+  if (tipo === 'inscricao') cond = `i.no_inscricao_imovel LIKE '%${escQ}%'`
+  else if (tipo === 'codigo') cond = `i.cd_imovel_urbano = ${qn || 0}`
+  else if (tipo === 'nome') cond = `cp.nm_rsocial LIKE '%${escQ}%'`
+  else cond = /^\d+$/.test(q) // auto: número → código/inscrição; texto → nome/inscrição
+    ? `(i.cd_imovel_urbano = ${qn || 0} OR i.no_inscricao_imovel LIKE '%${escQ}%')`
+    : `(cp.nm_rsocial LIKE '%${escQ}%' OR i.no_inscricao_imovel LIKE '%${escQ}%')`
   const r = await agentQuery(`SELECT TOP 20 i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, c.ds_endereco, c.nm_bairro, cp.nm_rsocial
     FROM ${S}.tb_dsod_imovel_urbano i
     LEFT JOIN ${S}.tb_dsod_cep c ON i.cd_cep = c.cd_cep
@@ -96,8 +102,9 @@ export async function GET(req: NextRequest) {
     const id = Number(sp.get('id'))
     if (id) return NextResponse.json({ detalhe: await detalhe(id) })
     const q = (sp.get('q') || '').trim()
+    const tipo = (sp.get('tipo') || '').trim()
     if (q.length < 2) return NextResponse.json({ matches: [] })
-    return NextResponse.json({ matches: await buscar(q) })
+    return NextResponse.json({ matches: await buscar(q, tipo) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

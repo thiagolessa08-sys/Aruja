@@ -15,7 +15,7 @@ function baseBairro(f: FiltrosBairro, grupo: string) {
   const joinProp = f.espolio ? `JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario` : ''
   let w = `g.no_exercicio_lancamento = ${f.ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
   if (f.espolio) w += ` AND cp.nm_rsocial LIKE '%ESP_LIO%'`
-  if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = '' OR i.no_imovel = '0')`
+  if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)` // no_imovel é NUMÉRICO
   if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
   return {
     from: `FROM ${S}.tb_dsod_guias g
@@ -122,8 +122,14 @@ export function rankingIptu(tipo: 'imovel' | 'proprietario', ano: number, metric
         nomes.set(k, { nome: `Insc. ${String(r[1] ?? k).trim()}`, endereco: `${rua}${no ? ', ' + no : ''}${bairro2 ? ' — ' + bairro2 : ''}`, extra: String(r[5] ?? '').trim() })
       }
     } else {
-      const e = await agentQuery(`SELECT cd_contr, nm_rsocial, no_cpf_cnpj FROM ${S}.tb_dsod_contribuinte WHERE cd_contr IN (${keys.join(',')})`, 200)
-      for (const r of e.rows) nomes.set(String(r[0]), { nome: String(r[1] ?? '').trim() || `Contrib. ${r[0]}`, endereco: '', extra: String(r[2] ?? '').trim() })
+      const [e, qi] = await Promise.all([
+        agentQuery(`SELECT cd_contr, nm_rsocial, no_cpf_cnpj FROM ${S}.tb_dsod_contribuinte WHERE cd_contr IN (${keys.join(',')})`, 200),
+        // Qtd total de imóveis de cada proprietário (item 13/07: mostrar nome + qtd imóveis)
+        agentQuery(`SELECT cd_contr_proprietario, COUNT(DISTINCT cd_imovel_urbano) FROM ${S}.tb_dsod_imovel_urbano WHERE cd_contr_proprietario IN (${keys.join(',')}) GROUP BY cd_contr_proprietario`, 200),
+      ])
+      const qtImap = new Map<string, number>()
+      for (const r of qi.rows) qtImap.set(String(r[0]), num(r[1]))
+      for (const r of e.rows) nomes.set(String(r[0]), { nome: String(r[1] ?? '').trim() || `Contrib. ${r[0]}`, endereco: `${qtImap.get(String(r[0])) ?? 0} imóveis`, extra: String(r[2] ?? '').trim() })
     }
     return keys.map(k => ({ chave: k, ...g(k), ...(nomes.get(k) ?? { nome: `${tipo === 'imovel' ? 'Imóvel' : 'Contrib.'} ${k}`, endereco: '', extra: '' }) }))
   })
@@ -133,18 +139,25 @@ export function rankingIptu(tipo: 'imovel' | 'proprietario', ano: number, metric
 export function resumoIptu(ano: number, bairro: string | null) {
   return cached(`iptuResumo:${ano}:${bairro ?? ''}`, CACHE_TTL, async () => {
     const jb = bairro ? `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem=iu.cd_imovel_urbano JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep AND ce.nm_bairro='${bairro.replace(/'/g, "''")}'` : ''
-    const inBairro = bairro ? `AND cd_imovel_urbano IN (SELECT iu.cd_imovel_urbano FROM ${S}.tb_dsod_imovel_urbano iu JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep WHERE ce.nm_bairro='${bairro.replace(/'/g, "''")}')` : ''
-    const [sitR, tcaR, itbiR, empR, semTcaR, semIptuR, forma] = await Promise.all([
-      agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo IN (1,25) AND g.no_exercicio_lancamento=${ano} GROUP BY g.ds_situacao`, 20),
-      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano}`, 1),
-      agentQuery(`SELECT COUNT(DISTINCT cd_imovel_urbano) FROM ${S}.tb_dsod_itbi_imovel_urbano WHERE 1=1 ${inBairro}`, 1),
-      agentQuery(`SELECT COUNT(DISTINCT cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico WHERE 1=1 ${inBairro}`, 1),
-      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo IN (1,25) AND g.no_exercicio_lancamento=${ano} AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo=67 AND t.no_exercicio_lancamento=${ano})`, 1),
-      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo IN (1,25) AND t.no_exercicio_lancamento=${ano})`, 1),
+    // Base MANDATÓRIA da análise: imóveis com IPTU (cd_tributo=1) do exercício — os que
+    // compõem o valor total lançado. Todas as demais contagens são INTERSEÇÃO com essa base.
+    const baseIptu = `SELECT DISTINCT g2.cd_origem FROM ${S}.tb_dsod_guias g2 WHERE g2.cd_tributo=1 AND g2.no_exercicio_lancamento=${ano} AND g2.ds_situacao NOT IN ('Recalculo','Validacao')`
+    const [comIptuR, sitR, tcaR, itbiR, empR, semTcaR, forma] = await Promise.all([
+      // Com IPTU = qtd de imóveis que compõem o lançado do exercício
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')`, 1),
+      agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} GROUP BY g.ds_situacao`, 20),
+      // Dos imóveis COM IPTU, quantos também têm TCA (cd_tributo=67) no exercício
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem IN (${baseIptu})`, 1),
+      // …quantos têm ITBI
+      agentQuery(`SELECT COUNT(DISTINCT it.cd_imovel_urbano) FROM ${S}.tb_dsod_itbi_imovel_urbano it WHERE it.cd_imovel_urbano IN (${baseIptu})`, 1),
+      // …quantos têm empresa no mesmo endereço
+      agentQuery(`SELECT COUNT(DISTINCT mf.cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico mf WHERE mf.cd_imovel_urbano IN (${baseIptu})`, 1),
+      // …quantos têm IPTU e NÃO tiveram lançamento de TCA no exercício
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo=67 AND t.no_exercicio_lancamento=${ano})`, 1),
       formaPagamentoIptu(),
     ])
+    const comIptu = num(comIptuR.rows[0]?.[0])
     const situacao = sitR.rows.map(r => ({ situacao: String(r[0] ?? '').trim() || '—', qt: num(r[1]) })).sort((a, b) => b.qt - a.qt)
-    const comIptu = situacao.reduce((s, x) => s + x.qt, 0)
     const fp = forma.get(ano) ?? { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
     const pagamento = [
       { status: 'Cota única', qt: fp.cotaUnica, cor: '#1fa463' },
@@ -155,7 +168,7 @@ export function resumoIptu(ano: number, bairro: string | null) {
     return {
       resumo: {
         comIptu, comItbi: num(itbiR.rows[0]?.[0]), comTca: num(tcaR.rows[0]?.[0]), comEmpresa: num(empR.rows[0]?.[0]),
-        iptuSemTca: num(semTcaR.rows[0]?.[0]), tcaSemIptu: num(semIptuR.rows[0]?.[0]),
+        iptuSemTca: num(semTcaR.rows[0]?.[0]),
       },
       situacao, pagamento,
     }

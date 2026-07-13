@@ -1,4 +1,4 @@
-import { serieTributo, rankingTributos, bucketsIptu, qtdImoveisIptu, formaPagamentoIptu, dataAtualizacaoIptu, serieMensalIptu } from '@/lib/tributo-engine'
+import { serieTributo, rankingTributos, bucketsIptu, bucketsIptuMes, qtdImoveisIptu, formaPagamentoIptu, dataAtualizacaoIptu, serieMensalIptu } from '@/lib/tributo-engine'
 import { bairrosIptu, rankingIptu, resumoIptu } from '@/lib/iptu-agg'
 import { resumoDivida } from '@/lib/divida-engine'
 import { resumoCobranca } from '@/lib/cobranca-engine'
@@ -14,6 +14,7 @@ async function runAll() {
 
   // --- IPTU: Visão Geral ---
   try { await bucketsIptu() } catch { /* ignora */ }
+  try { await bucketsIptuMes(new Date().getMonth() + 1) } catch { /* ignora */ } // YTD dos cards/evolução
   try { await dataAtualizacaoIptu() } catch { /* ignora */ }
   try { await serieMensalIptu(anoAtual) } catch { /* ignora */ }
   try { await serieMensalIptu(anoAtual - 1) } catch { /* ignora */ }

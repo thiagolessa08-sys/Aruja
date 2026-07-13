@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { bucketsIptu, bucketsIptuBairro, dataAtualizacaoIptu, isentoIptu, type BucketsIptuAno } from '@/lib/tributo-engine'
+import { bucketsIptu, bucketsIptuBairro, bucketsIptuMes, dataAtualizacaoIptu, isentoIptu, type BucketsIptuAno } from '@/lib/tributo-engine'
 
 const ANO_MIN = 2020
 
@@ -23,8 +23,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const bairro = req.nextUrl.searchParams.get('bairro') || null
-    const [buckets, dataAtualizacao] = await Promise.all([
+    // Mês de referência p/ comparação justa entre anos (YTD): mês atual (ex.: julho).
+    const mesRef = new Date().getMonth() + 1
+    const [buckets, bucketsMes, dataAtualizacao] = await Promise.all([
       bairro ? bucketsIptuBairro(bairro) : bucketsIptu(),
+      bairro ? Promise.resolve(null) : bucketsIptuMes(mesRef),
       dataAtualizacaoIptu(),
     ])
 
@@ -39,6 +42,11 @@ export async function GET(req: NextRequest) {
     const zero: BucketsIptuAno = { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 }
     const bRef = buckets.get(anoRef) ?? zero
     const bAnt = buckets.get(anoAnt) ?? zero
+    // Arrecadado / em aberto / inadimplência: YTD (até mês de referência) p/ comparar anos.
+    // Sem bairro usa bucketsMes; com bairro cai no valor anual do próprio bucket.
+    const zeroM = { arrecadado: 0, emAberto: 0, inadimplente: 0 }
+    const mRef = bucketsMes ? (bucketsMes.get(anoRef) ?? zeroM) : { arrecadado: bRef.arrecadado, emAberto: bRef.emAberto, inadimplente: bRef.inadimplente }
+    const mAnt = bucketsMes ? (bucketsMes.get(anoAnt) ?? zeroM) : { arrecadado: bAnt.arrecadado, emAberto: bAnt.emAberto, inadimplente: bAnt.inadimplente }
 
     // Isento oficial (regra nova) — só na visão geral (sem bairro); fallback = bucket
     let isentoRef = bRef.isento, isentoAnt = bAnt.isento
@@ -49,38 +57,40 @@ export async function GET(req: NextRequest) {
     }
 
     const cmp = (atual: number, ant: number) => ({ atual, ant, pct: ant ? ((atual - ant) / ant) * 100 : (atual > 0 ? 100 : 0) })
-    // Cards com valor atual, ano anterior e % de variação
+    // Cards: Lançado/Isento/Suspenso = anual; Arrecadado/Inadimplência/Em aberto = YTD (até mês ref)
     const cards = {
       lancado: cmp(bRef.lancado, bAnt.lancado),
-      arrecadado: cmp(bRef.arrecadado, bAnt.arrecadado),
-      inadimplencia: cmp(bRef.inadimplente, bAnt.inadimplente),
-      emAberto: cmp(bRef.emAberto, bAnt.emAberto),
+      arrecadado: cmp(mRef.arrecadado, mAnt.arrecadado),
+      inadimplencia: cmp(mRef.inadimplente, mAnt.inadimplente),
+      emAberto: cmp(mRef.emAberto, mAnt.emAberto),
       isento: cmp(isentoRef, isentoAnt),
       suspenso: cmp(bRef.suspenso, bAnt.suspenso),
     }
 
-    // Evolução: últimos 5 exercícios + previsão do próximo ano (regressão dos 5)
-    const pctFn = (b: BucketsIptuAno) => ({
-      arrecPct: b.lancado ? (b.arrecadado / b.lancado) * 100 : 0,
-      inadPct: b.lancado ? (b.inadimplente / b.lancado) * 100 : 0,
+    // Evolução: Lançado anual; Arrecadado/Inadimplência YTD (até mês ref) p/ comparar anos.
+    const arrecMes = (a: number) => bucketsMes ? (bucketsMes.get(a)?.arrecadado ?? 0) : (buckets.get(a)?.arrecadado ?? 0)
+    const inadMes = (a: number) => bucketsMes ? (bucketsMes.get(a)?.inadimplente ?? 0) : (buckets.get(a)?.inadimplente ?? 0)
+    const pctFn = (lanc: number, arrec: number, inad: number) => ({
+      arrecPct: lanc ? (arrec / lanc) * 100 : 0,
+      inadPct: lanc ? (inad / lanc) * 100 : 0,
     })
     const histAnos: number[] = []
     for (let a = anoMax - 4; a <= anoMax; a++) histAnos.push(a)
-    const hist = histAnos.map(a => ({ ano: a, b: buckets.get(a) ?? zero }))
-    const evolucao = hist.map(({ ano, b }) => ({
-      ano, lancado: b.lancado, arrecadado: b.arrecadado, inadimplencia: b.inadimplente, previsto: false, ...pctFn(b),
+    const hist = histAnos.map(a => ({ ano: a, lancado: (buckets.get(a) ?? zero).lancado, arrecadado: arrecMes(a), inadimplencia: inadMes(a) }))
+    const evolucao = hist.map(h => ({
+      ano: h.ano, lancado: h.lancado, arrecadado: h.arrecadado, inadimplencia: h.inadimplencia, previsto: false, ...pctFn(h.lancado, h.arrecadado, h.inadimplencia),
     }))
     // Previsão do próximo ano
-    const projL = tendencia(hist.map(h => ({ x: h.ano, y: h.b.lancado })))
-    const projA = tendencia(hist.map(h => ({ x: h.ano, y: h.b.arrecadado })))
-    const projI = tendencia(hist.map(h => ({ x: h.ano, y: h.b.inadimplente })))
+    const projL = tendencia(hist.map(h => ({ x: h.ano, y: h.lancado })))
+    const projA = tendencia(hist.map(h => ({ x: h.ano, y: h.arrecadado })))
+    const projI = tendencia(hist.map(h => ({ x: h.ano, y: h.inadimplencia })))
     const pl = Math.max(0, projL(proximo)), pa = Math.max(0, projA(proximo)), pi = Math.max(0, projI(proximo))
     evolucao.push({
       ano: proximo, lancado: pl, arrecadado: pa, inadimplencia: pi, previsto: true,
       arrecPct: pl ? (pa / pl) * 100 : 0, inadPct: pl ? (pi / pl) * 100 : 0,
     })
 
-    return NextResponse.json({ dataAtualizacao, anos, anoRef, cards, evolucao, bairro })
+    return NextResponse.json({ dataAtualizacao, anos, anoRef, mesRef, cards, evolucao, bairro })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { AreaChart, Area, LineChart, Line, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay from '../_components/LoadingOverlay'
 
 // Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
@@ -35,13 +35,15 @@ interface Visao {
   dataAtualizacao: string | null
   anos: number[]
   anoRef: number
+  mesRef: number
   cards: { lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp }
   evolucao: { ano: number; lancado: number; arrecadado: number; inadimplencia: number; previsto: boolean; arrecPct: number; inadPct: number }[]
 }
-// abreviação compacta (rótulos das barras): 67,6mi / 540K
+const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+// abreviação compacta padrão: mi (milhão) e k (milhar). Ex.: 67,6 mi / 540 k
 const fmtAbrev = (v: number) => {
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'mi'
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + 'K'
+  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mi'
+  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' k'
   return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
 
@@ -72,16 +74,8 @@ interface ImovelDet {
   anoParcela: number
   parcelas: { parcela: number; vencimento: string; lancado: number; pago: number; saldo: number }[]
 }
-interface Tendencia {
-  anoRef: number
-  historico: { ano: number; lancado: number; arrecadado: number; inadimplencia: number }[]
-  previsao: { ano: number; lancado: number; arrecadado: number; inadimplencia: number }
-  mensalAtual: { mes: number; arrecReal: number; arrecPrev: number; inadPrev: number }[]
-  taxaArrec: number
-}
-
 interface Resumo {
-  resumo: { comIptu: number; comItbi: number; comTca: number; comEmpresa: number; iptuSemTca: number; tcaSemIptu: number }
+  resumo: { comIptu: number; comItbi: number; comTca: number; comEmpresa: number; iptuSemTca: number }
   situacao: { situacao: string; qt: number }[]
   pagamento: { status: string; qt: number; cor: string }[]
 }
@@ -113,17 +107,15 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const [carregandoRank, setCarregandoRank] = useState(false)
   // Onda 4 — pesquisa de imóvel
   const [buscaImovel, setBuscaImovel] = useState('')
+  const [buscaTipo, setBuscaTipo] = useState<'inscricao' | 'codigo' | 'nome'>('inscricao')
   const [matches, setMatches] = useState<ImovelMatch[]>([])
   const [imovelDet, setImovelDet] = useState<ImovelDet | null>(null)
   const [carregandoDet, setCarregandoDet] = useState(false)
-  // Onda 5 — tendência
-  const [tend, setTend] = useState<Tendencia | null>(null)
   // Lazy-load das seções pesadas (só busca quando aparecem na tela)
   const obsDiario = useOnScreen<HTMLDivElement>()
   const obsBairros = useOnScreen<HTMLDivElement>()
   const obsRank = useOnScreen<HTMLDivElement>()
   const obsResumo = useOnScreen<HTMLDivElement>()
-  const obsTend = useOnScreen<HTMLDivElement>()
 
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
@@ -146,15 +138,6 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       .then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
   }, [qs, bairroQ, obsResumo.visible])
-
-  // Tendência (projeção) — lazy e global
-  useEffect(() => {
-    if (!obsTend.visible) return
-    let vivo = true
-    fetchJson(`/api/imobiliario/iptu-tendencia${qs}`)
-      .then(d => { if (vivo && d && !d.error) setTend(d) })
-    return () => { vivo = false }
-  }, [qs, obsTend.visible])
 
   // Série mensal só quando o usuário clica num ano na evolução (drill)
   useEffect(() => {
@@ -204,17 +187,17 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
     return () => { vivo = false }
   }, [ano, rankTipo, rankMetrica, bairroQ, obsRank.visible])
 
-  // Busca de imóvel (debounce simples)
+  // Busca de imóvel (debounce simples) — por inscrição, código ou nome
   useEffect(() => {
     const q = buscaImovel.trim()
     if (q.length < 2) { setMatches([]); return }
     let vivo = true
     const t = setTimeout(() => {
-      fetchJson(`/api/imobiliario/iptu-imovel?q=${encodeURIComponent(q)}`)
+      fetchJson(`/api/imobiliario/iptu-imovel?q=${encodeURIComponent(q)}&tipo=${buscaTipo}`)
         .then(d => { if (vivo && d?.matches) setMatches(d.matches) })
     }, 350)
     return () => { vivo = false; clearTimeout(t) }
-  }, [buscaImovel])
+  }, [buscaImovel, buscaTipo])
 
   function abrirImovel(cd: number) {
     setCarregandoDet(true); setMatches([])
@@ -226,14 +209,16 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
   const card: React.CSSProperties = { background: '#fff', borderRadius: 20, padding: 18, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
   const svg = (paths: React.ReactNode) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
+  // ytd = comparação até o mês de referência (ex.: até julho) com o ano anterior
   const cardsDef = v ? [
-    { label: 'Total Lançado', cmp: v.cards.lancado, cor: '#283e93', icon: svg(<><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h6M9 11h6M9 15h4" /></>) },
-    { label: 'Total Arrecadado', cmp: v.cards.arrecadado, cor: '#1fa463', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M14.5 9a2.5 2 0 0 0-2.5-1.5c-1.4 0-2.5.7-2.5 1.8 0 2.6 5 1.4 5 4 0 1.2-1.1 1.9-2.5 1.9A2.6 2 0 0 1 9.4 15M12 6v1.5M12 16.5V18" /></>) },
-    { label: 'Total Inadimplência', cmp: v.cards.inadimplencia, cor: '#d64545', icon: svg(<><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>) },
-    { label: 'Total em Aberto', cmp: v.cards.emAberto, cor: '#e8962e', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>) },
-    { label: 'Total Isento', cmp: v.cards.isento, cor: '#8094d6', icon: svg(<><path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>) },
-    { label: 'Total Suspenso', cmp: v.cards.suspenso, cor: '#5b6477', icon: svg(<><rect x="7" y="6" width="3.2" height="12" rx="1" /><rect x="13.8" y="6" width="3.2" height="12" rx="1" /></>) },
+    { label: 'Total Lançado', cmp: v.cards.lancado, cor: '#283e93', ytd: false, icon: svg(<><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h6M9 11h6M9 15h4" /></>) },
+    { label: 'Total Arrecadado', cmp: v.cards.arrecadado, cor: '#1fa463', ytd: true, icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M14.5 9a2.5 2 0 0 0-2.5-1.5c-1.4 0-2.5.7-2.5 1.8 0 2.6 5 1.4 5 4 0 1.2-1.1 1.9-2.5 1.9A2.6 2 0 0 1 9.4 15M12 6v1.5M12 16.5V18" /></>) },
+    { label: 'Total Inadimplência', cmp: v.cards.inadimplencia, cor: '#d64545', ytd: true, icon: svg(<><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>) },
+    { label: 'Total em Aberto', cmp: v.cards.emAberto, cor: '#e8962e', ytd: true, icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>) },
+    { label: 'Total Isento', cmp: v.cards.isento, cor: '#8094d6', ytd: false, icon: svg(<><path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>) },
+    { label: 'Total Suspenso', cmp: v.cards.suspenso, cor: '#5b6477', ytd: false, icon: svg(<><rect x="7" y="6" width="3.2" height="12" rx="1" /><rect x="13.8" y="6" width="3.2" height="12" rx="1" /></>) },
   ] : []
+  const mesRefLabel = v ? MESES_LONGO[(v.mesRef || 1) - 1] : ''
 
   // Evolução (5 anos + previsão) ou mensal (drill)
   const serie = v ? (drillAno
@@ -275,17 +260,19 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         </div>
       ) : null}
 
-      {/* 6 cards — valor, ano anterior e % de variação */}
+      {/* 6 cards — valor, ano anterior e % de variação. Arrecadado/Inadimplência/Em aberto
+          usam mês de referência (YTD, ex.: até julho) para comparação justa com o ano anterior. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginTop: 14 }}>
         {cardsDef.map(c => (
           <div key={c.label} style={card}>
             <span style={{ fontSize: 11.5, fontWeight: 600, color: '#5b6477', display: 'block' }}>{c.label}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+            <span style={{ fontSize: 9.5, color: '#aeb6c6', display: 'block', height: 12 }}>{c.ytd ? `até ${mesRefLabel}` : ' '}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: `${c.cor}1a`, color: c.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{c.icon}</div>
-              <span style={{ fontSize: 20, fontWeight: 700, color: c.cor, letterSpacing: '-.5px' }}>{fmtMi(c.cmp.atual)}</span>
+              <span style={{ fontSize: 20, fontWeight: 700, color: c.cor, letterSpacing: '-.5px' }}>{fmtAbrev(c.cmp.atual)}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
-              <span style={{ fontSize: 10.5, color: '#9098a8' }}>{v ? v.anoRef - 1 : ''} <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtMi(c.cmp.ant)}</span></span>
+              <span style={{ fontSize: 10.5, color: '#9098a8' }}>{v ? v.anoRef - 1 : ''} <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtAbrev(c.cmp.ant)}</span></span>
               <span style={{ fontSize: 11, fontWeight: 700, color: c.cmp.pct >= 0 ? '#1fa463' : '#d64545', flex: 'none' }}>{fmtPct(c.cmp.pct)}</span>
             </div>
           </div>
@@ -329,7 +316,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para detalhar por mês · barras claras = previsão {v?.evolucao.find(e => e.previsto)?.ano ?? ''}</div> : null}
+          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para detalhar por mês · Arrecadado e Inadimplência somados até {mesRefLabel} (comparação justa entre anos) · barras claras = previsão {v?.evolucao.find(e => e.previsto)?.ano ?? ''}</div> : null}
         </div>
 
       {/* ===== ONDA 3: IPTU por bairro (logo após a Evolução) ===== */}
@@ -368,7 +355,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
                   <div key={i} onClick={() => { if (podeDrill) setBairroSel(b.nome) }} style={{ cursor: podeDrill ? 'pointer' : 'default' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
                       <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {b.imoveis.toLocaleString('pt-BR')} im.</span></span>
-                      <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtMi(b[metricaBairro])}</span>
+                      <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b[metricaBairro])}</span>
                     </div>
                     <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 8, background: corM }} />
@@ -389,22 +376,33 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       <div ref={obsResumo.ref}>
       {res ? (
         <div style={{ ...card, marginTop: 18 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Resumo de Imóveis</span>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12, marginTop: 14 }}>
-            {[
-              { l: 'Com IPTU', val: res.resumo.comIptu, c: '#283e93' },
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Resumo de Imóveis {v ? `· ${v.anoRef}` : ''}</span>
+          <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Base: imóveis com IPTU (compõem o valor lançado). As demais contagens são a interseção com essa base.</div>
+          {(() => {
+            const base = Math.max(1, res.resumo.comIptu)
+            const pct = (n: number) => `${(100 * n / base).toFixed(1).replace('.', ',')}% da base`
+            const inters = [
               { l: 'Com ITBI', val: res.resumo.comItbi, c: '#1fa463' },
-              { l: 'Com empresa no endereço', val: res.resumo.comEmpresa, c: '#e8962e' },
               { l: 'Com TCA', val: res.resumo.comTca, c: '#8094d6' },
-              { l: 'IPTU sem TCA', val: res.resumo.iptuSemTca, c: '#d64545' },
-              { l: 'TCA sem IPTU', val: res.resumo.tcaSemIptu, c: '#5b6477' },
-            ].map(x => (
-              <div key={x.l} style={{ background: '#f7f9fd', borderRadius: 12, padding: '12px 14px' }}>
-                <div style={{ fontSize: 21, fontWeight: 700, color: x.c, letterSpacing: '-.5px' }}>{x.val.toLocaleString('pt-BR')}</div>
-                <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3, lineHeight: 1.25 }}>{x.l}</div>
+              { l: 'Com empresa no endereço', val: res.resumo.comEmpresa, c: '#e8962e' },
+              { l: 'IPTU sem lançamento de TCA', val: res.resumo.iptuSemTca, c: '#d64545' },
+            ]
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr repeat(4,1fr)', gap: 12, marginTop: 14 }}>
+                <div style={{ background: '#283e93', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 23, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{res.resumo.comIptu.toLocaleString('pt-BR')}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 3, lineHeight: 1.25 }}>Imóveis com IPTU (base)</div>
+                </div>
+                {inters.map(x => (
+                  <div key={x.l} style={{ background: '#f7f9fd', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 21, fontWeight: 700, color: x.c, letterSpacing: '-.5px' }}>{x.val.toLocaleString('pt-BR')}</div>
+                    <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3, lineHeight: 1.25 }}>{x.l}</div>
+                    <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 2 }}>{pct(x.val)}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )
+          })()}
         </div>
       ) : (obsResumo.visible ? <div style={{ ...card, marginTop: 18, fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 20 }}>Carregando resumo…</div> : null)}
       </div>
@@ -511,14 +509,17 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
                 ) : rankItens.map((it, i) => {
                   const bg = i % 2 === 0 ? '#fff' : '#f7f9fd'
                   const cel = (val: number, m: Metrica4) => (
-                    <td style={{ background: bg, color: rankMetrica === m ? '#283e93' : '#5b6477', fontWeight: rankMetrica === m ? 700 : 500, fontSize: 11.5, padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtNum(val)}</td>
+                    <td style={{ background: bg, color: rankMetrica === m ? '#283e93' : '#5b6477', fontWeight: rankMetrica === m ? 700 : 500, fontSize: 11.5, padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtAbrev(val)}</td>
                   )
+                  // imóvel: proprietário + inscrição/endereço · proprietário: nome + qtd imóveis
+                  const primaria = rankTipo === 'imovel' ? (it.extra || it.nome) : it.nome
+                  const secundaria = rankTipo === 'imovel' ? `${it.nome}${it.endereco ? ' · ' + it.endereco : ''}` : it.endereco
                   return (
                     <tr key={it.chave + i}>
                       <td style={{ background: bg, color: '#9098a8', fontSize: 11.5, padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid #eef1f7' }}>{i + 1}</td>
                       <td style={{ background: bg, fontSize: 11.5, padding: '8px 12px', borderBottom: '1px solid #eef1f7', maxWidth: 320 }}>
-                        <div style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.extra || it.nome}</div>
-                        <div style={{ color: '#9098a8', fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rankTipo === 'imovel' ? `${it.nome}${it.endereco ? ' · ' + it.endereco : ''}` : it.extra}</div>
+                        <div style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{primaria}</div>
+                        <div style={{ color: '#9098a8', fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{secundaria}</div>
                       </td>
                       {cel(it.lancado, 'lancado')}{cel(it.arrecadado, 'arrecadado')}{cel(it.emAberto, 'emAberto')}{cel(it.inadimplencia, 'inadimplencia')}
                     </tr>
@@ -528,7 +529,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
             </table>
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>Valores em milhões (R$). Ordenado por {METRICAS4.find(m => m.id === rankMetrica)?.label}.</div>
+        <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>Valores em R$ (mi = milhão · k = milhar). Ordenado por {METRICAS4.find(m => m.id === rankMetrica)?.label}.</div>
       </div>
 
       {/* ===== ONDA 4: Pesquisa de imóvel devedor ===== */}
@@ -536,10 +537,18 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         {carregandoDet ? <LoadingOverlay label="Carregando imóvel…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Pesquisa de Imóvel</span>
-          <div style={{ position: 'relative', width: 340, maxWidth: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* seletor do campo de busca */}
+            <select value={buscaTipo} onChange={e => { setBuscaTipo(e.target.value as 'inscricao' | 'codigo' | 'nome'); setMatches([]) }}
+              style={{ border: '1.5px solid #e3e9f5', borderRadius: 12, padding: '7px 10px', fontSize: 12, color: '#283e93', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}>
+              <option value="inscricao">Inscrição</option>
+              <option value="codigo">Código</option>
+              <option value="nome">Nome</option>
+            </select>
+          <div style={{ position: 'relative', width: 320, maxWidth: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-              <input value={buscaImovel} onChange={e => setBuscaImovel(e.target.value)} placeholder="Inscrição, código ou proprietário…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+              <input value={buscaImovel} onChange={e => setBuscaImovel(e.target.value)} placeholder={buscaTipo === 'inscricao' ? 'Inscrição do imóvel…' : buscaTipo === 'codigo' ? 'Código do imóvel…' : 'Nome do proprietário…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
               {buscaImovel || imovelDet ? (
                 <button onClick={() => { setBuscaImovel(''); setMatches([]); setImovelDet(null) }} title="Limpar pesquisa"
                   style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', display: 'flex', alignItems: 'center', padding: 0, flex: 'none' }}>
@@ -557,6 +566,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
                 ))}
               </div>
             ) : null}
+          </div>
           </div>
         </div>
 
@@ -628,55 +638,6 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}
       </div>
 
-      {/* ===== ONDA 5: Tendência / Previsão (lazy) ===== */}
-      <div ref={obsTend.ref}>
-      {tend ? (
-        <div style={{ ...card, marginTop: 18 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Tendência e Previsão</span>
-          {/* Previsão do próximo ano */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 12 }}>
-            {[
-              { l: `Lançado previsto ${tend.previsao.ano}`, val: tend.previsao.lancado, c: '#283e93' },
-              { l: `Arrecadação prevista ${tend.previsao.ano}`, val: tend.previsao.arrecadado, c: '#1fa463' },
-              { l: `Inadimplência prevista ${tend.previsao.ano}`, val: tend.previsao.inadimplencia, c: '#d64545' },
-            ].map(x => (
-              <div key={x.l} style={{ background: '#f7f9fd', borderRadius: 12, padding: '12px 14px' }}>
-                <div style={{ fontSize: 19, fontWeight: 700, color: x.c }}>{fmtMi(x.val)}</div>
-                <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3 }}>{x.l}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 6 }}>Projeção por tendência (regressão dos últimos 5 anos). Taxa média de arrecadação: {(tend.taxaArrec * 100).toFixed(1)}%.</div>
-
-          {/* Previsão mensal do ano atual (sazonalidade) */}
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44', marginTop: 18 }}>Previsão mês a mês · {tend.anoRef}</div>
-          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477', marginTop: 6 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 3, background: '#1fa463', display: 'inline-block' }} />Arrecadado real</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 0, borderTop: '2px dashed #1fa463', display: 'inline-block' }} />Arrecadado previsto</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 0, borderTop: '2px dashed #d64545', display: 'inline-block' }} />Inadimplência prevista</span>
-          </div>
-          {(() => {
-            const d = tend.mensalAtual.map(m => ({ mes: MESES[m.mes - 1], arrecReal: m.arrecReal, arrecPrev: m.arrecPrev, inadPrev: m.inadPrev }))
-            return (
-              <div style={{ marginTop: 12, height: 240 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={d} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
-                    <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                    <Tooltip
-                      formatter={(v, name) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
-                      contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
-                    <Line type="monotone" dataKey="arrecReal" name="Arrecadado real" stroke="#1fa463" strokeWidth={2.4} dot={false} />
-                    <Line type="monotone" dataKey="arrecPrev" name="Arrecadado previsto" stroke="#1fa463" strokeWidth={1.8} strokeDasharray="5 4" dot={false} />
-                    <Line type="monotone" dataKey="inadPrev" name="Inadimplência prevista" stroke="#d64545" strokeWidth={1.8} strokeDasharray="5 4" dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )
-          })()}
-        </div>
-      ) : (obsTend.visible ? <div style={{ ...card, marginTop: 18, fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 20 }}>Carregando previsão…</div> : null)}
-      </div>
     </div>
   )
 }
