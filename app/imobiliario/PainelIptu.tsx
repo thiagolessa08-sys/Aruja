@@ -48,8 +48,6 @@ const fmtAbrev = (v: number) => {
 }
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
-const fmtNum = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const fmtPct = (p: number) => (p >= 0 ? '+' : '') + p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
 const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
 
@@ -370,7 +368,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
                       <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 8, background: corM }} />
                     </div>
                     <div style={{ display: 'flex', gap: 14, fontSize: 10.5, color: '#9098a8', marginTop: 3 }}>
-                      <span>Lanç: {fmtNum(b.lancado)}</span><span>Arrec: {fmtNum(b.arrecadado)}</span><span>Inad: {fmtNum(b.inadimplencia)}</span>
+                      <span>Lanç: {fmtAbrev(b.lancado)}</span><span>Arrec: {fmtAbrev(b.arrecadado)}</span><span>Inad: {fmtAbrev(b.inadimplencia)}</span>
                     </div>
                   </div>
                 )
@@ -449,7 +447,7 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
       {/* ===== ONDA 2: Arrecadação diária ===== */}
       <div ref={obsDiario.ref} style={{ ...card, marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Arrecadação Diária {diario ? `· ${fmtMi(diario.total)}` : ''}</span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Arrecadação Diária {diario ? `· ${fmtAbrev(diario.total)}` : ''}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5b6477' }}>
             <span>De</span>
             <input type="date" value={de} onChange={e => setDe(e.target.value)} style={{ border: '1.5px solid #e3e9f5', borderRadius: 10, padding: '5px 8px', fontSize: 12, color: '#283e93', fontFamily: 'inherit' }} />
