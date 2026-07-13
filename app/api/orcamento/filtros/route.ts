@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { WHERE_RECEITA_OFICIAL, ANO_MIN_RECEITA } from '@/lib/receita-filtros'
+import { WHERE_RECEITA_OFICIAL, ANO_MIN_RECEITA, grupoDaAlinea } from '@/lib/receita-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -34,16 +34,22 @@ export async function GET() {
 
     const anos = anosR.rows.map(r => Number(r[0])).filter(a => a >= ANO_MIN_RECEITA)
 
-    // Agrupa em [{ alinea, naturezas: [...] }] preservando a ordem alfabética
-    const mapa = new Map<string, string[]>()
+    // Agrupa por GRUPO ALÍNEA (1º nível, planilha do BO) → naturezas (2º nível).
+    // A alínea completa do banco vira apenas referência para descobrir o grupo.
+    const mapa = new Map<string, Set<string>>()
     for (const r of hierR.rows) {
       const ali = String(r[0] ?? '').trim()
       const nat = String(r[1] ?? '').trim()
       if (!ali || !nat) continue
-      if (!mapa.has(ali)) mapa.set(ali, [])
-      mapa.get(ali)!.push(nat)
+      const grupo = grupoDaAlinea(ali)
+      if (!mapa.has(grupo)) mapa.set(grupo, new Set())
+      mapa.get(grupo)!.add(nat)
     }
-    const impostosTaxas = [...mapa.entries()].map(([alinea, naturezas]) => ({ alinea, naturezas }))
+    // Ordena grupos e naturezas alfabeticamente (pt-BR). Campo mantém a chave `alinea`
+    // (agora carregando o GRUPO) para não alterar o frontend/componente.
+    const impostosTaxas = [...mapa.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'))
+      .map(([alinea, naturezas]) => ({ alinea, naturezas: [...naturezas].sort((x, y) => x.localeCompare(y, 'pt-BR')) }))
 
     const data = { anos, impostosTaxas }
     cache = { data, at: Date.now() }
