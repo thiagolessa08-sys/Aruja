@@ -45,7 +45,7 @@ export function lerFiltros(sp: URLSearchParams): Filtros {
 // Aplica SEMPRE o filtro oficial: ano >= 2023 e unidades orçamentárias 02.01–02.19.
 export function whereExtra(f: Filtros): string {
   let w = ` AND d.NO_ANO >= ${ANO_MIN_DESPESA}` + whereUO('f.SK_INSTITUCIONAL')
-  if (f.mes) w += ` AND d.NO_MES = ${f.mes}`
+  if (f.mes) w += ` AND d.NO_MES <= ${f.mes}` // acumula jan→mês (YTD), não o mês isolado
   // Secretaria selecionada = todas as sub-unidades cujo CD_UO começa com o prefixo (ex '02.04.%')
   if (f.secretaria) w += ` AND f.SK_INSTITUCIONAL IN (SELECT i.SK_INSTITUCIONAL FROM ${SCHEMA}.DIM_BIORC_INSTITUCIONAL i WHERE i.CD_UO LIKE '${f.secretaria}.%')`
   return w

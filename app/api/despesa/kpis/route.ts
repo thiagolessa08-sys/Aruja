@@ -74,8 +74,9 @@ export async function GET(req: NextRequest) {
     // mês de referência: específico (filtro) ou último mês com dados do ano
     const mesRef = f.mes || mesesPorAno.get(ano) || 12
 
+    // Acumulado (YTD) de janeiro até o mês de referência — quando um mês é selecionado,
+    // Empenhado/Liquidado/Pago somam o período (jan..mês), não só o mês isolado.
     const soma = (m: Map<string, number>, a: number) => {
-      if (f.mes) return m.get(`${a}-${f.mes}`) ?? 0
       let s = 0
       for (let i = 1; i <= mesRef; i++) s += m.get(`${a}-${i}`) ?? 0
       return s
