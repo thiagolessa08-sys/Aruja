@@ -1,4 +1,4 @@
-import { serieTributo, rankingTributos, bucketsIptu, arrecadadoIptuMes, qtdImoveisIptu, formaPagamentoIptu, dataAtualizacaoIptu, serieMensalIptu } from '@/lib/tributo-engine'
+import { serieTributo, rankingTributos, bucketsIptu, arrecadadoIptuMes, qtdImoveisIptu, formaPagamentoIptu, dataAtualizacaoIptu, serieMensalIptu, isentoIptu } from '@/lib/tributo-engine'
 import { bairrosIptu, rankingIptu, resumoIptu } from '@/lib/iptu-agg'
 import { resumoDivida } from '@/lib/divida-engine'
 import { resumoCobranca } from '@/lib/cobranca-engine'
@@ -16,6 +16,8 @@ async function runAll() {
   try { await bucketsIptu() } catch { /* ignora */ }
   try { await arrecadadoIptuMes(new Date().getMonth() + 1) } catch { /* ignora */ } // arrecadado YTD
   try { await dataAtualizacaoIptu() } catch { /* ignora */ }
+  try { await isentoIptu(anoAtual) } catch { /* ignora */ } // isento oficial (tb_extr_isencoes)
+  try { await isentoIptu(anoAtual - 1) } catch { /* ignora */ }
   try { await serieMensalIptu(anoAtual) } catch { /* ignora */ }
   try { await serieMensalIptu(anoAtual - 1) } catch { /* ignora */ }
   try { await qtdImoveisIptu() } catch { /* ignora */ }
