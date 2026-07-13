@@ -300,11 +300,11 @@ export async function bucketsIptuBairro(bairro: string): Promise<Map<number, Buc
 }
 
 /**
- * ISENTO oficial (regra do usuário, 10/07/2026): SUM(vl_movimento) mov<=3, cd_tributo 1,
- * parcela<>0, guia fora de Recalculo/Validacao, dos devedores com isenção ativa no exercício
- * (dt_fim >= exercício) e ds_isencao que NÃO seja TCA/Não Incidência ITBI/TCA-Imóvel Locado.
- * Fonte: tb_dsod_isencoes (por cd_origem = cd_devedor).
- * ⚠️ Requer permissão de SELECT em tb_dsod_isencoes — se não houver, retorna null (fallback).
+ * ISENTO oficial (regra do usuário): SUM(vl_movimento) mov<=3, cd_tributo 1, parcela<>0,
+ * guia fora de Recalculo/Validacao, dos devedores com isenção ativa no exercício
+ * (datepart(year, dt_fim) >= exercício) e ds_isencao que NÃO seja TCA / Não Incidência ITBI /
+ * TCA-Imóvel Locado (ou nula). Fonte: tb_extr_isencoes (por cd_origem = cd_devedor).
+ * ⚠️ Requer permissão de SELECT em tb_extr_isencoes — se não houver, retorna null (fallback).
  */
 export async function isentoIptu(ano: number): Promise<number | null> {
   return cached(`iptuIsento:${ano}`, TTL_15MIN, async () => {
@@ -318,9 +318,9 @@ export async function isentoIptu(ano: number): Promise<number | null> {
           AND pm.cd_tipo_movimento <= 3 AND p.no_parcela <> 0
           AND g.ds_situacao NOT IN ('Recalculo','Validacao')
           AND g.cd_devedor IN (
-            SELECT i.cd_origem FROM ${SCHEMA}.tb_dsod_isencoes i
-            WHERE YEAR(i.dt_fim) >= ${ano}
-              AND (i.ds_isencao NOT IN ('TCA','Não Incidência de ITBI','TCA - Imóvel Locado a Órgão Público') OR i.ds_isencao IS NULL))`, 1)
+            SELECT e.cd_origem FROM ${SCHEMA}.tb_extr_isencoes e
+            WHERE datepart(year, e.dt_fim) >= ${ano}
+              AND (e.ds_isencao NOT IN ('TCA','Não Incidência de ITBI','TCA - Imóvel Locado a Órgão Público') OR e.ds_isencao IS NULL))`, 1)
       return num(r.rows[0]?.[0])
     } catch {
       return null // sem permissão na tabela de isenções → usa fallback (regra antiga)
