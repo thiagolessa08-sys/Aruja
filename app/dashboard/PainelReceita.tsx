@@ -209,6 +209,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
   const [graf, setGraf] = useState<Graficos | null>(null)
   const [drill, setDrill] = useState<string[]>([]) // caminho do drill Categoria→…→Natureza
   const [daDrill, setDaDrill] = useState<string | null>(null) // bucket selecionado na Dívida Ativa
+  const [histSort, setHistSort] = useState<{ col: number; dir: 'asc' | 'desc' }>({ col: -1, dir: 'asc' }) // ordenação do histórico (col -1 = Meses)
   const [carregando, setCarregando] = useState(false)
 
   const qs = buildQS(filtros)
@@ -552,23 +553,38 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Meses', ...g.historico.anos.map(String)].map((h, i) => (
-                  <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                ))}
+                {['Meses', ...g.historico.anos.map(String)].map((h, i) => {
+                  const col = i === 0 ? -1 : i - 1
+                  const ativo = histSort.col === col
+                  return (
+                    <th key={h} title="Clique para ordenar"
+                      onClick={() => setHistSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: col === -1 ? 'asc' : 'desc' })}
+                      style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                      {h}<span style={{ opacity: ativo ? 1 : 0.35, marginLeft: 5, fontSize: 10 }}>{ativo ? (histSort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
-              {g.historico.linhas.map((row, ri) => {
-                const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
-                return (
-                  <tr key={row.mes}>
-                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.mes}</td>
-                    {row.vals.map((v, ci) => (
-                      <td key={ci} style={{ background: cellBg, color: v === 0 ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(v)}</td>
-                    ))}
-                  </tr>
-                )
-              })}
+              {(() => {
+                const ord = g.historico.linhas.map((row, i) => ({ row, i }))
+                ord.sort((a, b) => {
+                  const cmp = histSort.col === -1 ? a.i - b.i : (a.row.vals[histSort.col] ?? 0) - (b.row.vals[histSort.col] ?? 0)
+                  return histSort.dir === 'asc' ? cmp : -cmp
+                })
+                return ord.map(({ row }, ri) => {
+                  const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
+                  return (
+                    <tr key={row.mes}>
+                      <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.mes}</td>
+                      {row.vals.map((v, ci) => (
+                        <td key={ci} style={{ background: histSort.col === ci ? '#fff6ee' : cellBg, color: v === 0 ? '#9098a8' : '#c0612a', fontSize: 12, fontWeight: histSort.col === ci ? 700 : 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(v)}</td>
+                      ))}
+                    </tr>
+                  )
+                })
+              })()}
               <tr>
                 <td style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Total</td>
                 {g.historico.anos.map((_, ci) => {
