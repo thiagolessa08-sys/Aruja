@@ -299,8 +299,10 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={serie} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
                 onClick={(e) => {
-                  const a = (e as unknown as { activePayload?: { payload?: { ano?: number } }[] })?.activePayload?.[0]?.payload?.ano
-                  if (!drillAno && a) setDrillAno(a)
+                  const st = e as unknown as { activePayload?: { payload?: { ano?: number; previsto?: boolean } }[]; activeLabel?: string }
+                  const pl = st?.activePayload?.[0]?.payload
+                  const ano = pl?.ano ?? Number(st?.activeLabel)
+                  if (!drillAno && ano && !pl?.previsto) setDrillAno(ano)
                 }}>
                 <XAxis dataKey="rot" interval={0} height={!drillAno ? 46 : 24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                 <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
@@ -308,7 +310,12 @@ export default function PainelIptu({ ano }: { ano: number | '' }) {
                   formatter={(v, name) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
                 {(['lancado', 'arrecadado', 'inadimplencia'] as const).map(dk => (
-                  <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={28}>
+                  <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={28}
+                    cursor={!drillAno ? 'pointer' : 'default'}
+                    onClick={(d) => {
+                      const p = (d as unknown as { payload?: { ano?: number; previsto?: boolean } })?.payload
+                      if (!drillAno && p?.ano && !p?.previsto) setDrillAno(p.ano)
+                    }}>
                     {serie.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} />)}
                     <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
                   </Bar>
