@@ -342,42 +342,26 @@ export async function dataAtualizacaoIptu(): Promise<string | null> {
 }
 
 /**
- * Buckets do IPTU limitados a um MÊS DE REFERÊNCIA (YTD) — parcelas com vencimento
- * até o mês `mesRef`. Serve para comparar anos de forma justa (o ano corrente é
- * parcial): arrecadado/em aberto/inadimplência "até julho", por exercício.
- *  • arrecadado = baixas 11,14 (lanç 0,4,7,10; exclui baixa 28) de parcelas venc mês<=ref
- *  • emAberto   = saldo (parcela_posicao) das parcelas venc mês<=ref
- *  • inadimplente = saldo vencido (dt_vencimento < hoje) das parcelas venc mês<=ref
+ * ARRECADADO do IPTU acumulado até um MÊS DE REFERÊNCIA (YTD), por exercício — parcelas
+ * com vencimento até o mês `mesRef`. Serve para comparar anos de forma justa: o arrecadado
+ * é um FLUXO que acumula ao longo do ano, então comparar 2026-até-julho com 2025-até-julho
+ * evita a distorção do ano corrente parcial. (Em aberto e inadimplência NÃO usam mês de
+ * referência — são posições atuais: ver bucketsIptu, que já separa vencido de a vencer.)
  */
-export interface BucketMesIptu { arrecadado: number; emAberto: number; inadimplente: number }
-
-export async function bucketsIptuMes(mesRef: number): Promise<Map<number, BucketMesIptu>> {
-  return cached(`bucketsIptuMes:${mesRef}`, TTL_15MIN, async () => {
-    const [arrecR, saldoR] = await Promise.all([
-      agentQuery(`
-        SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
-        FROM ${SCHEMA}.tb_dsod_guias g
-        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-        JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
-        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
-          AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
-          AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND MONTH(p.dt_vencimento) <= ${mesRef}
-        GROUP BY g.no_exercicio_lancamento`, 200),
-      agentQuery(`
-        SELECT g.no_exercicio_lancamento ex, SUM(pp.vl_saldo) aberto,
-               SUM(CASE WHEN p.dt_vencimento < getdate() THEN pp.vl_saldo ELSE 0 END) venc
-        FROM ${SCHEMA}.tb_dsod_guias g
-        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-        JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-        WHERE g.cd_tributo IN (${IPTU_COD}) AND p.no_parcela NOT IN (0)
-          AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND MONTH(p.dt_vencimento) <= ${mesRef}
-        GROUP BY g.no_exercicio_lancamento`, 200),
-    ])
-    const map = new Map<number, BucketMesIptu>()
-    const get = (ex: number) => map.get(ex) ?? { arrecadado: 0, emAberto: 0, inadimplente: 0 }
-    for (const r of arrecR.rows) { const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue; const b = get(ex); b.arrecadado = num(r[1]); map.set(ex, b) }
-    for (const r of saldoR.rows) { const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); b.inadimplente = Math.max(0, num(r[2])); map.set(ex, b) }
+export async function arrecadadoIptuMes(mesRef: number): Promise<Map<number, number>> {
+  return cached(`arrecadadoIptuMes:${mesRef}`, TTL_15MIN, async () => {
+    const r = await agentQuery(`
+      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
+        AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
+        AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND MONTH(p.dt_vencimento) <= ${mesRef}
+      GROUP BY g.no_exercicio_lancamento`, 200)
+    const map = new Map<number, number>()
+    for (const row of r.rows) { const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue; map.set(ex, num(row[1])) }
     return map
   })
 }
