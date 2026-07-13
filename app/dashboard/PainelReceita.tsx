@@ -393,18 +393,19 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                   ))}
                 </div>
 
-                {/* Barras horizontais clicáveis */}
+                {/* Barras horizontais clicáveis — mais grossas só no 1º nível (Categoria) */}
                 <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {vis.map((it, i) => {
                     const w = Math.max(6, 100 * it.v / maxV)
+                    const alt = drill.length === 0 ? 40 : 22 // 1º nível bem mais grosso
                     return (
                       <div key={i} onClick={() => { if (canDrill) setDrill([...drill, it.label]) }} title={`${it.label}: ${fmtM(it.v)}`} style={{ cursor: canDrill ? 'pointer' : 'default' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 4 }}>
                           <span title={it.label} style={{ color: '#3a4256', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
                           <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtM(it.v)}</span>
                         </div>
-                        <div style={{ height: 22, borderRadius: 11, background: '#eef1f7', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 11, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)' }} />
+                        <div style={{ height: alt, borderRadius: alt / 2, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: alt / 2, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)' }} />
                         </div>
                       </div>
                     )
