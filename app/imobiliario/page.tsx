@@ -107,6 +107,20 @@ export default function ImobiliarioPage() {
                 </button>
               )
             })}
+            {/* Placeholder: tela de TCA ainda não existe — botão desabilitado (em breve) */}
+            <button
+              type="button"
+              disabled
+              title="Tela em desenvolvimento"
+              style={{
+                padding: '10px 20px', borderRadius: 24, border: 'none', cursor: 'not-allowed',
+                fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontSize: 14, fontWeight: 500,
+                background: 'transparent', color: '#aeb6c6', display: 'flex', alignItems: 'center', gap: 7,
+              }}
+            >
+              TCA
+              <span style={{ fontSize: 9, fontWeight: 700, background: '#e6eaf3', color: '#8a93a6', borderRadius: 8, padding: '2px 6px', letterSpacing: '.03em' }}>EM BREVE</span>
+            </button>
           </div>
         </div>
 
