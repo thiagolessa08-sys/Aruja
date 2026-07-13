@@ -205,6 +205,15 @@ const KPIS_FALLBACK: KpiCard[] = [
   { label: 'Valor Pago', value: '360,60 mi', subLabel: 'Ano Anterior', subValue: '628,18 mi', pct: '-42,60%', dir: 'down' },
 ]
 
+// Indicador do filtro → rótulo do card correspondente (para destacar em azul)
+const INDICADOR_TO_KPI: Record<string, string> = {
+  'Dotação Inicial': 'Dotação Inicial',
+  'Dotação Atualizada': 'Dotação Atualizada',
+  'Empenhado': 'Valor Empenho',
+  'Liquidado': 'Valor Liquidado',
+  'Pago': 'Valor Pago',
+}
+
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   if (dir === 'up') return azul ? '#6ee0a0' : '#1fa463'
   if (dir === 'down') return azul ? '#ff9b8a' : '#d64545'
@@ -357,7 +366,8 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
       {/* ===== KPIs ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
-          const azul = i === 0
+          // Destaca (azul) o card correspondente ao indicador selecionado no filtro
+          const azul = k.label === INDICADOR_TO_KPI[ind]
           return (
             <div key={k.label} style={azul
               ? { background: '#283e93', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 20px rgba(40,62,147,0.22)' }
@@ -588,7 +598,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
       {/* ===== Fornecedores (busca + Top 10 + rolagem) ===== */}
       <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Fornecedores - Valor de {ind}</span>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Fornecedores</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '6px 10px' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
