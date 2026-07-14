@@ -147,7 +147,7 @@ export function resumoIptu(ano: number, bairro: string | null) {
     // compõem o valor total lançado. Todas as demais contagens são INTERSEÇÃO com essa base.
     // (com bairro, a base já fica restrita ao bairro → ITBI/empresa deixam de ficar congelados)
     const baseIptu = `SELECT DISTINCT g2.cd_origem FROM ${S}.tb_dsod_guias g2 WHERE g2.cd_tributo=1 AND g2.no_exercicio_lancamento=${ano} AND g2.ds_situacao NOT IN ('Recalculo','Validacao')${inBairroSub}`
-    const [comIptuR, totalImR, sitR, tcaR, itbiR, empR, semTcaR, forma] = await Promise.all([
+    const [comIptuR, totalImR, sitR, tcaR, itbiR, empR, semTcaR, forma, formaBairroR] = await Promise.all([
       // Com IPTU = qtd de imóveis que compõem o lançado do exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')`, 1),
       // Total de imóveis do cadastro (item 10) — respeita o bairro
@@ -164,11 +164,40 @@ export function resumoIptu(ano: number, bairro: string | null) {
       // …quantos têm IPTU e NÃO tiveram lançamento de TCA no exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo=67 AND t.no_exercicio_lancamento=${ano})`, 1),
       formaPagamentoIptu(),
+      // Forma de pagamento RESTRITA ao bairro (item 13: quadro deixa de ficar congelado no total)
+      bairro ? agentQuery(`
+        SELECT categoria, COUNT(*) qt FROM (
+          SELECT g.cd_guia,
+            CASE
+              WHEN SUM(CASE WHEN p.no_parcela = 0 THEN pp.vl_pagto ELSE 0 END) > 0 THEN 'CotaUnica'
+              WHEN SUM(pp.vl_pagto) = 0 THEN 'EmAberto'
+              WHEN SUM(CASE WHEN p.no_parcela <> 0 THEN pp.vl_saldo ELSE 0 END) <= 0 THEN 'Parcelado'
+              ELSE 'PagoParcial'
+            END AS categoria
+          FROM ${S}.tb_dsod_guias g
+          JOIN ${S}.tb_dsod_imovel_urbano iub ON g.cd_origem = iub.cd_imovel_urbano
+          JOIN ${S}.tb_dsod_cep ceb ON iub.cd_cep = ceb.cd_cep AND ceb.nm_bairro = '${bq}'
+          JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+          JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+          WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          GROUP BY g.cd_guia
+        ) t GROUP BY categoria`, 50) : Promise.resolve(null),
     ])
     const comIptu = num(comIptuR.rows[0]?.[0])
     const totalImoveis = num(totalImR.rows[0]?.[0])
     const situacao = sitR.rows.map(r => ({ situacao: String(r[0] ?? '').trim() || '—', qt: num(r[1]) })).sort((a, b) => b.qt - a.qt)
-    const fp = forma.get(ano) ?? { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
+    let fp = forma.get(ano) ?? { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
+    if (bairro && formaBairroR) { // usa a forma de pagamento do bairro
+      const b = { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
+      for (const r of formaBairroR.rows) {
+        const cat = String(r[0] ?? '').trim(), qt = num(r[1])
+        if (cat === 'CotaUnica') b.cotaUnica = qt
+        else if (cat === 'Parcelado') b.parcelado = qt
+        else if (cat === 'PagoParcial') b.pagoParcial = qt
+        else if (cat === 'EmAberto') b.emAberto = qt
+      }
+      fp = b
+    }
     // Item 14: rótulos — "Parcelado" = pagou todas as parcelas; "Pago parcial" = pagou parte
     const pagamento = [
       { status: 'Cota única', qt: fp.cotaUnica, cor: '#1fa463' },
