@@ -164,4 +164,42 @@ O filtro "Impostos e Taxas" tem 2 níveis: DS_ALINEA_RECEITA (nível 1) e DS_NAT
 Diferença para a REGRA 1: a REGRA 1 detalha bruta/deduções/líquida (uso analítico). A REGRA 7 é o
 número OFICIAL exibido no painel (bruta com os filtros acima). Se o usuário pedir explicitamente
 deduções/líquida, use a REGRA 1; caso contrário, o total oficial é o da REGRA 7.
+
+## REGRA 8 — IPTU por IMÓVEL / BAIRRO / RUA (ponte e tabelas certas)
+
+Para QUALQUER análise de IPTU por imóvel, bairro ou rua (ex.: "bairros mais inadimplentes",
+"IPTU por bairro", "ruas com mais dívida"):
+
+1) PONTE guia↔imóvel — a tabela tb_dsod_guias NÃO possui coluna cd_imovel_urbano. A ligação é
+   SEMPRE por cd_origem:
+     JOIN pref_aruja_sp.tb_dsod_imovel_urbano iu ON iu.cd_imovel_urbano = g.cd_origem
+   (usar g.cd_imovel_urbano dá erro "Column not found".)
+
+2) BAIRRO / ENDEREÇO = do IMÓVEL, não do contribuinte:
+     JOIN pref_aruja_sp.tb_dsod_cep c ON c.cd_cep = iu.cd_cep   → c.nm_bairro, c.ds_endereco
+   Agrupe pelo bairro do IMÓVEL (via cd_origem). Proprietário: iu.cd_contr_proprietario = tb_dsod_contribuinte.cd_contr.
+
+3) NÃO use tb_dsod_devedor_contribuinte NEM tb_dsod_contribuinte_endereco nessas consultas —
+   são DESNECESSÁRIAS e só deixam a query pesada/lenta (risco de timeout). A guia já traz o devedor
+   (g.cd_devedor / g.cd_contr) e o imóvel já dá o bairro. Não inclua essas tabelas no FROM.
+
+4) VALORES (lançado/arrecadado/em aberto/inadimplência) seguem a REGRA 4 (tb_dsod_parcela_movimento).
+   Para agrupar por bairro: calcule o saldo por imóvel (GROUP BY g.cd_origem HAVING SUM(...) > 0),
+   depois junte com imóvel/cep e agrupe por c.nm_bairro. SEMPRE filtre UM exercício e use TOP N.
+
+Modelo (bairros mais inadimplentes, exercício 2026):
+  SELECT TOP 20 c.nm_bairro AS bairro, SUM(t.bal) AS inadimplencia, COUNT(*) AS imoveis
+  FROM (
+    SELECT g.cd_origem, SUM(pm.vl_movimento * pm.no_sinal) AS bal
+    FROM pref_aruja_sp.tb_dsod_guias g
+    JOIN pref_aruja_sp.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+    JOIN pref_aruja_sp.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+    WHERE g.cd_tributo = 1 AND g.no_exercicio_lancamento = 2026 AND p.no_parcela <> 0
+      AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+      AND p.dt_vencimento < getdate() - 1 AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+    GROUP BY g.cd_origem HAVING SUM(pm.vl_movimento * pm.no_sinal) > 1
+  ) t
+  JOIN pref_aruja_sp.tb_dsod_imovel_urbano iu ON iu.cd_imovel_urbano = t.cd_origem
+  JOIN pref_aruja_sp.tb_dsod_cep c ON c.cd_cep = iu.cd_cep
+  GROUP BY c.nm_bairro ORDER BY inadimplencia DESC
 `
