@@ -868,21 +868,33 @@ async function baixarRelatorioPdf(markdown: string) {
   }
 
   // Cards de destaque (1º preenchido de azul; demais com contorno) — igual ao template.
+  // O valor reduz a fonte até caber e quebra em até 2 linhas (evita corte).
   const desenharCards = (cards: Card[]) => {
     const n = Math.min(4, cards.length); if (!n) return
-    const gap = 10, h = 50
+    const gap = 10, h = 58
     const w = (pageW - 2 * mx - gap * (n - 1)) / n
+    const innerW = w - 20
     ensure(h + 12)
     for (let k = 0; k < n; k++) {
       const x = mx + k * (w + gap), filled = k === 0
       if (filled) { doc.setFillColor(AZUL[0], AZUL[1], AZUL[2]); doc.roundedRect(x, y, w, h, 7, 7, 'F') }
       else { doc.setDrawColor(205, 213, 235); doc.setLineWidth(1); doc.setFillColor(255, 255, 255); doc.roundedRect(x, y, w, h, 7, 7, 'FD') }
+      // rótulo (uma linha, elipse se estourar)
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
       doc.setTextColor(filled ? 220 : 120, filled ? 228 : 128, filled ? 245 : 150)
-      doc.text(doc.splitTextToSize(cards[k].rotulo.toUpperCase(), w - 20)[0], x + 12, y + 18)
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5)
+      let rot = cards[k].rotulo.toUpperCase()
+      while (rot.length > 4 && doc.getTextWidth(rot) > innerW) rot = rot.slice(0, -2)
+      if (rot !== cards[k].rotulo.toUpperCase()) rot = rot.replace(/\s*\S*$/, '') + '…'
+      doc.text(rot, x + 12, y + 17)
+      // valor: reduz a fonte até caber; se ainda não couber, 2 linhas
+      doc.setFont('helvetica', 'bold')
       doc.setTextColor(filled ? 255 : AZUL[0], filled ? 255 : AZUL[1], filled ? 255 : AZUL[2])
-      doc.text(doc.splitTextToSize(cards[k].valor, w - 20)[0], x + 12, y + 37)
+      let fs = 13
+      doc.setFontSize(fs)
+      while (fs > 8 && doc.getTextWidth(cards[k].valor) > innerW) { fs -= 0.5; doc.setFontSize(fs) }
+      const vlin = doc.splitTextToSize(cards[k].valor, innerW).slice(0, 2)
+      let vy = y + (vlin.length > 1 ? 34 : 40)
+      for (const vl of vlin) { doc.text(vl, x + 12, vy); vy += fs * 1.15 }
     }
     y += h + 14
   }

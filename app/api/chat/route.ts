@@ -135,7 +135,14 @@ RELATÓRIOS EM PDF (estrutura do template institucional):
        ## Destaques
        - <Rótulo curto>: <valor>
        - <Rótulo curto>: <valor>
-     (2 a 4 itens; cada um vira um card. Use os totais/números-chave, ex.: "- Total 2025: R$ 739,4 mi".)
+     REGRAS DOS CARDS (importante):
+       • 2 a 4 itens, cada um vira um card (KPI).
+       • RÓTULO curto (1–3 palavras). VALOR curto, COMPLETO e quantificável — um número, valor em R$,
+         percentual ou código. NUNCA uma frase ou texto cortado.
+         BOM: "- Total Lançado 2026: R$ 4.488,44" | "- Arrecadado: 60%" | "- Inscrição: SE11161203.000"
+         RUIM: "- Histórico de: 100% em dia nos últimos" | "- Localização: AL Via Láctea, nº" (frases/cortados)
+       • Use SOMENTE métricas que façam sentido como KPI para a análise pedida.
+       • Se a análise NÃO tiver KPIs numéricos claros, OMITA a seção "## Destaques" (o relatório fica sem cards).
   4. Insights em texto (2–4 frases analíticas).
   5. Uma ou mais TABELAS markdown (| col | col |) com os dados detalhados.
 • O sistema exibe AUTOMATICAMENTE um botão "Baixar PDF" logo abaixo da sua resposta, que gera o PDF
