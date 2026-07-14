@@ -737,6 +737,11 @@ function pedeRelatorioPdf(text: string): boolean {
   return /\bpdf\b/i.test(text)
 }
 
+// Detecta pedido de relatório em Excel/planilha na mensagem do usuário.
+function pedeRelatorioExcel(text: string): boolean {
+  return /\b(excel|planilha|xlsx|xls|csv)\b/i.test(text)
+}
+
 // Remove marcações inline (**, *, `) e sanitiza para a fonte do PDF (CP1252): a Helvetica
 // do jsPDF não suporta emojis/símbolos fora do Latin-1 e embaralha o texto. Converte os
 // símbolos comuns de status em texto e remove o restante (acentos do pt-BR são mantidos).
@@ -934,6 +939,90 @@ async function baixarRelatorioPdf(markdown: string) {
 
   const stamp = new Date().toISOString().slice(0, 10)
   doc.save(`Relatorio-Aruja-${stamp}.pdf`)
+}
+
+// Gera o relatório em Excel (.xlsx) estilizado e BAIXA direto.
+async function baixarRelatorioExcel(markdown: string) {
+  const mod = await import('exceljs')
+  const ExcelJS = (mod as unknown as { default?: typeof import('exceljs') }).default ?? mod
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Prefeitura de Arujá'
+  const ws = wb.addWorksheet('Relatório', { views: [{ showGridLines: false }] })
+  const AZUL = 'FF283E93', AZUL_CLARO = 'FFF4F7FC', CINZA = 'FF5A6478', ESCURO = 'FF1F2A44'
+  const dataStr = new Date().toLocaleDateString('pt-BR')
+
+  // remove narração antes do 1º título
+  const linhasMd = markdown.split('\n')
+  const ini = linhasMd.findIndex(l => l.startsWith('# '))
+  const md = ini >= 0 ? linhasMd.slice(ini).join('\n') : markdown
+
+  const larg: number[] = []
+  const anota = (ci: number, len: number) => { larg[ci] = Math.min(52, Math.max(larg[ci] ?? 10, len + 2)) }
+  const borda = () => ({
+    top: { style: 'thin' as const, color: { argb: 'FFE1E7F3' } },
+    bottom: { style: 'thin' as const, color: { argb: 'FFE1E7F3' } },
+    left: { style: 'thin' as const, color: { argb: 'FFE1E7F3' } },
+    right: { style: 'thin' as const, color: { argb: 'FFE1E7F3' } },
+  })
+  const ehNumero = (v: string) => /^[R$\s]*-?[\d.][\d.,\s]*%?$/.test(v.trim()) && /\d/.test(v)
+
+  // Cabeçalho institucional
+  ws.addRow(['Prefeitura Municipal de Arujá']).getCell(1).font = { bold: true, size: 14, color: { argb: AZUL } }
+  ws.addRow([`Relatório · Emitido em ${dataStr} · Secretaria da Fazenda`]).getCell(1).font = { size: 9, color: { argb: CINZA } }
+  ws.addRow([])
+
+  for (const b of parseBlocos(md)) {
+    if (b.tipo === 'gap') continue
+    if (b.tipo === 'h1') {
+      ws.addRow([b.texto]).getCell(1).font = { bold: true, size: 13, color: { argb: AZUL } }
+      ws.addRow([]); anota(0, b.texto.length)
+    } else if (b.tipo === 'h2' || b.tipo === 'h3') {
+      ws.addRow([b.texto]).getCell(1).font = { bold: true, size: 11, color: { argb: AZUL } }; anota(0, b.texto.length)
+    } else if (b.tipo === 'p') {
+      ws.addRow([b.texto]).getCell(1).font = { size: 10, color: { argb: CINZA } }; anota(0, Math.min(60, b.texto.length))
+    } else if (b.tipo === 'li') {
+      ws.addRow(['• ' + b.texto]).getCell(1).font = { size: 10, color: { argb: ESCURO } }; anota(0, b.texto.length + 2)
+    } else if (b.tipo === 'cards') {
+      ws.addRow(['Destaques']).getCell(1).font = { bold: true, size: 11, color: { argb: AZUL } }
+      for (const c of b.cards) {
+        const rr = ws.addRow([c.rotulo, c.valor])
+        rr.getCell(1).font = { bold: true, color: { argb: ESCURO }, size: 10 }
+        rr.getCell(2).font = { bold: true, color: { argb: AZUL }, size: 10 }
+        anota(0, c.rotulo.length); anota(1, c.valor.length)
+      }
+      ws.addRow([])
+    } else if (b.tipo === 'table' && b.linhas.length) {
+      const [head, ...body] = b.linhas
+      const hr = ws.addRow(head)
+      hr.eachCell((cell, ci) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } }
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 }
+        cell.alignment = { vertical: 'middle' }
+        cell.border = borda()
+        anota(ci - 1, String(head[ci - 1] ?? '').length)
+      })
+      body.forEach((arr, ri) => {
+        const dr = ws.addRow(arr)
+        dr.eachCell((cell, ci) => {
+          if (ri % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_CLARO } }
+          cell.border = borda()
+          cell.font = { size: 10, color: { argb: ci === 1 ? ESCURO : 'FF37415F' }, bold: ci === 1 }
+          const val = String(arr[ci - 1] ?? '')
+          if (ci !== 1 && ehNumero(val)) cell.alignment = { horizontal: 'right' }
+          anota(ci - 1, val.length)
+        })
+      })
+      ws.addRow([])
+    }
+  }
+  larg.forEach((w, i) => { ws.getColumn(i + 1).width = w })
+
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = `Relatorio-Aruja-${new Date().toISOString().slice(0, 10)}.xlsx`
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
 }
 
 function ToolIndicator({ tool }: { tool: ToolEvent }) {
@@ -1230,15 +1319,25 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {isAssistant && msg.content && i > 0 && messages[i - 1].role === 'user'
-                      && pedeRelatorioPdf(messages[i - 1].content) && !(isLast && loading) && (
-                      <div style={{ marginLeft: '44px' }}>
-                        <button className="kc-pdf-btn" onClick={() => { baixarRelatorioPdf(msg.content).catch(() => alert('Não foi possível gerar o PDF. Tente novamente.')) }} title="Baixar este relatório em PDF">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
-                          </svg>
-                          Baixar PDF
-                        </button>
+                    {isAssistant && msg.content && i > 0 && messages[i - 1].role === 'user' && !(isLast && loading)
+                      && (pedeRelatorioPdf(messages[i - 1].content) || pedeRelatorioExcel(messages[i - 1].content)) && (
+                      <div style={{ marginLeft: '44px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {pedeRelatorioPdf(messages[i - 1].content) && (
+                          <button className="kc-pdf-btn" onClick={() => { baixarRelatorioPdf(msg.content).catch(() => alert('Não foi possível gerar o PDF. Tente novamente.')) }} title="Baixar este relatório em PDF">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
+                            </svg>
+                            Baixar PDF
+                          </button>
+                        )}
+                        {pedeRelatorioExcel(messages[i - 1].content) && (
+                          <button className="kc-pdf-btn" onClick={() => { baixarRelatorioExcel(msg.content).catch(() => alert('Não foi possível gerar o Excel. Tente novamente.')) }} title="Baixar este relatório em Excel">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 9h16M4 15h16M10 3v18" />
+                            </svg>
+                            Baixar Excel
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

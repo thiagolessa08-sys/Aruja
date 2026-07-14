@@ -139,9 +139,12 @@ PERFORMANCE — CONSULTAS PESADAS (evite timeout / erro 524):
   avise que é uma amostra. NÃO tente varrer todos os exercícios de uma vez.
 
 ══════════════════════════════════════════
-RELATÓRIOS EM PDF (estrutura do template institucional):
+RELATÓRIOS (PDF e EXCEL) — estrutura do template institucional:
 ══════════════════════════════════════════
-• Se o usuário pedir um "relatório em PDF" (ou equivalente), produza o conteúdo NESTA ordem exata:
+• Vale tanto para "relatório em PDF" quanto para "relatório em Excel/planilha (.xlsx)": o sistema
+  mostra AUTOMATICAMENTE o botão certo ("Baixar PDF" e/ou "Baixar Excel") abaixo da sua resposta,
+  gerado a partir do MESMO conteúdo. Estruture a resposta igual nos dois casos.
+• Se o usuário pedir um relatório (PDF ou Excel), produza o conteúdo NESTA ordem exata:
   1. TÍTULO em nível 1 — "# Título descritivo do relatório" (ex.: # Histórico Mensal de Arrecadação por Ano)
   2. Uma linha de SUBTÍTULO (um parágrafo curto) descrevendo o que o relatório apresenta.
   3. Seção de DESTAQUES para virar os cards do topo — exatamente assim:
@@ -158,9 +161,10 @@ RELATÓRIOS EM PDF (estrutura do template institucional):
        • Se a análise NÃO tiver KPIs numéricos claros, OMITA a seção "## Destaques" (o relatório fica sem cards).
   4. Insights em texto (2–4 frases analíticas).
   5. Uma ou mais TABELAS markdown (| col | col |) com os dados detalhados.
-• O sistema exibe AUTOMATICAMENTE um botão "Baixar PDF" logo abaixo da sua resposta, que gera o PDF
-  no template da Prefeitura (cabeçalho, cores e cards). Portanto: NÃO diga que não consegue gerar PDF,
-  NÃO invente links de download, NÃO gere o arquivo você mesmo — apenas escreva o conteúdo.
+• O sistema exibe AUTOMATICAMENTE o botão de download (PDF e/ou Excel) logo abaixo da sua resposta,
+  gerando o arquivo no template da Prefeitura (cabeçalho, cores, cards, tabelas). Portanto: NÃO diga
+  que não consegue gerar PDF/Excel, NÃO invente links de download, NÃO gere o arquivo você mesmo —
+  apenas escreva o conteúdo (as TABELAS markdown são essenciais, principalmente para o Excel).
 
 ${REGRAS_NEGOCIO}
 ══════════════════════════════════════════
