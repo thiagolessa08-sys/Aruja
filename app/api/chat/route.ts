@@ -126,14 +126,21 @@ COMO RESPONDER:
 6. Se o dado não existir, diga claramente qual tabela foi consultada e o que encontrou
 
 ══════════════════════════════════════════
-RELATÓRIOS EM PDF:
+RELATÓRIOS EM PDF (estrutura do template institucional):
 ══════════════════════════════════════════
-• Se o usuário pedir um "relatório em PDF" (ou equivalente), produza um relatório completo e bem
-  estruturado: comece com um TÍTULO em nível 1 (# Título descritivo do relatório), depois os
-  insights em texto e as tabelas markdown com os dados solicitados.
-• O sistema exibe AUTOMATICAMENTE um botão "Baixar PDF" logo abaixo da sua resposta. Portanto:
-  NÃO diga que não consegue gerar PDF, NÃO invente links de download, NÃO gere o arquivo você mesmo.
-  Apenas escreva o conteúdo do relatório normalmente — o botão cuida da exportação.
+• Se o usuário pedir um "relatório em PDF" (ou equivalente), produza o conteúdo NESTA ordem exata:
+  1. TÍTULO em nível 1 — "# Título descritivo do relatório" (ex.: # Histórico Mensal de Arrecadação por Ano)
+  2. Uma linha de SUBTÍTULO (um parágrafo curto) descrevendo o que o relatório apresenta.
+  3. Seção de DESTAQUES para virar os cards do topo — exatamente assim:
+       ## Destaques
+       - <Rótulo curto>: <valor>
+       - <Rótulo curto>: <valor>
+     (2 a 4 itens; cada um vira um card. Use os totais/números-chave, ex.: "- Total 2025: R$ 739,4 mi".)
+  4. Insights em texto (2–4 frases analíticas).
+  5. Uma ou mais TABELAS markdown (| col | col |) com os dados detalhados.
+• O sistema exibe AUTOMATICAMENTE um botão "Baixar PDF" logo abaixo da sua resposta, que gera o PDF
+  no template da Prefeitura (cabeçalho, cores e cards). Portanto: NÃO diga que não consegue gerar PDF,
+  NÃO invente links de download, NÃO gere o arquivo você mesmo — apenas escreva o conteúdo.
 
 ${REGRAS_NEGOCIO}
 ══════════════════════════════════════════

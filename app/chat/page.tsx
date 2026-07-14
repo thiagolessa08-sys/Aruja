@@ -740,15 +740,22 @@ function pedeRelatorioPdf(text: string): boolean {
 // Remove marcações inline (**, *, `) para o texto puro do PDF.
 const stripInline = (s: string) => s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\*([^*]+)\*/g, '$1')
 
+interface Card { rotulo: string; valor: string }
 type Bloco =
   | { tipo: 'h1' | 'h2' | 'h3' | 'p' | 'li'; texto: string }
   | { tipo: 'gap' }
   | { tipo: 'table'; linhas: string[][] }
+  | { tipo: 'cards'; cards: Card[] }
 
-// Quebra o markdown da resposta em blocos para renderizar no PDF.
+// Cor institucional (azul da Prefeitura de Arujá).
+const AZUL: [number, number, number] = [40, 62, 147]
+const AZUL_ALT: [number, number, number] = [244, 247, 252]
+
+// Quebra o markdown da resposta em blocos. Uma seção de heading contendo "Destaque(s)"
+// seguida de itens "Rótulo: valor" vira um bloco de CARDS (destaques no topo do relatório).
 function parseBlocos(md: string): Bloco[] {
   const lines = md.split('\n')
-  const out: Bloco[] = []
+  const raw: Bloco[] = []
   let i = 0
   while (i < lines.length) {
     const line = lines[i]
@@ -757,37 +764,57 @@ function parseBlocos(md: string): Bloco[] {
       while (i < lines.length && lines[i].startsWith('|')) { tl.push(lines[i]); i++ }
       const linhas = tl.filter(l => !l.match(/^\|[\s\-:|]+\|$/))
         .map(l => l.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map(c => stripInline(c.trim())))
-      if (linhas.length) out.push({ tipo: 'table', linhas })
+      if (linhas.length) raw.push({ tipo: 'table', linhas })
       continue
     }
     if (line.startsWith('```')) { i++; while (i < lines.length && !lines[i].startsWith('```')) i++; i++; continue }
-    if (line.startsWith('### ')) out.push({ tipo: 'h3', texto: stripInline(line.slice(4)) })
-    else if (line.startsWith('## ')) out.push({ tipo: 'h2', texto: stripInline(line.slice(3)) })
-    else if (line.startsWith('# ')) out.push({ tipo: 'h1', texto: stripInline(line.slice(2)) })
-    else if (line.match(/^[-*] /)) out.push({ tipo: 'li', texto: stripInline(line.slice(2)) })
-    else if (line.trim() === '') out.push({ tipo: 'gap' })
-    else out.push({ tipo: 'p', texto: stripInline(line) })
+    if (line.startsWith('### ')) raw.push({ tipo: 'h3', texto: stripInline(line.slice(4)) })
+    else if (line.startsWith('## ')) raw.push({ tipo: 'h2', texto: stripInline(line.slice(3)) })
+    else if (line.startsWith('# ')) raw.push({ tipo: 'h1', texto: stripInline(line.slice(2)) })
+    else if (line.match(/^[-*] /)) raw.push({ tipo: 'li', texto: stripInline(line.slice(2)) })
+    else if (line.trim() === '') raw.push({ tipo: 'gap' })
+    else raw.push({ tipo: 'p', texto: stripInline(line) })
     i++
+  }
+  // pós-processa: heading "Destaques" + itens seguintes → bloco de cards
+  const out: Bloco[] = []
+  for (let k = 0; k < raw.length; k++) {
+    const b = raw[k]
+    if ((b.tipo === 'h1' || b.tipo === 'h2' || b.tipo === 'h3') && /destaque/i.test(b.texto)) {
+      const cards: Card[] = []
+      let j = k + 1
+      while (j < raw.length && (raw[j].tipo === 'li' || raw[j].tipo === 'gap')) {
+        const bj = raw[j]
+        if (bj.tipo === 'li') {
+          const idx = bj.texto.indexOf(':')
+          if (idx > 0) cards.push({ rotulo: bj.texto.slice(0, idx).trim(), valor: bj.texto.slice(idx + 1).trim() })
+        }
+        j++
+      }
+      if (cards.length) { out.push({ tipo: 'cards', cards: cards.slice(0, 4) }); k = j - 1; continue }
+    }
+    out.push(b)
   }
   return out
 }
 
-// Carrega o logo da prefeitura como dataURL (para embutir no PDF). Null se falhar.
-async function carregarLogo(): Promise<string | null> {
+// Carrega o logo da prefeitura como dataURL + dimensões naturais (para preservar proporção).
+async function carregarLogo(): Promise<{ url: string; w: number; h: number } | null> {
   try {
     const res = await fetch('/logo-aruja.png')
     if (!res.ok) return null
     const blob = await res.blob()
-    return await new Promise<string | null>(resolve => {
-      const r = new FileReader()
-      r.onload = () => resolve(typeof r.result === 'string' ? r.result : null)
-      r.onerror = () => resolve(null)
-      r.readAsDataURL(blob)
+    const url = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader(); r.onload = () => resolve(r.result as string); r.onerror = reject; r.readAsDataURL(blob)
     })
+    const dim = await new Promise<{ w: number; h: number }>(resolve => {
+      const img = new Image(); img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight }); img.onerror = () => resolve({ w: 0, h: 0 }); img.src = url
+    })
+    return { url, w: dim.w, h: dim.h }
   } catch { return null }
 }
 
-// Gera o PDF do relatório e BAIXA direto (sem passar pela caixa de impressão).
+// Gera o PDF do relatório no template institucional e BAIXA direto (sem caixa de impressão).
 async function baixarRelatorioPdf(markdown: string) {
   const { jsPDF } = await import('jspdf')
   const autoTable = (await import('jspdf-autotable')).default
@@ -796,22 +823,28 @@ async function baixarRelatorioPdf(markdown: string) {
   const pageH = doc.internal.pageSize.getHeight()
   const mx = 40
   const maxY = pageH - 46
-  let y = 40
+  const dataStr = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-  // Cabeçalho: logo + nome + data
+  // ===== Cabeçalho institucional (logo à esquerda; "RELATÓRIO" + emissão à direita) =====
+  const desenharCabecalho = (logo: { url: string; w: number; h: number } | null) => {
+    const topo = 34
+    if (logo && logo.h > 0) {
+      const alt = 46, larg = Math.min(190, alt * (logo.w / logo.h))
+      try { doc.addImage(logo.url, 'PNG', mx, topo, larg, alt) } catch { /* logo opcional */ }
+    }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(AZUL[0], AZUL[1], AZUL[2])
+    doc.text('RELATÓRIO', pageW - mx, topo + 16, { align: 'right' })
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(120, 128, 148)
+    doc.text(`Emitido em ${dataStr} · Secretaria da Fazenda`, pageW - mx, topo + 32, { align: 'right' })
+    const yLinha = topo + 52
+    doc.setDrawColor(AZUL[0], AZUL[1], AZUL[2]); doc.setLineWidth(2); doc.line(mx, yLinha, pageW - mx, yLinha)
+    return yLinha + 22
+  }
+
   const logo = await carregarLogo()
-  let headX = mx
-  if (logo) { try { doc.addImage(logo, 'PNG', mx, y, 50, 50); headX = mx + 62 } catch { /* logo opcional */ } }
-  doc.setTextColor(40, 62, 147); doc.setFont('helvetica', 'bold'); doc.setFontSize(15)
-  doc.text('Prefeitura Municipal de Arujá', headX, y + 20)
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120, 120, 140)
-  const dataStr = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-  doc.text(`Relatório gerado pelo Assistente IA · ${dataStr}`, headX, y + 36)
-  y += 60
-  doc.setDrawColor(40, 62, 147); doc.setLineWidth(1.5); doc.line(mx, y, pageW - mx, y)
-  y += 20
+  let y = desenharCabecalho(logo)
 
-  const ensure = (h: number) => { if (y + h > maxY) { doc.addPage(); y = 40 } }
+  const ensure = (h: number) => { if (y + h > maxY) { doc.addPage(); y = desenharCabecalho(logo) } }
   const addTexto = (texto: string, size: number, style: 'normal' | 'bold', cor: [number, number, number], gapAfter: number) => {
     doc.setFont('helvetica', style); doc.setFontSize(size); doc.setTextColor(cor[0], cor[1], cor[2])
     const lh = size * 1.35
@@ -819,24 +852,46 @@ async function baixarRelatorioPdf(markdown: string) {
     y += gapAfter
   }
 
+  // Cards de destaque (1º preenchido de azul; demais com contorno) — igual ao template.
+  const desenharCards = (cards: Card[]) => {
+    const n = Math.min(4, cards.length); if (!n) return
+    const gap = 10, h = 50
+    const w = (pageW - 2 * mx - gap * (n - 1)) / n
+    ensure(h + 12)
+    for (let k = 0; k < n; k++) {
+      const x = mx + k * (w + gap), filled = k === 0
+      if (filled) { doc.setFillColor(AZUL[0], AZUL[1], AZUL[2]); doc.roundedRect(x, y, w, h, 7, 7, 'F') }
+      else { doc.setDrawColor(205, 213, 235); doc.setLineWidth(1); doc.setFillColor(255, 255, 255); doc.roundedRect(x, y, w, h, 7, 7, 'FD') }
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
+      doc.setTextColor(filled ? 220 : 120, filled ? 228 : 128, filled ? 245 : 150)
+      doc.text(doc.splitTextToSize(cards[k].rotulo.toUpperCase(), w - 20)[0], x + 12, y + 18)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5)
+      doc.setTextColor(filled ? 255 : AZUL[0], filled ? 255 : AZUL[1], filled ? 255 : AZUL[2])
+      doc.text(doc.splitTextToSize(cards[k].valor, w - 20)[0], x + 12, y + 37)
+    }
+    y += h + 14
+  }
+
   for (const b of parseBlocos(markdown)) {
     if (b.tipo === 'gap') { y += 5 }
-    else if (b.tipo === 'h1') addTexto(b.texto, 16, 'bold', [40, 62, 147], 7)
-    else if (b.tipo === 'h2') addTexto(b.texto, 13, 'bold', [40, 62, 147], 4)
+    else if (b.tipo === 'h1') addTexto(b.texto, 17, 'bold', [31, 42, 68], 4)      // título principal
+    else if (b.tipo === 'h2') addTexto(b.texto, 13, 'bold', AZUL, 4)
     else if (b.tipo === 'h3') addTexto(b.texto, 11.5, 'bold', [58, 66, 86], 3)
     else if (b.tipo === 'li') addTexto('•  ' + b.texto, 10.5, 'normal', [40, 42, 60], 2)
-    else if (b.tipo === 'p') addTexto(b.texto, 10.5, 'normal', [40, 42, 60], 5)
+    else if (b.tipo === 'p') addTexto(b.texto, 10, 'normal', [90, 100, 120], 6)   // subtítulo/descrição
+    else if (b.tipo === 'cards') desenharCards(b.cards)
     else if (b.tipo === 'table' && b.linhas.length) {
       const [head, ...body] = b.linhas
       ensure(50)
       autoTable(doc, {
         head: [head], body, startY: y, margin: { left: mx, right: mx },
-        styles: { fontSize: 9, cellPadding: 5, textColor: [40, 42, 60], lineColor: [230, 235, 245], lineWidth: 0.5 },
-        headStyles: { fillColor: [40, 62, 147], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [247, 249, 253] },
+        styles: { fontSize: 9, cellPadding: 6, textColor: [55, 65, 95], lineColor: [225, 231, 243], lineWidth: 0.5 },
+        headStyles: { fillColor: AZUL, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9.5, halign: 'left' },
+        alternateRowStyles: { fillColor: AZUL_ALT },
+        columnStyles: { 0: { fontStyle: 'bold', textColor: [31, 42, 68] } },
         theme: 'grid',
       })
-      y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14
+      y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16
     }
   }
 
@@ -844,9 +899,10 @@ async function baixarRelatorioPdf(markdown: string) {
   const total = doc.getNumberOfPages()
   for (let p = 1; p <= total; p++) {
     doc.setPage(p)
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150, 150, 165)
-    doc.text('Documento gerado a partir de dados do banco Sybase IQ — Prefeitura de Arujá.', mx, pageH - 22)
-    doc.text(`${p}/${total}`, pageW - mx, pageH - 22, { align: 'right' })
+    doc.setDrawColor(230, 234, 244); doc.setLineWidth(0.5); doc.line(mx, pageH - 34, pageW - mx, pageH - 34)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150, 156, 172)
+    doc.text('Prefeitura Municipal de Arujá · Documento gerado a partir de dados oficiais.', mx, pageH - 20)
+    doc.text(`${p}/${total}`, pageW - mx, pageH - 20, { align: 'right' })
   }
 
   const stamp = new Date().toISOString().slice(0, 10)
