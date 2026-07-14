@@ -1,4 +1,5 @@
-const AGENT_URL = process.env.AGENT_URL!
+// Remove barra(s) final(is) para não gerar caminho com barra dupla (ex.: '//query' → 404).
+const AGENT_URL = (process.env.AGENT_URL || '').replace(/\/+$/, '')
 const AGENT_API_KEY = process.env.AGENT_API_KEY!
 // Service token do Cloudflare Access (quando o agente está atrás do Zero Trust).
 const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID
