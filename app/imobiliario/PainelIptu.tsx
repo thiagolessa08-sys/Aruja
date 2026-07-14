@@ -58,12 +58,6 @@ const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'inadimplencia', label: 'Inadimplência', cor: '#d64545' },
 ]
 
-type Metrica4 = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia'
-const METRICAS4: { id: Metrica4; label: string }[] = [
-  { id: 'lancado', label: 'Lançado' }, { id: 'arrecadado', label: 'Arrecadado' },
-  { id: 'emAberto', label: 'Em aberto' }, { id: 'inadimplencia', label: 'Inadimplência' },
-]
-interface RankItem { chave: string; nome: string; endereco: string; extra: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
 interface ImovelMatch { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string }
 interface ImovelDet {
   cd: number; inscricao: string; numero: string; endereco: string; cep: string; proprietario: string; cpfCnpj: string
@@ -73,7 +67,7 @@ interface ImovelDet {
   parcelas: { parcela: number; vencimento: string; lancado: number; pago: number; saldo: number }[]
 }
 interface Resumo {
-  resumo: { comIptu: number; comItbi: number; comTca: number; comEmpresa: number; iptuSemTca: number }
+  resumo: { comIptu: number; totalImoveis: number; comItbi: number; comTca: number; comEmpresa: number; iptuSemTca: number }
   situacao: { situacao: string; qt: number }[]
   pagamento: { status: string; qt: number; cor: string }[]
 }
@@ -98,11 +92,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [semNumero, setSemNumero] = useState(false)
   const [metricaBairro, setMetricaBairro] = useState<Metrica>('lancado')
   const [carregandoBairros, setCarregandoBairros] = useState(false)
-  // Onda 4 — rankings
-  const [rankTipo, setRankTipo] = useState<'imovel' | 'proprietario'>('imovel')
-  const [rankMetrica, setRankMetrica] = useState<Metrica4>('lancado')
-  const [rankItens, setRankItens] = useState<RankItem[]>([])
-  const [carregandoRank, setCarregandoRank] = useState(false)
   // Onda 4 — pesquisa de imóvel
   const [buscaImovel, setBuscaImovel] = useState('')
   const [buscaTipo, setBuscaTipo] = useState<'inscricao' | 'codigo' | 'nome'>('inscricao')
@@ -112,7 +101,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   // Lazy-load das seções pesadas (só busca quando aparecem na tela)
   const obsDiario = useOnScreen<HTMLDivElement>()
   const obsBairros = useOnScreen<HTMLDivElement>()
-  const obsRank = useOnScreen<HTMLDivElement>()
   const obsResumo = useOnScreen<HTMLDivElement>()
 
   const qs = ano ? `?ano=${ano}` : ''
@@ -190,16 +178,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     return () => { vivo = false }
   }, [ano, espolio, semNumero, bairroSel, obsBairros.visible])
 
-  // Rankings (100 maiores imóveis / proprietários) — lazy
-  useEffect(() => {
-    if (!ano || !obsRank.visible) return
-    let vivo = true
-    setCarregandoRank(true)
-    fetchJson(`/api/imobiliario/iptu-ranking?ano=${ano}&tipo=${rankTipo}&metrica=${rankMetrica}${bairroQ}`)
-      .then(d => { if (vivo && d && !d.error) setRankItens(d.itens ?? []) })
-      .finally(() => { if (vivo) setCarregandoRank(false) })
-    return () => { vivo = false }
-  }, [ano, rankTipo, rankMetrica, bairroQ, obsRank.visible])
 
   // Busca de imóvel (debounce simples) — por inscrição, código ou nome
   useEffect(() => {
@@ -260,7 +238,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
 
       {/* Cabeçalho + data de atualização */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, margin: '0 4px 4px' }}>
-        <span style={{ fontSize: 18, fontWeight: 700, color: '#283e93' }}>Visão Geral do IPTU {v ? `· ${v.anoRef}` : ''}{mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
+        <span style={{ fontSize: 18, fontWeight: 700, color: '#283e93' }}>Visão Geral do IPTU {v ? `· ${v.anoRef}` : ''}{mes ? ` · até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
         <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
           Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(v?.dataAtualizacao ?? null)}</b>
         </span>
@@ -280,13 +258,13 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         {cardsDef.map(c => (
           <div key={c.label} style={card}>
             <span style={{ fontSize: 11.5, fontWeight: 600, color: '#5b6477', display: 'block' }}>{c.label}</span>
-            <span style={{ fontSize: 9.5, color: '#aeb6c6', display: 'block', height: 12 }}>{c.sub || ' '}</span>
+            <span style={{ fontSize: 9.5, color: '#aeb6c6', display: 'block', height: 12 }}>{mes ? `até ${MESES_LONGO[Number(mes) - 1]}` : (c.sub || ' ')}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: `${c.cor}1a`, color: c.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{c.icon}</div>
               <span style={{ fontSize: 20, fontWeight: 700, color: c.cor, letterSpacing: '-.5px' }}>{fmtAbrev(c.cmp.atual)}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
-              <span style={{ fontSize: 10.5, color: '#9098a8' }}>{v ? v.anoRef - 1 : ''} <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtAbrev(c.cmp.ant)}</span></span>
+              <span style={{ fontSize: 10.5, color: '#9098a8' }}>{v ? v.anoRef - 1 : ''}{mes ? ' · mesmo período' : ''} <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtAbrev(c.cmp.ant)}</span></span>
               <span style={{ fontSize: 11, fontWeight: 700, color: c.cmp.pct >= 0 ? '#1fa463' : '#d64545', flex: 'none' }}>{fmtPct(c.cmp.pct)}</span>
             </div>
           </div>
@@ -336,7 +314,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para detalhar por mês · Arrecadado somado até {mesRefLabel} (comparação justa); Inadimplência = saldo vencido · barras claras = previsão {anoPrevisto ?? ''}</div> : null}
+          {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para detalhar por mês · Arrecadado somado até {mesRefLabel} (comparação justa); Inadimplência = saldo vencido · barras claras = previsão {anoPrevisto ?? ''} (regressão linear dos últimos 5 anos, por métrica)</div> : null}
           {drillPrevisto ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Projeção mês a mês de {drillAno} — totais previstos distribuídos pela sazonalidade dos anos anteriores.</div> : null}
         </div>
 
@@ -411,9 +389,13 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
               { l: 'IPTU sem lançamento de TCA', val: res.resumo.iptuSemTca, c: '#d64545' },
             ]
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr repeat(4,1fr)', gap: 12, marginTop: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr repeat(4,1fr)', gap: 12, marginTop: 14 }}>
+                <div style={{ background: '#f7f9fd', border: '1.5px solid #e3e9f5', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', letterSpacing: '-.5px' }}>{res.resumo.totalImoveis.toLocaleString('pt-BR')}</div>
+                  <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3, lineHeight: 1.25 }}>Total de imóveis (cadastro)</div>
+                </div>
                 <div style={{ background: '#283e93', borderRadius: 12, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 23, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{res.resumo.comIptu.toLocaleString('pt-BR')}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{res.resumo.comIptu.toLocaleString('pt-BR')}</div>
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 3, lineHeight: 1.25 }}>Imóveis com IPTU (base)</div>
                 </div>
                 {inters.map(x => (
@@ -499,72 +481,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             </div>
           )
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
-      </div>
-
-      {/* ===== ONDA 4: 100 maiores imóveis / proprietários ===== */}
-      <div ref={obsRank.ref} style={{ ...card, marginTop: 18, position: 'relative' }}>
-        {carregandoRank ? <LoadingOverlay label="Calculando ranking…" /> : null}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
-            {([['imovel', '100 Maiores Imóveis'], ['proprietario', '100 Maiores Proprietários']] as const).map(([id, lbl]) => (
-              <button key={id} onClick={() => setRankTipo(id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '6px 14px', fontSize: 12.5, fontWeight: 600, background: rankTipo === id ? '#283e93' : 'transparent', color: rankTipo === id ? '#fff' : '#5b6477' }}>{lbl}</button>
-            ))}
-          </div>
-          <span style={{ fontSize: 10.5, color: '#9098a8' }}>Clique numa coluna de valor para ordenar</span>
-        </div>
-        <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ maxHeight: 460, overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {([
-                    { h: '#', m: null as Metrica4 | null },
-                    { h: rankTipo === 'imovel' ? 'Imóvel' : 'Proprietário', m: null as Metrica4 | null },
-                    { h: 'Lançado', m: 'lancado' as Metrica4 },
-                    { h: 'Arrecadado', m: 'arrecadado' as Metrica4 },
-                    { h: 'Em aberto', m: 'emAberto' as Metrica4 },
-                    { h: 'Inadimpl.', m: 'inadimplencia' as Metrica4 },
-                  ]).map((c, i) => {
-                    const ativo = !!c.m && rankMetrica === c.m
-                    return (
-                      <th key={c.h} onClick={() => { if (c.m) setRankMetrica(c.m) }} title={c.m ? 'Ordenar pelos maiores desta coluna' : undefined}
-                        style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 600, padding: '10px 12px', textAlign: i <= 1 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)', cursor: c.m ? 'pointer' : 'default', userSelect: 'none' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: i <= 1 ? 'flex-start' : 'flex-end' }}>
-                          {c.h}
-                          {c.m ? <span style={{ fontSize: 10, opacity: ativo ? 1 : 0.45 }}>{ativo ? '▼' : '↕'}</span> : null}
-                        </span>
-                      </th>
-                    )
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {rankItens.length === 0 ? (
-                  <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', fontSize: 12, color: '#9098a8' }}>Sem dados.</td></tr>
-                ) : rankItens.map((it, i) => {
-                  const bg = i % 2 === 0 ? '#fff' : '#f7f9fd'
-                  const cel = (val: number, m: Metrica4) => (
-                    <td style={{ background: bg, color: rankMetrica === m ? '#283e93' : '#5b6477', fontWeight: rankMetrica === m ? 700 : 500, fontSize: 11.5, padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtAbrev(val)}</td>
-                  )
-                  // imóvel: proprietário + inscrição/endereço · proprietário: nome + qtd imóveis
-                  const primaria = rankTipo === 'imovel' ? (it.extra || it.nome) : it.nome
-                  const secundaria = rankTipo === 'imovel' ? `${it.nome}${it.endereco ? ' · ' + it.endereco : ''}` : it.endereco
-                  return (
-                    <tr key={it.chave + i}>
-                      <td style={{ background: bg, color: '#9098a8', fontSize: 11.5, padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid #eef1f7' }}>{i + 1}</td>
-                      <td style={{ background: bg, fontSize: 11.5, padding: '8px 12px', borderBottom: '1px solid #eef1f7', maxWidth: 320 }}>
-                        <div style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{primaria}</div>
-                        <div style={{ color: '#9098a8', fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{secundaria}</div>
-                      </td>
-                      {cel(it.lancado, 'lancado')}{cel(it.arrecadado, 'arrecadado')}{cel(it.emAberto, 'emAberto')}{cel(it.inadimplencia, 'inadimplencia')}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>Valores em R$ (mi = milhão · k = milhar). Ordenado por {METRICAS4.find(m => m.id === rankMetrica)?.label}.</div>
       </div>
 
       {/* ===== ONDA 4: Pesquisa de imóvel devedor ===== */}

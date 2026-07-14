@@ -136,7 +136,7 @@ export default function ImobiliarioPage() {
                 </select>
                 <select aria-label="Mês" value={pMes} onChange={e => setPMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
                   <option value="">Mês: Ano todo</option>
-                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m} (acum.)</option>)}
+                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
               </>
             )}

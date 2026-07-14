@@ -138,13 +138,22 @@ export function rankingIptu(tipo: 'imovel' | 'proprietario', ano: number, metric
 // ===================== RESUMO =====================
 export function resumoIptu(ano: number, bairro: string | null) {
   return cached(`iptuResumo:${ano}:${bairro ?? ''}`, CACHE_TTL, async () => {
-    const jb = bairro ? `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem=iu.cd_imovel_urbano JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep AND ce.nm_bairro='${bairro.replace(/'/g, "''")}'` : ''
+    const bq = bairro ? bairro.replace(/'/g, "''") : ''
+    const jb = bairro ? `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem=iu.cd_imovel_urbano JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep AND ce.nm_bairro='${bq}'` : ''
+    // Imóveis do bairro (para restringir as contagens que passam por baseIptu)
+    const imoveisBairro = bairro ? `(SELECT iu2.cd_imovel_urbano FROM ${S}.tb_dsod_imovel_urbano iu2 JOIN ${S}.tb_dsod_cep ce2 ON iu2.cd_cep=ce2.cd_cep WHERE ce2.nm_bairro='${bq}')` : ''
+    const inBairroSub = bairro ? ` AND g2.cd_origem IN ${imoveisBairro}` : ''
     // Base MANDATÓRIA da análise: imóveis com IPTU (cd_tributo=1) do exercício — os que
     // compõem o valor total lançado. Todas as demais contagens são INTERSEÇÃO com essa base.
-    const baseIptu = `SELECT DISTINCT g2.cd_origem FROM ${S}.tb_dsod_guias g2 WHERE g2.cd_tributo=1 AND g2.no_exercicio_lancamento=${ano} AND g2.ds_situacao NOT IN ('Recalculo','Validacao')`
-    const [comIptuR, sitR, tcaR, itbiR, empR, semTcaR, forma] = await Promise.all([
+    // (com bairro, a base já fica restrita ao bairro → ITBI/empresa deixam de ficar congelados)
+    const baseIptu = `SELECT DISTINCT g2.cd_origem FROM ${S}.tb_dsod_guias g2 WHERE g2.cd_tributo=1 AND g2.no_exercicio_lancamento=${ano} AND g2.ds_situacao NOT IN ('Recalculo','Validacao')${inBairroSub}`
+    const [comIptuR, totalImR, sitR, tcaR, itbiR, empR, semTcaR, forma] = await Promise.all([
       // Com IPTU = qtd de imóveis que compõem o lançado do exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')`, 1),
+      // Total de imóveis do cadastro (item 10) — respeita o bairro
+      agentQuery(bairro
+        ? `SELECT COUNT(*) FROM ${S}.tb_dsod_imovel_urbano i JOIN ${S}.tb_dsod_cep c ON i.cd_cep=c.cd_cep WHERE c.nm_bairro='${bq}'`
+        : `SELECT COUNT(*) FROM ${S}.tb_dsod_imovel_urbano`, 1),
       agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} GROUP BY g.ds_situacao`, 20),
       // Dos imóveis COM IPTU, quantos também têm TCA (cd_tributo=67) no exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem IN (${baseIptu})`, 1),
@@ -157,17 +166,19 @@ export function resumoIptu(ano: number, bairro: string | null) {
       formaPagamentoIptu(),
     ])
     const comIptu = num(comIptuR.rows[0]?.[0])
+    const totalImoveis = num(totalImR.rows[0]?.[0])
     const situacao = sitR.rows.map(r => ({ situacao: String(r[0] ?? '').trim() || '—', qt: num(r[1]) })).sort((a, b) => b.qt - a.qt)
     const fp = forma.get(ano) ?? { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
+    // Item 14: rótulos — "Parcelado" = pagou todas as parcelas; "Pago parcial" = pagou parte
     const pagamento = [
       { status: 'Cota única', qt: fp.cotaUnica, cor: '#1fa463' },
-      { status: 'Parcelado', qt: fp.parcelado, cor: '#283e93' },
-      { status: 'Pago parcial', qt: fp.pagoParcial, cor: '#e8962e' },
+      { status: 'Pago todas as parcelas', qt: fp.parcelado, cor: '#283e93' },
+      { status: 'Pago parcelado', qt: fp.pagoParcial, cor: '#e8962e' },
       { status: 'Em aberto', qt: fp.emAberto, cor: '#d64545' },
     ]
     return {
       resumo: {
-        comIptu, comItbi: num(itbiR.rows[0]?.[0]), comTca: num(tcaR.rows[0]?.[0]), comEmpresa: num(empR.rows[0]?.[0]),
+        comIptu, totalImoveis, comItbi: num(itbiR.rows[0]?.[0]), comTca: num(tcaR.rows[0]?.[0]), comEmpresa: num(empR.rows[0]?.[0]),
         iptuSemTca: num(semTcaR.rows[0]?.[0]),
       },
       situacao, pagamento,
