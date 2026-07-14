@@ -65,8 +65,21 @@ export async function agentQuery(sql: string, limit = 500): Promise<QueryResult>
     body: JSON.stringify({ sql, limit }),
   })
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Query failed (${res.status}): ${err}`)
+    const body = await res.text()
+    const isHtml = /<html|<!doctype/i.test(body)
+    let msg: string
+    if (res.status === 524 || res.status === 504) {
+      msg = 'Tempo limite excedido — a consulta demorou demais (limite ~100s). Restrinja por ano/bairro ou reduza o escopo da análise.'
+    } else if (res.status === 502 || res.status === 503) {
+      msg = 'Agente/banco temporariamente indisponível. Tente novamente em instantes.'
+    } else if (res.status === 500 && !isHtml) {
+      msg = body.slice(0, 300) // erro do próprio agente (SQL/banco) — mostra a mensagem
+    } else if (isHtml) {
+      msg = `gateway retornou HTTP ${res.status}.`
+    } else {
+      msg = body.slice(0, 300)
+    }
+    throw new Error(`Query failed (${res.status}): ${msg}`)
   }
   return res.json()
 }

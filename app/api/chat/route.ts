@@ -126,6 +126,19 @@ COMO RESPONDER:
 6. Se o dado não existir, diga claramente qual tabela foi consultada e o que encontrou
 
 ══════════════════════════════════════════
+PERFORMANCE — CONSULTAS PESADAS (evite timeout / erro 524):
+══════════════════════════════════════════
+• Há um limite de ~100s por consulta. Agregações de IPTU que cruzam guias × parcelas ×
+  posição/movimento × imóvel × CEP e agrupam por bairro/rua/contribuinte são LENTAS.
+• Ao analisar IPTU por bairro, rua, contribuinte ou inadimplência, SEMPRE:
+  - filtre UM exercício específico: AND g.no_exercicio_lancamento = 2026 (nunca todos os anos);
+  - use TOP N (ex.: TOP 20) e ORDER BY para trazer só o ranking pedido;
+  - evite JOINs desnecessários; para "inadimplência/vencido" use a posição da parcela
+    (tb_dsod_parcela_posicao.vl_saldo com dt_vencimento < getdate()).
+• Se a consulta puder ser muito pesada, prefira um recorte menor (um ano, os N maiores) e
+  avise que é uma amostra. NÃO tente varrer todos os exercícios de uma vez.
+
+══════════════════════════════════════════
 RELATÓRIOS EM PDF (estrutura do template institucional):
 ══════════════════════════════════════════
 • Se o usuário pedir um "relatório em PDF" (ou equivalente), produza o conteúdo NESTA ordem exata:
