@@ -737,8 +737,17 @@ function pedeRelatorioPdf(text: string): boolean {
   return /\bpdf\b/i.test(text)
 }
 
-// Remove marcações inline (**, *, `) para o texto puro do PDF.
-const stripInline = (s: string) => s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\*([^*]+)\*/g, '$1')
+// Remove marcações inline (**, *, `) e sanitiza para a fonte do PDF (CP1252): a Helvetica
+// do jsPDF não suporta emojis/símbolos fora do Latin-1 e embaralha o texto. Converte os
+// símbolos comuns de status em texto e remove o restante (acentos do pt-BR são mantidos).
+const stripInline = (s: string) => s
+  .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\*([^*]+)\*/g, '$1')
+  .replace(/[✅✔✓☑]/g, 'OK ')   // check marks -> OK
+  .replace(/[❌✖✗✘]/g, 'X ')     // cross marks -> X
+  .replace(/[⚠⛔]/g, '! ')                   // warning/no-entry -> !
+  .replace(/[^ -ÿ–—‘’“”•…€]/g, '') // fora do CP1252 -> remove
+  .replace(/[ 	]{2,}/g, ' ')
+  .trim()
 
 interface Card { rotulo: string; valor: string }
 type Bloco =
