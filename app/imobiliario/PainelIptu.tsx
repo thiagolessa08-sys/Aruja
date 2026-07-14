@@ -91,6 +91,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [espolio, setEspolio] = useState(false)
   const [semNumero, setSemNumero] = useState(false)
   const [metricaBairro, setMetricaBairro] = useState<Metrica>('lancado')
+  const [ordenarBairro, setOrdenarBairro] = useState<'valor' | 'imoveis'>('valor') // item 7
   const [carregandoBairros, setCarregandoBairros] = useState(false)
   // Onda 4 — pesquisa de imóvel
   const [buscaImovel, setBuscaImovel] = useState('')
@@ -338,6 +339,15 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
                 <button key={m.id} onClick={() => setMetricaBairro(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metricaBairro === m.id ? '#283e93' : 'transparent', color: metricaBairro === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
               ))}
             </div>
+            {/* item 7: ordenar por valor (da métrica) ou por qtd de imóveis */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#9098a8' }}>
+              <span>Ordenar:</span>
+              <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
+                {([['valor', 'Valor'], ['imoveis', 'Qtd. imóveis']] as const).map(([id, lbl]) => (
+                  <button key={id} onClick={() => setOrdenarBairro(id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 9px', fontSize: 11, fontWeight: 600, background: ordenarBairro === id ? '#283e93' : 'transparent', color: ordenarBairro === id ? '#fff' : '#5b6477' }}>{lbl}</button>
+                ))}
+              </div>
+            </div>
             {bairroSel ? <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
           </div>
         </div>
@@ -345,8 +355,9 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           const mx = Math.max(1, ...bairros.map(b => b[metricaBairro]))
           const corM = METRICAS.find(m => m.id === metricaBairro)!.cor
           if (!bairros.length) return <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados para os filtros selecionados.</div>
-          // Ordena sempre pelo maior valor da métrica selecionada (Lançado/Arrecadado/Inadimplência)
-          const lista = [...bairros].sort((a, b) => b[metricaBairro] - a[metricaBairro])
+          // Ordena pelo maior valor da métrica OU pela quantidade de imóveis (item 7)
+          const chaveOrd = ordenarBairro === 'imoveis' ? 'imoveis' : metricaBairro
+          const lista = [...bairros].sort((a, b) => b[chaveOrd] - a[chaveOrd])
           return (
             <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
               {lista.map((b, i) => {
