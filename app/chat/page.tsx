@@ -844,6 +844,12 @@ async function baixarRelatorioPdf(markdown: string) {
   const logo = await carregarLogo()
   let y = desenharCabecalho(logo)
 
+  // Remove a narração intermediária do assistente ("Vou buscar…", "Perfeito!…"): o relatório
+  // começa no título (# ...). Se houver um "# ", descarta tudo antes dele.
+  const linhasMd = markdown.split('\n')
+  const inicio = linhasMd.findIndex(l => l.startsWith('# '))
+  const md = inicio >= 0 ? linhasMd.slice(inicio).join('\n') : markdown
+
   const ensure = (h: number) => { if (y + h > maxY) { doc.addPage(); y = desenharCabecalho(logo) } }
   const addTexto = (texto: string, size: number, style: 'normal' | 'bold', cor: [number, number, number], gapAfter: number) => {
     doc.setFont('helvetica', style); doc.setFontSize(size); doc.setTextColor(cor[0], cor[1], cor[2])
@@ -872,7 +878,7 @@ async function baixarRelatorioPdf(markdown: string) {
     y += h + 14
   }
 
-  for (const b of parseBlocos(markdown)) {
+  for (const b of parseBlocos(md)) {
     if (b.tipo === 'gap') { y += 5 }
     else if (b.tipo === 'h1') addTexto(b.texto, 17, 'bold', [31, 42, 68], 4)      // título principal
     else if (b.tipo === 'h2') addTexto(b.texto, 13, 'bold', AZUL, 4)
