@@ -135,6 +135,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const obsComp = useOnScreen<HTMLDivElement>()
   const [comp, setComp] = useState<Comparativo | null>(null)
   const [carregandoComp, setCarregandoComp] = useState(false)
+  const [compErro, setCompErro] = useState(false)
+  const [recarregarComp, setRecarregarComp] = useState(0)
 
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
@@ -163,14 +165,14 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   useEffect(() => {
     if (!ano || !obsComp.visible) return
     let vivo = true
-    setCarregandoComp(true)
+    setCarregandoComp(true); setCompErro(false)
     const p = new URLSearchParams({ ano: String(ano) })
     if (bairroSel) p.set('bairro', bairroSel)
     fetchJson(`/api/imobiliario/iptu-comparativo?${p}`)
-      .then(d => { if (vivo && d && !d.error) setComp(d) })
+      .then(d => { if (!vivo) return; if (d && !d.error) setComp(d); else setCompErro(true) })
       .finally(() => { if (vivo) setCarregandoComp(false) })
     return () => { vivo = false }
-  }, [ano, bairroSel, obsComp.visible])
+  }, [ano, bairroSel, obsComp.visible, recarregarComp])
 
   // Ano de previsão (barra clara na evolução) — drill dele mostra a projeção mês a mês
   const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano ?? null
@@ -510,44 +512,52 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       ) : null}
 
       {/* ===== Comparativo Detalhado (item 16) — interativo por bairro ===== */}
-      <div ref={obsComp.ref} style={{ marginTop: 18, borderRadius: 20, padding: 18, background: '#141c30', boxShadow: '0 6px 22px rgba(20,30,60,0.14)', position: 'relative', overflowX: 'auto' }}>
+      <div ref={obsComp.ref} style={{ ...card, marginTop: 18, position: 'relative', overflowX: 'auto' }}>
         {carregandoComp ? <LoadingOverlay label="Calculando comparativo…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: '#cdd6ea', letterSpacing: '.08em' }}>COMPARATIVO DETALHADO{bairroSel ? ` · ${bairroSel}` : ''}</span>
-          <span style={{ fontSize: 10.5, color: '#6b7594' }}>Selecione um bairro (no gráfico acima) para filtrar</span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Comparativo Detalhado{bairroSel ? ` · ${bairroSel}` : ''}</span>
+          <span style={{ fontSize: 10.5, color: '#aeb6c6' }}>Selecione um bairro (no gráfico acima) para filtrar</span>
         </div>
         {comp ? (
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12, minWidth: 520 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #2a3550' }}>
-                {['CATEGORIA', String(comp.anoB), String(comp.anoA), 'VARIAÇÃO', '% VARIAÇÃO'].map((h, i) => (
-                  <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 12px', fontSize: 10.5, fontWeight: 700, color: '#8a93ad', letterSpacing: '.05em' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {comp.linhas.map((l, i) => {
-                const corVar = l.variacao > 0 ? '#4ade80' : l.variacao < 0 ? '#f87171' : '#8a93ad'
-                const sinal = (n: number) => (n > 0 ? '+' : '') + n.toLocaleString('pt-BR')
-                return (
-                  <tr key={i} style={{ borderBottom: '1px solid #202a44' }}>
-                    <td style={{ padding: '9px 12px', fontSize: 12.5, fontWeight: 600, color: '#e6ebf5' }}>{l.categoria}</td>
-                    {l.pendente ? (
-                      <><td /><td /><td /><td /></>
-                    ) : (
-                      <>
-                        <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: '#8aa0e0', fontWeight: 600 }}>{l.b.toLocaleString('pt-BR')}</td>
-                        <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: '#5fd39a', fontWeight: 600 }}>{l.a.toLocaleString('pt-BR')}</td>
-                        <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: corVar, fontWeight: 600 }}>{sinal(l.variacao)}</td>
-                        <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: corVar, fontWeight: 600 }}>{(l.pct >= 0 ? '+' : '') + l.pct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>
-                      </>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        ) : (obsComp.visible ? <div style={{ fontSize: 12, color: '#8a93ad', textAlign: 'center', padding: 24 }}>Carregando comparativo…</div> : null)}
+          <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+              <thead>
+                <tr>
+                  {['Categoria', String(comp.anoB), String(comp.anoA), 'Variação', '% Variação'].map((h, i) => (
+                    <th key={h} style={{ background: '#283e93', color: '#fff', textAlign: i === 0 ? 'left' : 'right', padding: '10px 14px', fontSize: 12, fontWeight: 600, borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {comp.linhas.map((l, i) => {
+                  const bg = i % 2 === 0 ? '#fff' : '#f7f9fd'
+                  const corVar = l.variacao > 0 ? '#1fa463' : l.variacao < 0 ? '#d64545' : '#9098a8'
+                  const sinal = (n: number) => (n > 0 ? '+' : '') + n.toLocaleString('pt-BR')
+                  return (
+                    <tr key={i}>
+                      <td style={{ background: bg, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, color: '#1f2a44', borderBottom: '1px solid #eef1f7' }}>{l.categoria}</td>
+                      {l.pendente ? (
+                        <><td style={{ background: bg, borderBottom: '1px solid #eef1f7' }} /><td style={{ background: bg, borderBottom: '1px solid #eef1f7' }} /><td style={{ background: bg, borderBottom: '1px solid #eef1f7' }} /><td style={{ background: bg, borderBottom: '1px solid #eef1f7' }} /></>
+                      ) : (
+                        <>
+                          <td style={{ background: bg, textAlign: 'right', padding: '9px 14px', fontSize: 12.5, color: '#5b6477', fontWeight: 500, borderBottom: '1px solid #eef1f7' }}>{l.b.toLocaleString('pt-BR')}</td>
+                          <td style={{ background: bg, textAlign: 'right', padding: '9px 14px', fontSize: 12.5, color: '#283e93', fontWeight: 700, borderBottom: '1px solid #eef1f7' }}>{l.a.toLocaleString('pt-BR')}</td>
+                          <td style={{ background: bg, textAlign: 'right', padding: '9px 14px', fontSize: 12.5, color: corVar, fontWeight: 600, borderBottom: '1px solid #eef1f7' }}>{sinal(l.variacao)}</td>
+                          <td style={{ background: bg, textAlign: 'right', padding: '9px 14px', fontSize: 12.5, color: corVar, fontWeight: 600, borderBottom: '1px solid #eef1f7' }}>{(l.pct >= 0 ? '+' : '') + l.pct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>
+                        </>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : compErro ? (
+          <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 24 }}>
+            Não foi possível carregar.{' '}
+            <button onClick={() => setRecarregarComp(n => n + 1)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, marginLeft: 6 }}>Recarregar</button>
+          </div>
+        ) : (obsComp.visible ? <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 24 }}>Carregando comparativo…</div> : null)}
       </div>
 
       {/* ===== Arrecadação Diária + Insights (uma linha) · Pesquisa abaixo ===== */}

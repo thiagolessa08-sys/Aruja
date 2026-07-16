@@ -10,30 +10,36 @@ const num = (v: unknown) => Number(v) || 0
 
 export interface LinhaComparativo { categoria: string; a: number; b: number; variacao: number; pct: number; pendente: boolean }
 
-// Contagens de um exercício (uma query com CASE). Base: imóveis com IPTU no ano.
+// Contagens de um exercício. Base: imóveis com IPTU no ano (ponte cd_devedor).
+// Separado em queries simples (evita subquery dentro de CASE, que o IQ pode não aceitar).
 async function contagensAno(ano: number, bairro: string | null): Promise<Record<string, number>> {
   const wb = bairro ? ` AND c.nm_bairro = '${bairro.replace(/'/g, "''")}'` : ''
-  const itbiSub = `SELECT iiu.cd_imovel_urbano FROM ${S}.tb_dsod_itbi itb JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = itb.cd_itbi WHERE itb.dt_lancamento BETWEEN '${ano}-01-01' AND getdate()-1 AND itb.vl_total > 0`
-  const r = await agentQuery(`
-    SELECT
-      COUNT(DISTINCT g.cd_devedor) total,
-      COUNT(DISTINCT CASE WHEN i.vl_area_edificaca = 0 THEN g.cd_devedor END) baldios,
-      COUNT(DISTINCT CASE WHEN i.ic_status_registro <> 'A' THEN g.cd_devedor END) inativos,
-      COUNT(DISTINCT CASE WHEN (i.no_imovel = 0 OR i.no_imovel IS NULL) THEN g.cd_devedor END) semnum,
-      COUNT(DISTINCT CASE WHEN cp.ic_pessoa = 'J' THEN g.cd_devedor END) cnpjs,
-      COUNT(DISTINCT CASE WHEN cp.nm_rsocial LIKE '%ESP_LIO%' THEN g.cd_devedor END) espolios,
-      COUNT(DISTINCT CASE WHEN g.cd_devedor IN (SELECT mf.cd_imovel_urbano FROM ${S}.tb_dsod_contribuinte_mob_fisico mf) THEN g.cd_devedor END) vincmob,
-      COUNT(DISTINCT CASE WHEN g.cd_devedor IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo = 67 AND t.no_exercicio_lancamento = ${ano}) THEN g.cd_devedor END) tca,
-      COUNT(DISTINCT CASE WHEN g.cd_devedor IN (${itbiSub}) THEN g.cd_devedor END) itbis
-    FROM ${S}.tb_dsod_guias g
+  const from = `FROM ${S}.tb_dsod_guias g
     JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_devedor
-    JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep
-    LEFT JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario
-    WHERE g.cd_tributo = 1 AND g.no_exercicio_lancamento = ${ano}${wb}`, 1)
-  const cols = r.columns.map(c => String(c).trim().toLowerCase())
-  const row = r.rows[0] ?? []
+    JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep`
+  const where = `WHERE g.cd_tributo = 1 AND g.no_exercicio_lancamento = ${ano}${wb}`
+  const itbiSub = `SELECT iiu.cd_imovel_urbano FROM ${S}.tb_dsod_itbi itb JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = itb.cd_itbi WHERE itb.dt_lancamento BETWEEN '${ano}-01-01' AND getdate()-1 AND itb.vl_total > 0`
+  const [attrR, vincR, itbiR] = await Promise.all([
+    // atributos do imóvel/proprietário (CASE simples, sem subquery)
+    agentQuery(`SELECT
+        COUNT(DISTINCT g.cd_devedor) total,
+        COUNT(DISTINCT CASE WHEN i.vl_area_edificaca = 0 THEN g.cd_devedor END) baldios,
+        COUNT(DISTINCT CASE WHEN i.ic_status_registro <> 'A' THEN g.cd_devedor END) inativos,
+        COUNT(DISTINCT CASE WHEN (i.no_imovel = 0 OR i.no_imovel IS NULL) THEN g.cd_devedor END) semnum,
+        COUNT(DISTINCT CASE WHEN cp.ic_pessoa = 'J' THEN g.cd_devedor END) cnpjs,
+        COUNT(DISTINCT CASE WHEN cp.nm_rsocial LIKE '%ESP_LIO%' THEN g.cd_devedor END) espolios
+      ${from} LEFT JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario ${where}`, 1),
+    // vínculo mobiliário (empresa no endereço)
+    agentQuery(`SELECT COUNT(DISTINCT g.cd_devedor) ${from} ${where} AND g.cd_devedor IN (SELECT mf.cd_imovel_urbano FROM ${S}.tb_dsod_contribuinte_mob_fisico mf)`, 1),
+    // ITBI lançado no exercício
+    agentQuery(`SELECT COUNT(DISTINCT g.cd_devedor) ${from} ${where} AND g.cd_devedor IN (${itbiSub})`, 1),
+  ])
   const o: Record<string, number> = {}
+  const cols = attrR.columns.map(c => String(c).trim().toLowerCase())
+  const row = attrR.rows[0] ?? []
   cols.forEach((c, idx) => { o[c] = num(row[idx]) })
+  o.vincmob = num(vincR.rows[0]?.[0])
+  o.itbis = num(itbiR.rows[0]?.[0])
   return o
 }
 
