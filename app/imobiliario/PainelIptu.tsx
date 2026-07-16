@@ -95,6 +95,7 @@ interface Resumo {
   pagamento: { status: string; qt: number; cor: string }[]
 }
 interface Diario { de: string; ate: string; dias: { dia: string; valor: number }[]; total: number }
+interface Comparativo { anoA: number; anoB: number; linhas: { categoria: string; a: number; b: number; variacao: number; pct: number; pendente: boolean }[] }
 
 export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: number | '' }) {
   const [v, setV] = useState<Visao | null>(null)
@@ -131,6 +132,9 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const obsDiario = useOnScreen<HTMLDivElement>()
   const obsBairros = useOnScreen<HTMLDivElement>()
   const obsResumo = useOnScreen<HTMLDivElement>()
+  const obsComp = useOnScreen<HTMLDivElement>()
+  const [comp, setComp] = useState<Comparativo | null>(null)
+  const [carregandoComp, setCarregandoComp] = useState(false)
 
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
@@ -154,6 +158,19 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       .then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
   }, [qs, bairroQ, obsResumo.visible])
+
+  // Comparativo Detalhado (item 16) — lazy; reage ao bairro selecionado
+  useEffect(() => {
+    if (!ano || !obsComp.visible) return
+    let vivo = true
+    setCarregandoComp(true)
+    const p = new URLSearchParams({ ano: String(ano) })
+    if (bairroSel) p.set('bairro', bairroSel)
+    fetchJson(`/api/imobiliario/iptu-comparativo?${p}`)
+      .then(d => { if (vivo && d && !d.error) setComp(d) })
+      .finally(() => { if (vivo) setCarregandoComp(false) })
+    return () => { vivo = false }
+  }, [ano, bairroSel, obsComp.visible])
 
   // Ano de previsão (barra clara na evolução) — drill dele mostra a projeção mês a mês
   const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano ?? null
@@ -491,6 +508,47 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           })}
         </div>
       ) : null}
+
+      {/* ===== Comparativo Detalhado (item 16) — interativo por bairro ===== */}
+      <div ref={obsComp.ref} style={{ marginTop: 18, borderRadius: 20, padding: 18, background: '#141c30', boxShadow: '0 6px 22px rgba(20,30,60,0.14)', position: 'relative', overflowX: 'auto' }}>
+        {carregandoComp ? <LoadingOverlay label="Calculando comparativo…" /> : null}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: '#cdd6ea', letterSpacing: '.08em' }}>COMPARATIVO DETALHADO{bairroSel ? ` · ${bairroSel}` : ''}</span>
+          <span style={{ fontSize: 10.5, color: '#6b7594' }}>Selecione um bairro (no gráfico acima) para filtrar</span>
+        </div>
+        {comp ? (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12, minWidth: 520 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #2a3550' }}>
+                {['CATEGORIA', String(comp.anoB), String(comp.anoA), 'VARIAÇÃO', '% VARIAÇÃO'].map((h, i) => (
+                  <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 12px', fontSize: 10.5, fontWeight: 700, color: '#8a93ad', letterSpacing: '.05em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {comp.linhas.map((l, i) => {
+                const corVar = l.variacao > 0 ? '#4ade80' : l.variacao < 0 ? '#f87171' : '#8a93ad'
+                const sinal = (n: number) => (n > 0 ? '+' : '') + n.toLocaleString('pt-BR')
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid #202a44' }}>
+                    <td style={{ padding: '9px 12px', fontSize: 12.5, fontWeight: 600, color: '#e6ebf5' }}>{l.categoria}{l.pendente ? <span style={{ fontSize: 9.5, color: '#6b7594', marginLeft: 6 }}>(a definir)</span> : null}</td>
+                    {l.pendente ? (
+                      <><td style={{ textAlign: 'right', padding: '9px 12px', color: '#5a6483' }}>—</td><td style={{ textAlign: 'right', padding: '9px 12px', color: '#5a6483' }}>—</td><td style={{ textAlign: 'right', padding: '9px 12px', color: '#5a6483' }}>—</td><td style={{ textAlign: 'right', padding: '9px 12px', color: '#5a6483' }}>—</td></>
+                    ) : (
+                      <>
+                        <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: '#8aa0e0', fontWeight: 600 }}>{l.b.toLocaleString('pt-BR')}</td>
+                        <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: '#5fd39a', fontWeight: 600 }}>{l.a.toLocaleString('pt-BR')}</td>
+                        <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: corVar, fontWeight: 600 }}>{sinal(l.variacao)}</td>
+                        <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: corVar, fontWeight: 600 }}>{(l.pct >= 0 ? '+' : '') + l.pct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>
+                      </>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        ) : (obsComp.visible ? <div style={{ fontSize: 12, color: '#8a93ad', textAlign: 'center', padding: 24 }}>Carregando comparativo…</div> : null)}
+      </div>
 
       {/* ===== Arrecadação + Pesquisa (esquerda) · Insights (direita) ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'start' }}>
