@@ -176,6 +176,7 @@ async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
       WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11, 14)
         AND p.no_parcela NOT IN (0) AND pm.cd_tipo_lancamento IN (0, 4, 7, 10)
         AND pb.cd_tipo_baixa NOT IN (28)
+        AND YEAR(pb.dt_baixa) >= g.no_exercicio_lancamento
       GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 400),
     // Em Aberto (todos) + Inadimplente (vencidos) — net por ano/mês de vencimento.
     agentQuery(`
@@ -267,6 +268,7 @@ export async function bucketsIptuBairro(bairro: string): Promise<Map<number, Buc
         JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa=pm.cd_parcela_baixa
         WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
           AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
+          AND YEAR(pb.dt_baixa) >= g.no_exercicio_lancamento
         GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 800),
       agentQuery(`SELECT g.no_exercicio_lancamento ex, YEAR(p.dt_vencimento) vy, MONTH(p.dt_vencimento) vm, SUM(pm.vl_movimento*pm.no_sinal) net
         FROM ${SCHEMA}.tb_dsod_guias g ${jb}
@@ -397,6 +399,7 @@ export async function bucketsIptuAteMes(mes: number): Promise<Map<number, Bucket
         WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
           AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
           AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND MONTH(p.dt_vencimento) <= ${mes}
+          AND YEAR(pb.dt_baixa) >= g.no_exercicio_lancamento
         GROUP BY g.no_exercicio_lancamento`, 200),
       agentQuery(`
         SELECT g.no_exercicio_lancamento ex, SUM(pp.vl_saldo) aberto,
@@ -452,6 +455,7 @@ export async function serieMensalIptu(ano: number): Promise<IptuMes[]> {
           AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
           AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
           AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          AND YEAR(pb.dt_baixa) >= ${ano}
         GROUP BY MONTH(pb.dt_baixa)`, 40),
       agentQuery(`
         SELECT MONTH(p.dt_vencimento) AS m, SUM(pp.vl_saldo) AS vl
