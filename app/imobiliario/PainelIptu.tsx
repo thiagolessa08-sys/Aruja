@@ -531,9 +531,9 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
                 const sinal = (n: number) => (n > 0 ? '+' : '') + n.toLocaleString('pt-BR')
                 return (
                   <tr key={i} style={{ borderBottom: '1px solid #202a44' }}>
-                    <td style={{ padding: '9px 12px', fontSize: 12.5, fontWeight: 600, color: '#e6ebf5' }}>{l.categoria}{l.pendente ? <span style={{ fontSize: 9.5, color: '#6b7594', marginLeft: 6 }}>(a definir)</span> : null}</td>
+                    <td style={{ padding: '9px 12px', fontSize: 12.5, fontWeight: 600, color: '#e6ebf5' }}>{l.categoria}</td>
                     {l.pendente ? (
-                      <><td style={{ textAlign: 'right', padding: '9px 12px', color: '#5a6483' }}>—</td><td style={{ textAlign: 'right', padding: '9px 12px', color: '#5a6483' }}>—</td><td style={{ textAlign: 'right', padding: '9px 12px', color: '#5a6483' }}>—</td><td style={{ textAlign: 'right', padding: '9px 12px', color: '#5a6483' }}>—</td></>
+                      <><td /><td /><td /><td /></>
                     ) : (
                       <>
                         <td style={{ textAlign: 'right', padding: '9px 12px', fontSize: 12.5, color: '#8aa0e0', fontWeight: 600 }}>{l.b.toLocaleString('pt-BR')}</td>
