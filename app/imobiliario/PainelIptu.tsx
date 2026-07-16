@@ -51,6 +51,19 @@ const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'O
 const fmtPct = (p: number) => (p >= 0 ? '+' : '') + p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
 const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
 
+// Insights de IPTU (item 14) — frases derivadas dos cards já carregados.
+function insightsIptu(v: Visao): string[] {
+  const c = v.cards
+  const p1 = (x: number) => x.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%'
+  const pctLanc = (x: number) => c.lancado.atual ? (x / c.lancado.atual) * 100 : 0
+  const arr: string[] = []
+  arr.push(`Em ${v.anoRef}, o IPTU lançado soma ${fmtAbrev(c.lancado.atual)} (${fmtPct(c.lancado.pct)} vs ${v.anoRef - 1}).`)
+  arr.push(`Arrecadado ${fmtAbrev(c.arrecadado.atual)} — ${p1(pctLanc(c.arrecadado.atual))} do lançado (${fmtPct(c.arrecadado.pct)} vs ${v.anoRef - 1}).`)
+  arr.push(`Inadimplência ${fmtAbrev(c.inadimplencia.atual)} (${p1(pctLanc(c.inadimplencia.atual))} do lançado); em aberto ${fmtAbrev(c.emAberto.atual)}.`)
+  if (c.isento.atual || c.suspenso.atual) arr.push(`Isento ${fmtAbrev(c.isento.atual)} e suspenso ${fmtAbrev(c.suspenso.atual)} no exercício.`)
+  return arr
+}
+
 type Metrica = 'lancado' | 'arrecadado' | 'inadimplencia'
 const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'lancado', label: 'Lançado', cor: '#283e93' },
@@ -479,8 +492,11 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         </div>
       ) : null}
 
-      {/* ===== ONDA 2: Arrecadação diária ===== */}
-      <div ref={obsDiario.ref} style={{ ...card, marginTop: 18 }}>
+      {/* ===== Arrecadação + Pesquisa (esquerda) · Insights (direita) ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+      {/* Arrecadação diária */}
+      <div ref={obsDiario.ref} style={{ ...card }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Arrecadação Diária {diario ? `· ${fmtAbrev(diario.total)}` : ''}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5b6477' }}>
@@ -525,8 +541,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
       </div>
 
-      {/* ===== ONDA 4: Pesquisa de imóvel devedor ===== */}
-      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+      {/* ===== Pesquisa de imóvel devedor ===== */}
+      <div style={{ ...card, position: 'relative' }}>
         {carregandoDet ? <LoadingOverlay label="Carregando imóvel…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Pesquisa de Imóvel</span>
@@ -629,6 +645,32 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             </div>
           )
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}
+      </div>
+        </div>
+        {/* ===== Insights de IPTU (item 14) — ao lado da Arrecadação e Pesquisa ===== */}
+        <div style={{ position: 'sticky', top: 14, borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }} />
+            </div>
+            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>IPTU</span>
+          </div>
+          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de IPTU {v ? `· ${v.anoRef}` : ''}</div>
+          {v ? (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {insightsIptu(v).map((t, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
+                  <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[0, 1, 2].map(i => <div key={i} style={{ height: 9, borderRadius: 5, width: i === 1 ? '85%' : '95%', background: 'rgba(255,255,255,0.18)' }} />)}
+            </div>
+          )}
+        </div>
       </div>
 
     </div>
