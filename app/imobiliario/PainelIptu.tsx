@@ -82,6 +82,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [carregandoMensal, setCarregandoMensal] = useState(false)
   const [res, setRes] = useState<Resumo | null>(null)
   const [diario, setDiario] = useState<Diario | null>(null)
+  const [diarioErro, setDiarioErro] = useState(false)
+  const [recarregarDiario, setRecarregarDiario] = useState(0)
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   // Onda 3 — bairros
@@ -93,6 +95,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [metricaBairro, setMetricaBairro] = useState<Metrica>('lancado')
   const [ordenarBairro, setOrdenarBairro] = useState<'valor' | 'imoveis'>('valor') // item 7
   const [carregandoBairros, setCarregandoBairros] = useState(false)
+  const [bairrosErro, setBairrosErro] = useState(false)
+  const [recarregarBairros, setRecarregarBairros] = useState(0)
   // Onda 4 — pesquisa de imóvel
   const [buscaImovel, setBuscaImovel] = useState('')
   const [buscaTipo, setBuscaTipo] = useState<'inscricao' | 'codigo' | 'nome'>('inscricao')
@@ -159,25 +163,26 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   useEffect(() => {
     if (!de || !ate || !obsDiario.visible) return
     let vivo = true
+    setDiarioErro(false)
     fetchJson(`/api/imobiliario/iptu-diario?ano=${ano}&de=${de}&ate=${ate}${bairroQ}`)
-      .then(d => { if (vivo && d && !d.error) setDiario(d) })
+      .then(d => { if (!vivo) return; if (d && !d.error) setDiario(d); else setDiarioErro(true) })
     return () => { vivo = false }
-  }, [ano, de, ate, bairroQ, obsDiario.visible])
+  }, [ano, de, ate, bairroQ, obsDiario.visible, recarregarDiario])
 
   // Bairros (ou ruas quando há bairro selecionado) — query pesada, lazy + loading próprio
   useEffect(() => {
     if (!ano || !obsBairros.visible) return
     let vivo = true
-    setCarregandoBairros(true)
+    setCarregandoBairros(true); setBairrosErro(false)
     const p = new URLSearchParams({ ano: String(ano) })
     if (espolio) p.set('espolio', '1')
     if (semNumero) p.set('semnumero', '1')
     if (bairroSel) p.set('bairro', bairroSel)
     fetchJson(`/api/imobiliario/iptu-bairros?${p}`)
-      .then(d => { if (vivo && d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) } })
+      .then(d => { if (!vivo) return; if (d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) } else setBairrosErro(true) })
       .finally(() => { if (vivo) setCarregandoBairros(false) })
     return () => { vivo = false }
-  }, [ano, espolio, semNumero, bairroSel, obsBairros.visible])
+  }, [ano, espolio, semNumero, bairroSel, obsBairros.visible, recarregarBairros])
 
 
   // Busca de imóvel (debounce simples) — por inscrição, código ou nome
@@ -354,7 +359,12 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         {(() => {
           const mx = Math.max(1, ...bairros.map(b => b[metricaBairro]))
           const corM = METRICAS.find(m => m.id === metricaBairro)!.cor
-          if (!bairros.length) return <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados para os filtros selecionados.</div>
+          if (!bairros.length) return bairrosErro ? (
+            <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>
+              Não foi possível carregar (consulta pesada / instabilidade).{' '}
+              <button onClick={() => setRecarregarBairros(n => n + 1)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, marginLeft: 6 }}>Recarregar</button>
+            </div>
+          ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados para os filtros selecionados.</div>
           // Ordena pelo maior valor da métrica OU pela quantidade de imóveis (item 7)
           const chaveOrd = ordenarBairro === 'imoveis' ? 'imoveis' : metricaBairro
           const lista = [...bairros].sort((a, b) => b[chaveOrd] - a[chaveOrd])
@@ -491,7 +501,12 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
               </ResponsiveContainer>
             </div>
           )
-        })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
+        })() : diarioErro ? (
+          <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>
+            Não foi possível carregar.{' '}
+            <button onClick={() => setRecarregarDiario(n => n + 1)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, marginLeft: 6 }}>Recarregar</button>
+          </div>
+        ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
       </div>
 
       {/* ===== ONDA 4: Pesquisa de imóvel devedor ===== */}
