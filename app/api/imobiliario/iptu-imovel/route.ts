@@ -32,7 +32,7 @@ async function buscar(q: string, tipo: string) {
 
 // Detalhe completo do imóvel + 5 anos + flags.
 async function detalhe(id: number) {
-  const [infoR, itbiR, isscR, tcaR, lancR, arrecR, saldoR, parcR] = await Promise.all([
+  const [infoR, itbiR, isscR, tcaR, lancR, arrecR, saldoR, parcR, statusR] = await Promise.all([
     agentQuery(`SELECT i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, c.ds_endereco, c.nm_bairro, c.no_cep, cp.nm_rsocial, cp.no_cpf_cnpj
       FROM ${S}.tb_dsod_imovel_urbano i
       LEFT JOIN ${S}.tb_dsod_cep c ON i.cd_cep = c.cd_cep
@@ -60,6 +60,10 @@ async function detalhe(id: number) {
       WHERE g.cd_origem=${id} AND g.cd_tributo IN (1,25) AND g.ds_situacao NOT IN ('Recalculo','Validacao')
         AND g.no_exercicio_lancamento = (SELECT MAX(no_exercicio_lancamento) FROM ${S}.tb_dsod_guias WHERE cd_origem=${id} AND cd_tributo IN (1,25))
       ORDER BY p.no_parcela`, 60),
+    // Status do imóvel (item 15): situação da guia de IPTU do exercício mais recente
+    agentQuery(`SELECT TOP 1 g.ds_situacao FROM ${S}.tb_dsod_guias g
+      WHERE g.cd_origem=${id} AND g.cd_tributo IN (1,25)
+      ORDER BY g.no_exercicio_lancamento DESC`, 1),
   ])
   const info = infoR.rows[0] ?? []
   const numero = String(info[2] ?? '').trim()
@@ -83,6 +87,7 @@ async function detalhe(id: number) {
     cd: num(info[0]), inscricao: String(info[1] ?? '').trim(), numero,
     endereco: `${String(info[3] ?? '').trim()}${numero ? ', ' + numero : ''}${String(info[4] ?? '').trim() ? ' — ' + String(info[4]).trim() : ''}`,
     cep: String(info[5] ?? '').trim(), proprietario: nome, cpfCnpj: String(info[7] ?? '').trim(),
+    status: String(statusR.rows[0]?.[0] ?? '').trim(), // item 15
     flags: {
       itbi: num(itbiR.rows[0]?.[0]) > 0,
       isscc: num(isscR.rows[0]?.[0]) > 0,
