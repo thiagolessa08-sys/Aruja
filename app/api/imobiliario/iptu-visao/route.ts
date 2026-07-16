@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { bucketsIptu, bucketsIptuBairro, arrecadadoIptuMes, bucketsIptuAteMes, dataAtualizacaoIptu, isentoIptu, type BucketsIptuAno } from '@/lib/tributo-engine'
+import { bucketsIptu, bucketsIptuBairro, bucketsIptuAteMes, dataAtualizacaoIptu, isentoIptu, type BucketsIptuAno } from '@/lib/tributo-engine'
 
 const ANO_MIN = 2020
 
@@ -27,9 +27,8 @@ export async function GET(req: NextRequest) {
     const mesSel = Number(req.nextUrl.searchParams.get('mes')) || null
     const mesRef = mesSel ?? (new Date().getMonth() + 1)
     const usaAteMes = !!mesSel && !bairro // mês selecionado → toda a visão acumulada até o mês
-    const [buckets, arrecMesMap, ateMes, dataAtualizacao] = await Promise.all([
+    const [buckets, ateMes, dataAtualizacao] = await Promise.all([
       bairro ? bucketsIptuBairro(bairro) : bucketsIptu(),
-      bairro ? Promise.resolve(null) : arrecadadoIptuMes(mesRef),
       usaAteMes ? bucketsIptuAteMes(mesSel) : Promise.resolve(null),
       dataAtualizacaoIptu(),
     ])
@@ -49,7 +48,8 @@ export async function GET(req: NextRequest) {
     // acumulada até o mês (ateMes); senão: lançado/em aberto/inadimplência anuais e
     // arrecadado YTD até o mês atual (arrecMesMap).
     const lancMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.lancado ?? 0) : (buckets.get(a)?.lancado ?? 0)
-    const arrecMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.arrecadado ?? 0) : (arrecMesMap ? (arrecMesMap.get(a) ?? 0) : (buckets.get(a)?.arrecadado ?? 0))
+    // "Ano Todo" (sem mês) = ano cheio (Jan→Dez) — item 1. Com mês = acumulado até o mês.
+    const arrecMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.arrecadado ?? 0) : (buckets.get(a)?.arrecadado ?? 0)
     const abertoMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.emAberto ?? 0) : (buckets.get(a)?.emAberto ?? 0)
     const inadMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.inadimplente ?? 0) : (buckets.get(a)?.inadimplente ?? 0)
 
