@@ -186,10 +186,11 @@ export function resumoIptu(ano: number, bairro: string | null) {
       agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} GROUP BY g.ds_situacao`, 20),
       // Dos imóveis COM IPTU, quantos também têm TCA (cd_tributo=67) no exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem IN (${baseIptu})`, 1),
-      // …quantos têm ITBI LANÇADO no exercício (item 19: antes contava ITBI de qualquer época)
+      // …quantos imóveis com ITBI lançado no exercício (item 19 — query oficial do Wallace:
+      // dt_lancamento no ano até ontem, vl_total>0; NÃO intersecta com a base IPTU)
       agentQuery(`SELECT COUNT(DISTINCT iiu.cd_imovel_urbano) FROM ${S}.tb_dsod_itbi itb
         JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = itb.cd_itbi
-        WHERE YEAR(itb.dt_lancamento) = ${ano} AND iiu.cd_imovel_urbano IN (${baseIptu})`, 1),
+        WHERE itb.dt_lancamento BETWEEN '${ano}-01-01' AND getdate()-1 AND itb.vl_total > 0`, 1),
       // …quantos têm empresa no mesmo endereço
       agentQuery(`SELECT COUNT(DISTINCT mf.cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico mf WHERE mf.cd_imovel_urbano IN (${baseIptu})`, 1),
       // …quantos têm IPTU e NÃO tiveram lançamento de TCA no exercício
