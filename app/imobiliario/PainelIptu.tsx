@@ -590,10 +590,10 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
               <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{d.proprietario || `Imóvel ${d.cd}`}</div>
-                  <div style={{ fontSize: 12, color: '#5b6477', marginTop: 3 }}>Código {d.cd} · Inscrição {d.inscricao || '—'} · {d.cpfCnpj}</div>
-                  {/* item 15: status do imóvel entre o nome e o endereço */}
-                  {d.status ? <div style={{ marginTop: 4 }}><span style={{ fontSize: 11, fontWeight: 600, color: '#283e93', background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '3px 10px' }}>Status: {d.status}</span></div> : null}
-                  <div style={{ fontSize: 12, color: '#5b6477', marginTop: 4 }}>{d.endereco}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
+                  {/* item 15: status do imóvel logo abaixo do nome */}
+                  {d.status ? <div style={{ marginTop: 5 }}><span style={{ fontSize: 11, fontWeight: 600, color: '#283e93', background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '3px 10px' }}>Status: {d.status}</span></div> : null}
+                  <div style={{ fontSize: 12, color: '#5b6477', marginTop: 5 }}>Código {d.cd} · Inscrição {d.inscricao || '—'} · {d.cpfCnpj}</div>
+                  <div style={{ fontSize: 12, color: '#5b6477' }}>{d.endereco}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-start' }}>
                   {FLAGS.map(f => (
