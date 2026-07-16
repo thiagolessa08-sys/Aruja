@@ -57,6 +57,16 @@ const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'arrecadado', label: 'Arrecadado', cor: '#1fa463' },
   { id: 'inadimplencia', label: 'Inadimplência', cor: '#d64545' },
 ]
+// Métricas do gráfico IPTU por Bairro (itens 7,8,9) — cada uma refetcha do backend
+type MetricaBairroUI = 'lancado' | 'arrecadado' | 'inadimplencia' | 'emAberto' | 'isento' | 'suspenso'
+const METRICAS_BAIRRO: { id: MetricaBairroUI; label: string; cor: string }[] = [
+  { id: 'lancado', label: 'Lançado', cor: '#283e93' },
+  { id: 'arrecadado', label: 'Arrecadado', cor: '#1fa463' },
+  { id: 'emAberto', label: 'Em aberto', cor: '#e8962e' },
+  { id: 'inadimplencia', label: 'Inadimplência', cor: '#d64545' },
+  { id: 'isento', label: 'Isento', cor: '#8094d6' },
+  { id: 'suspenso', label: 'Suspenso', cor: '#5b6477' },
+]
 
 interface ImovelMatch { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string }
 interface ImovelDet {
@@ -87,12 +97,13 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   // Onda 3 — bairros
-  const [bairros, setBairros] = useState<{ nome: string; lancado: number; arrecadado: number; inadimplencia: number; imoveis: number }[]>([])
+  const [bairros, setBairros] = useState<{ nome: string; imoveis: number; valor: number }[]>([])
   const [nivelBairro, setNivelBairro] = useState<'bairro' | 'rua'>('bairro')
   const [bairroSel, setBairroSel] = useState<string | null>(null)
   const [espolio, setEspolio] = useState(false)
   const [semNumero, setSemNumero] = useState(false)
-  const [metricaBairro, setMetricaBairro] = useState<Metrica>('lancado')
+  const [metricaBairro, setMetricaBairro] = useState<MetricaBairroUI>('lancado')
+  const [buscaBairro, setBuscaBairro] = useState('') // item 13
   const [ordenarBairro, setOrdenarBairro] = useState<'valor' | 'imoveis'>('valor') // item 7
   const [carregandoBairros, setCarregandoBairros] = useState(false)
   const [bairrosErro, setBairrosErro] = useState(false)
@@ -174,7 +185,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     if (!ano || !obsBairros.visible) return
     let vivo = true
     setCarregandoBairros(true); setBairrosErro(false)
-    const p = new URLSearchParams({ ano: String(ano) })
+    const p = new URLSearchParams({ ano: String(ano), metrica: metricaBairro })
     if (espolio) p.set('espolio', '1')
     if (semNumero) p.set('semnumero', '1')
     if (bairroSel) p.set('bairro', bairroSel)
@@ -182,7 +193,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       .then(d => { if (!vivo) return; if (d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) } else setBairrosErro(true) })
       .finally(() => { if (vivo) setCarregandoBairros(false) })
     return () => { vivo = false }
-  }, [ano, espolio, semNumero, bairroSel, obsBairros.visible, recarregarBairros])
+  }, [ano, espolio, semNumero, bairroSel, metricaBairro, obsBairros.visible, recarregarBairros])
 
 
   // Busca de imóvel (debounce simples) — por inscrição, código ou nome
@@ -339,8 +350,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#5b6477', cursor: 'pointer' }}>
               <input type="checkbox" checked={semNumero} onChange={e => setSemNumero(e.target.checked)} /> Sem número
             </label>
-            <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
-              {METRICAS.map(m => (
+            <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3, flexWrap: 'wrap' }}>
+              {METRICAS_BAIRRO.map(m => (
                 <button key={m.id} onClick={() => setMetricaBairro(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metricaBairro === m.id ? '#283e93' : 'transparent', color: metricaBairro === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
               ))}
             </div>
@@ -353,37 +364,41 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
                 ))}
               </div>
             </div>
+            {/* item 13: pesquisa */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+              <input value={buscaBairro} onChange={e => setBuscaBairro(e.target.value)} placeholder={nivelBairro === 'rua' ? 'Buscar rua…' : 'Buscar bairro…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 130, fontFamily: 'inherit' }} />
+            </div>
             {bairroSel ? <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
           </div>
         </div>
         {(() => {
-          const mx = Math.max(1, ...bairros.map(b => b[metricaBairro]))
-          const corM = METRICAS.find(m => m.id === metricaBairro)!.cor
-          if (!bairros.length) return bairrosErro ? (
+          const corM = METRICAS_BAIRRO.find(m => m.id === metricaBairro)!.cor
+          const q = buscaBairro.trim().toLowerCase()
+          const filtrados = q ? bairros.filter(b => b.nome.toLowerCase().includes(q)) : bairros
+          if (!filtrados.length) return bairrosErro ? (
             <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>
               Não foi possível carregar (consulta pesada / instabilidade).{' '}
               <button onClick={() => setRecarregarBairros(n => n + 1)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, marginLeft: 6 }}>Recarregar</button>
             </div>
-          ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados para os filtros selecionados.</div>
-          // Ordena pelo maior valor da métrica OU pela quantidade de imóveis (item 7)
-          const chaveOrd = ordenarBairro === 'imoveis' ? 'imoveis' : metricaBairro
-          const lista = [...bairros].sort((a, b) => b[chaveOrd] - a[chaveOrd])
+          ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>{q ? 'Nenhum resultado para a busca.' : 'Sem dados para os filtros selecionados.'}</div>
+          // Ordena por valor da métrica OU por qtd de imóveis (item 7)
+          const lista = [...filtrados].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
+          const mx = Math.max(1, ...lista.map(b => Math.abs(b.valor)))
+          const metLabel = METRICAS_BAIRRO.find(m => m.id === metricaBairro)!.label
           return (
             <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
               {lista.map((b, i) => {
-                const w = Math.max(2, 100 * b[metricaBairro] / mx)
+                const w = Math.max(2, 100 * Math.abs(b.valor) / mx)
                 const podeDrill = nivelBairro === 'bairro'
                 return (
                   <div key={i} onClick={() => { if (podeDrill) setBairroSel(b.nome) }} style={{ cursor: podeDrill ? 'pointer' : 'default' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
-                      <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {b.imoveis.toLocaleString('pt-BR')} im.</span></span>
-                      <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b[metricaBairro])}</span>
+                      <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {b.imoveis.toLocaleString('pt-BR')} im. ({metLabel})</span></span>
+                      <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.valor)}</span>
                     </div>
                     <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 8, background: corM }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: 14, fontSize: 10.5, color: '#9098a8', marginTop: 3 }}>
-                      <span>Lanç: {fmtAbrev(b.lancado)}</span><span>Arrec: {fmtAbrev(b.arrecadado)}</span><span>Inad: {fmtAbrev(b.inadimplencia)}</span>
                     </div>
                   </div>
                 )

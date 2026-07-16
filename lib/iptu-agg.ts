@@ -9,62 +9,91 @@ const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 
 // ===================== BAIRROS (ou ruas no drill) =====================
-export interface FiltrosBairro { ano: number; espolio: boolean; semNumero: boolean; bairro: string | null }
+// Reescrito conforme as queries de referência (15/07): ponte imóvel = g.cd_devedor
+// (NÃO cd_origem), e cada métrica tem sua fórmula exata + qtd de imóveis própria.
+export type MetricaBairro = 'lancado' | 'arrecadado' | 'inadimplencia' | 'emAberto' | 'isento' | 'suspenso'
+export interface FiltrosBairro { ano: number; espolio: boolean; semNumero: boolean; bairro: string | null; metrica?: MetricaBairro }
 
-function baseBairro(f: FiltrosBairro, grupo: string) {
+// FROM + WHERE base (ponte cd_devedor→imóvel→cep); junta contribuinte só p/ filtro de espólio.
+function baseBairro(f: FiltrosBairro) {
   const joinProp = f.espolio ? `JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario` : ''
-  let w = `g.no_exercicio_lancamento = ${f.ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
+  let w = `g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${f.ano} AND p.no_parcela <> 0`
   if (f.espolio) w += ` AND cp.nm_rsocial LIKE '%ESP_LIO%'`
-  if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)` // no_imovel é NUMÉRICO
+  if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)`
   if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
-  return {
-    from: `FROM ${S}.tb_dsod_guias g
-      JOIN ${S}.tb_dsod_imovel_urbano i ON g.cd_origem = i.cd_imovel_urbano
-      JOIN ${S}.tb_dsod_cep c ON i.cd_cep = c.cd_cep
+  const from = `FROM ${S}.tb_dsod_guias g
+      JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_devedor
+      JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep
       ${joinProp}
-      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia`,
-    where: w, grupo,
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas`
+  return { from, where: w }
+}
+
+// Monta a query da métrica (retorna: grupo, qtd de imóveis, valor).
+function queryMetricaBairro(f: FiltrosBairro, grupo: string): string {
+  const b = baseBairro(f)
+  const semRV = ` AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
+  switch (f.metrica) {
+    case 'arrecadado': // item 11
+      return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
+        ${b.from}
+        JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+        JOIN ${S}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+        WHERE ${b.where}${semRV} AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+          AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
+        GROUP BY ${grupo}`
+    case 'isento': // item 8
+      return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
+        ${b.from}
+        WHERE ${b.where}${semRV} AND pm.cd_tipo_movimento <= 3
+          AND g.cd_devedor IN (SELECT e.cd_origem FROM ${S}.tb_extr_isencoes e
+            WHERE datepart(year, e.dt_fim) >= ${f.ano}
+              AND (e.ds_isencao NOT IN ('TCA','Não Incidência de ITBI','TCA - Imóvel Locado a Órgão Público') OR e.ds_isencao IS NULL))
+        GROUP BY ${grupo}`
+    case 'suspenso': // item 9 — só grupos de imóvel com net<0 (mov 20)
+      return `SELECT k, COUNT(DISTINCT cd_devedor) im, SUM(valor) vl FROM (
+        SELECT ${grupo} k, g.cd_devedor cd_devedor, SUM(pm.vl_movimento) valor
+        ${b.from}
+        WHERE ${b.where} AND pm.cd_tipo_movimento IN (20)
+        GROUP BY ${grupo}, g.cd_devedor HAVING SUM(pm.vl_movimento * pm.no_sinal) < 0
+      ) t GROUP BY k`
+    case 'emAberto': // item 7 — saldo líquido em aberto (net>0) por parcela vencendo/a vencer
+      return `SELECT k, COUNT(DISTINCT cd_devedor) im, SUM(valor) vl FROM (
+        SELECT ${grupo} k, g.cd_devedor cd_devedor, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
+        ${b.from}
+        WHERE ${b.where} AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+        GROUP BY ${grupo}, g.cd_devedor, p.dt_vencimento HAVING SUM(pm.vl_movimento * pm.no_sinal) > 0
+      ) t GROUP BY k`
+    case 'inadimplencia': // item 12 — saldo líquido VENCIDO (net>1)
+      return `SELECT k, COUNT(DISTINCT cd_devedor) im, SUM(valor) vl FROM (
+        SELECT ${grupo} k, g.cd_devedor cd_devedor, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
+        ${b.from}
+        WHERE ${b.where} AND p.dt_vencimento < getdate()-1
+          AND pm.cd_tipo_movimento IN (0,1,2,3,12,11,14,20) AND pm.cd_tipo_lancamento IN (4,7,0,10,1)
+        GROUP BY ${grupo}, g.cd_devedor, p.dt_vencimento HAVING SUM(pm.vl_movimento * pm.no_sinal) > 1
+      ) t GROUP BY k`
+    default: // 'lancado' (item 10)
+      return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
+        ${b.from}
+        WHERE ${b.where}${semRV} AND pm.cd_tipo_movimento <= 3
+        GROUP BY ${grupo}`
   }
 }
 
 async function agregadoBairro(f: FiltrosBairro, grupo: string) {
-  const b = baseBairro(f, grupo)
-  const [lancR, arrecR, saldoR] = await Promise.all([
-    agentQuery(`SELECT ${b.grupo} AS k, SUM(pm.vl_movimento) AS vl, COUNT(DISTINCT g.cd_origem) AS im
-      ${b.from}
-      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      WHERE ${b.where} AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela NOT IN (0)
-      GROUP BY ${b.grupo}`, 800),
-    agentQuery(`SELECT ${b.grupo} AS k, SUM(pm.vl_movimento) AS vl
-      ${b.from}
-      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
-      WHERE ${b.where} AND pm.cd_tipo_movimento IN (11,14) AND p.no_parcela NOT IN (0)
-        AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
-      GROUP BY ${b.grupo}`, 800),
-    agentQuery(`SELECT ${b.grupo} AS k, YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm, SUM(pp.vl_saldo) AS saldo
-      ${b.from}
-      JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-      WHERE ${b.where} AND p.no_parcela NOT IN (0)
-      GROUP BY ${b.grupo}, YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 4000),
-  ])
-  const map = new Map<string, { lancado: number; arrecadado: number; inadimplencia: number; imoveis: number }>()
-  const g = (k: string) => map.get(k) ?? { lancado: 0, arrecadado: 0, inadimplencia: 0, imoveis: 0 }
-  for (const r of lancR.rows) { const k = String(r[0] ?? '').trim() || '—'; const x = g(k); x.lancado = num(r[1]); x.imoveis = num(r[2]); map.set(k, x) }
-  for (const r of arrecR.rows) { const k = String(r[0] ?? '').trim() || '—'; const x = g(k); x.arrecadado = num(r[1]); map.set(k, x) }
-  const now = new Date(); const cy = now.getFullYear(), cm = now.getMonth() + 1
-  for (const r of saldoR.rows) {
-    const k = String(r[0] ?? '').trim() || '—'; const vy = num(r[1]), vm = num(r[2]), saldo = num(r[3])
-    if (saldo <= 0) continue
-    if (vy < cy || (vy === cy && vm < cm)) { const x = g(k); x.inadimplencia += saldo; map.set(k, x) }
-  }
-  return [...map.entries()].map(([nome, m]) => ({ nome, ...m })).sort((a, b) => b.lancado - a.lancado)
+  const r = await agentQuery(queryMetricaBairro(f, grupo), 4000)
+  return r.rows
+    .map(x => ({ nome: String(x[0] ?? '').trim() || '—', imoveis: num(x[1]), valor: num(x[2]) }))
+    .filter(b => b.valor !== 0 || b.imoveis > 0)
+    .sort((a, b) => b.valor - a.valor)
 }
 
 export function bairrosIptu(f: FiltrosBairro) {
   const grupo = f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
-  const key = `iptuBairros:${f.ano}:${f.espolio ? 1 : 0}:${f.semNumero ? 1 : 0}:${f.bairro ?? ''}`
-  return cached(key, CACHE_TTL, () => agregadoBairro(f, grupo))
+  const met = f.metrica ?? 'lancado'
+  const key = `iptuBairros:${f.ano}:${met}:${f.espolio ? 1 : 0}:${f.semNumero ? 1 : 0}:${f.bairro ?? ''}`
+  return cached(key, CACHE_TTL, () => agregadoBairro({ ...f, metrica: met }, grupo))
 }
 
 // ===================== RANKING (100 maiores) =====================
@@ -157,8 +186,10 @@ export function resumoIptu(ano: number, bairro: string | null) {
       agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} GROUP BY g.ds_situacao`, 20),
       // Dos imóveis COM IPTU, quantos também têm TCA (cd_tributo=67) no exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem IN (${baseIptu})`, 1),
-      // …quantos têm ITBI
-      agentQuery(`SELECT COUNT(DISTINCT it.cd_imovel_urbano) FROM ${S}.tb_dsod_itbi_imovel_urbano it WHERE it.cd_imovel_urbano IN (${baseIptu})`, 1),
+      // …quantos têm ITBI LANÇADO no exercício (item 19: antes contava ITBI de qualquer época)
+      agentQuery(`SELECT COUNT(DISTINCT iiu.cd_imovel_urbano) FROM ${S}.tb_dsod_itbi itb
+        JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = itb.cd_itbi
+        WHERE YEAR(itb.dt_lancamento) = ${ano} AND iiu.cd_imovel_urbano IN (${baseIptu})`, 1),
       // …quantos têm empresa no mesmo endereço
       agentQuery(`SELECT COUNT(DISTINCT mf.cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico mf WHERE mf.cd_imovel_urbano IN (${baseIptu})`, 1),
       // …quantos têm IPTU e NÃO tiveram lançamento de TCA no exercício
