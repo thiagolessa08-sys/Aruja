@@ -37,7 +37,7 @@ interface Visao {
   anoRef: number
   mesRef: number
   cards: { lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp }
-  evolucao: { ano: number; lancado: number; arrecadado: number; inadimplencia: number; previsto: boolean; arrecPct: number; inadPct: number }[]
+  evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; previsto: boolean; arrecPct: number; inadPct: number }[]
 }
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 // abreviação compacta padrão: mi (milhão) e k (milhar). Ex.: 67,6 mi / 540 k
@@ -88,7 +88,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [carregando, setCarregando] = useState(false)
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [drillAno, setDrillAno] = useState<number | null>(null) // ano em drill mensal na evolução
-  const [mensalData, setMensalData] = useState<{ mes: number; lancado: number; arrecadado: number; inadimplencia: number }[]>([])
+  const [mensalData, setMensalData] = useState<{ mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }[]>([])
   const [carregandoMensal, setCarregandoMensal] = useState(false)
   const [res, setRes] = useState<Resumo | null>(null)
   const [diario, setDiario] = useState<Diario | null>(null)
@@ -231,12 +231,12 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
 
   // Evolução (5 anos + previsão) ou mensal (drill)
   const serie = v ? (drillAno
-    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, inadimplencia: m.inadimplencia, previsto: drillPrevisto, arrecPct: 0, inadPct: 0 }))
-    : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, inadimplencia: e.inadimplencia, previsto: e.previsto, arrecPct: e.arrecPct, inadPct: e.inadPct }))
+    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia, previsto: drillPrevisto, arrecPct: 0, inadPct: 0 }))
+    : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, emAberto: e.emAberto, inadimplencia: e.inadimplencia, previsto: e.previsto, arrecPct: e.arrecPct, inadPct: e.inadPct }))
   ) : []
   const pctPorRot = new Map(serie.map(s => [s.rot, { arrecPct: s.arrecPct, inadPct: s.inadPct, previsto: s.previsto }]))
   // cores por métrica (tom forte = real, tom claro = previsto)
-  const CORES = { lancado: ['#283e93', '#a9b6e2'], arrecadado: ['#1fa463', '#9adcbc'], inadimplencia: ['#d64545', '#eeaeae'] }
+  const CORES = { lancado: ['#283e93', '#a9b6e2'], arrecadado: ['#1fa463', '#9adcbc'], emAberto: ['#e8962e', '#f3cd97'], inadimplencia: ['#d64545', '#eeaeae'] }
   // tick do eixo X: ano/mês + (no anual) % arrecadado e inadimplência frente ao lançado
   const EixoTick = (props: { x?: number; y?: number; payload?: { value?: string } }) => {
     const x = props.x ?? 0, y = props.y ?? 0, rot = props.payload?.value ?? ''
@@ -297,8 +297,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
-                {METRICAS.map(m => (
-                  <span key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
+                {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }].map(m => (
+                  <span key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
                 ))}
               </div>
               {drillAno ? <button onClick={() => setDrillAno(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button> : null}
@@ -317,8 +317,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
                 <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
                   formatter={(v, name) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
-                {(['lancado', 'arrecadado', 'inadimplencia'] as const).map(dk => (
-                  <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={28}
+                {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia'] as const).map(dk => (
+                  <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={22}
                     stroke="none" activeBar={false}
                     cursor={!drillAno ? 'pointer' : 'default'}
                     onClick={(d) => {

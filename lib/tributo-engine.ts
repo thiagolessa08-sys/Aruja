@@ -162,8 +162,27 @@ export async function bucketsIptu(): Promise<Map<number, BucketsIptuAno>> {
   return cached('bucketsIptu', TTL_15MIN, bucketsIptuRaw)
 }
 
+// Em aberto / inadimplência conforme queries de referência (15/07): net por
+// (exercício, devedor, vencimento), com HAVING. Em aberto = todos net>0; inadimplência
+// = só vencidos (dt_vencimento < hoje-1) net>1. Limitado a exercícios recentes (custo).
+const MOV_ABERTO = '0,1,2,3,11,12,14,20', LANC_ABERTO = '0,4,7,10,1'
+function qEmAbertoInad(vencido: boolean, exFloor = 2019): string {
+  const venc = vencido ? ' AND p.dt_vencimento < getdate()-1' : ''
+  const th = vencido ? '1' : '0'
+  return `SELECT ex, SUM(valor) vl FROM (
+      SELECT g.no_exercicio_lancamento ex, g.cd_devedor dev, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND g.no_exercicio_lancamento >= ${exFloor} AND p.no_parcela <> 0
+        AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${venc}
+      GROUP BY g.no_exercicio_lancamento, g.cd_devedor, p.dt_vencimento
+      HAVING SUM(pm.vl_movimento * pm.no_sinal) > ${th}
+    ) t GROUP BY ex`
+}
+
 async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
-  const [lanc, arrecRows, viRows, isenRows, suspRows] = await Promise.all([
+  const [lanc, arrecRows, abertoRows, inadRows, isenRows, suspRows] = await Promise.all([
     lancadoOficial([1]),
     // Arrecadado: movimento 11,14 · lançamento 0,4,7,10 · exclui tipo_baixa 28 (Estorno)
     // · exclui guia Recalculo/Validacao (em JS).
@@ -178,16 +197,9 @@ async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
         AND pb.cd_tipo_baixa NOT IN (28)
         AND YEAR(pb.dt_baixa) >= g.no_exercicio_lancamento
       GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 400),
-    // Em Aberto (todos) + Inadimplente (vencidos) — net por ano/mês de vencimento.
-    agentQuery(`
-      SELECT g.no_exercicio_lancamento AS ex, YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm,
-             SUM(pm.vl_movimento * pm.no_sinal) AS net
-      FROM ${SCHEMA}.tb_dsod_guias g
-      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (0, 1, 2, 3, 11, 12, 14, 20)
-        AND p.no_parcela NOT IN (0) AND pm.cd_tipo_lancamento IN (0, 4, 7, 10, 1)
-      GROUP BY g.no_exercicio_lancamento, YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 4000),
+    // Em aberto (todos net>0) e Inadimplência (vencidos net>1) — por exercício (referência 15/07)
+    agentQuery(qEmAbertoInad(false), 200),
+    agentQuery(qEmAbertoInad(true), 200),
     // Isento: movimento 12,5 · lançamento 1 · setor de origem da baixa = 'Isencao' (filtro em JS).
     agentQuery(`
       SELECT g.no_exercicio_lancamento AS ex, pb.ds_setor_origem_baixa AS setor, SUM(pm.vl_movimento) AS vl
@@ -208,13 +220,12 @@ async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
       GROUP BY g.no_exercicio_lancamento`, 200),
   ])
 
-  return montarBuckets(lanc, arrecRows.rows, viRows.rows, isenRows.rows, suspRows.rows)
+  return montarBuckets(lanc, arrecRows.rows, abertoRows.rows, inadRows.rows, isenRows.rows, suspRows.rows)
 }
 
 // Montagem dos buckets a partir das linhas cruas (compartilhado entre total e por bairro).
-function montarBuckets(lanc: Map<number, number>, arrecRows: unknown[][], viRows: unknown[][], isenRows: unknown[][], suspRows: unknown[][]): Map<number, BucketsIptuAno> {
-  const now = new Date()
-  const curY = now.getFullYear(), curM = now.getMonth() + 1
+// abertoRows/inadRows já vêm agregados por exercício ([ex, valor]).
+function montarBuckets(lanc: Map<number, number>, arrecRows: unknown[][], abertoRows: unknown[][], inadRows: unknown[][], isenRows: unknown[][], suspRows: unknown[][]): Map<number, BucketsIptuAno> {
   const get = (m: Map<number, BucketsIptuAno>, ex: number) =>
     m.get(ex) ?? { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 }
   const map = new Map<number, BucketsIptuAno>()
@@ -225,12 +236,13 @@ function montarBuckets(lanc: Map<number, number>, arrecRows: unknown[][], viRows
     if (LANC_SIT_EXCLUIR.has(String(row[1] ?? '').trim())) continue
     const b = get(map, ex); b.arrecadado += num(row[2]); map.set(ex, b)
   }
-  for (const row of viRows) {
+  for (const row of abertoRows) {
     const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
-    const vy = num(row[1]), vm = num(row[2]), net = num(row[3])
-    const b = get(map, ex); b.emAberto += net
-    if (vy < curY || (vy === curY && vm < curM)) b.inadimplente += net
-    map.set(ex, b)
+    const b = get(map, ex); b.emAberto = Math.max(0, num(row[1])); map.set(ex, b)
+  }
+  for (const row of inadRows) {
+    const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+    const b = get(map, ex); b.inadimplente = Math.max(0, num(row[1])); map.set(ex, b)
   }
   for (const row of isenRows) {
     const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
@@ -241,7 +253,6 @@ function montarBuckets(lanc: Map<number, number>, arrecRows: unknown[][], viRows
     const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
     const b = get(map, ex); b.suspenso = Math.max(0, -num(row[1])); map.set(ex, b)
   }
-  for (const b of map.values()) { b.emAberto = Math.max(0, b.emAberto); b.inadimplente = Math.max(0, b.inadimplente) }
   return map
 }
 
@@ -252,9 +263,19 @@ function montarBuckets(lanc: Map<number, number>, arrecRows: unknown[][], viRows
  */
 export async function bucketsIptuBairro(bairro: string): Promise<Map<number, BucketsIptuAno>> {
   return cached(`bucketsIptuBairro:${bairro}`, TTL_15MIN, async () => {
-    const jb = `JOIN ${SCHEMA}.tb_dsod_imovel_urbano iu ON g.cd_origem = iu.cd_imovel_urbano
+    const jb = `JOIN ${SCHEMA}.tb_dsod_imovel_urbano iu ON g.cd_devedor = iu.cd_imovel_urbano
       JOIN ${SCHEMA}.tb_dsod_cep ce ON iu.cd_cep = ce.cd_cep AND ce.nm_bairro = '${bairro.replace(/'/g, "''")}'`
-    const [lancRows, arrecRows, viRows, isenRows, suspRows] = await Promise.all([
+    const qAbInBairro = (vencido: boolean) => `SELECT ex, SUM(valor) vl FROM (
+        SELECT g.no_exercicio_lancamento ex, g.cd_devedor dev, p.dt_vencimento venc, SUM(pm.vl_movimento*pm.no_sinal) valor
+        FROM ${SCHEMA}.tb_dsod_guias g ${jb}
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND p.no_parcela <> 0
+          AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${vencido ? ' AND p.dt_vencimento < getdate()-1' : ''}
+        GROUP BY g.no_exercicio_lancamento, g.cd_devedor, p.dt_vencimento
+        HAVING SUM(pm.vl_movimento*pm.no_sinal) > ${vencido ? '1' : '0'}
+      ) t GROUP BY ex`
+    const [lancRows, arrecRows, abertoRows, inadRows, isenRows, suspRows] = await Promise.all([
       agentQuery(`SELECT g.no_exercicio_lancamento ex, g.ds_situacao sit, SUM(pm.vl_movimento) vl
         FROM ${SCHEMA}.tb_dsod_guias g ${jb}
         JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
@@ -270,12 +291,8 @@ export async function bucketsIptuBairro(bairro: string): Promise<Map<number, Buc
           AND pm.cd_tipo_lancamento IN (0,4,7,10) AND pb.cd_tipo_baixa NOT IN (28)
           AND YEAR(pb.dt_baixa) >= g.no_exercicio_lancamento
         GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 800),
-      agentQuery(`SELECT g.no_exercicio_lancamento ex, YEAR(p.dt_vencimento) vy, MONTH(p.dt_vencimento) vm, SUM(pm.vl_movimento*pm.no_sinal) net
-        FROM ${SCHEMA}.tb_dsod_guias g ${jb}
-        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
-        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
-        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND p.no_parcela NOT IN (0) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
-        GROUP BY g.no_exercicio_lancamento, YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 4000),
+      agentQuery(qAbInBairro(false), 200),
+      agentQuery(qAbInBairro(true), 200),
       agentQuery(`SELECT g.no_exercicio_lancamento ex, pb.ds_setor_origem_baixa setor, SUM(pm.vl_movimento) vl
         FROM ${SCHEMA}.tb_dsod_guias g ${jb}
         JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
@@ -297,7 +314,7 @@ export async function bucketsIptuBairro(bairro: string): Promise<Map<number, Buc
       if (LANC_SIT_EXCLUIR.has(String(row[1] ?? '').trim())) continue
       lancMap.set(ex, (lancMap.get(ex) ?? 0) + num(row[2]))
     }
-    return montarBuckets(lancMap, arrecRows.rows, viRows.rows, isenRows.rows, suspRows.rows)
+    return montarBuckets(lancMap, arrecRows.rows, abertoRows.rows, inadRows.rows, isenRows.rows, suspRows.rows)
   })
 }
 
@@ -381,7 +398,19 @@ export interface BucketAteMesIptu { lancado: number; arrecadado: number; emAbert
 
 export async function bucketsIptuAteMes(mes: number): Promise<Map<number, BucketAteMesIptu>> {
   return cached(`bucketsIptuAteMes:${mes}`, TTL_15MIN, async () => {
-    const [lancR, arrecR, saldoR] = await Promise.all([
+    // Em aberto/inadimplência acumulados até o mês (net por devedor+vencimento, referência 15/07)
+    const qAteMes = (vencido: boolean) => `SELECT ex, SUM(valor) vl FROM (
+        SELECT g.no_exercicio_lancamento ex, g.cd_devedor dev, p.dt_vencimento venc, SUM(pm.vl_movimento*pm.no_sinal) valor
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND g.no_exercicio_lancamento >= 2019 AND p.no_parcela <> 0
+          AND MONTH(p.dt_vencimento) <= ${mes}
+          AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${vencido ? ' AND p.dt_vencimento < getdate()-1' : ''}
+        GROUP BY g.no_exercicio_lancamento, g.cd_devedor, p.dt_vencimento
+        HAVING SUM(pm.vl_movimento*pm.no_sinal) > ${vencido ? '1' : '0'}
+      ) t GROUP BY ex`
+    const [lancR, arrecR, abertoR, inadR] = await Promise.all([
       agentQuery(`
         SELECT g.no_exercicio_lancamento ex, g.ds_situacao sit, SUM(pm.vl_movimento) vl
         FROM ${SCHEMA}.tb_dsod_guias g
@@ -401,15 +430,8 @@ export async function bucketsIptuAteMes(mes: number): Promise<Map<number, Bucket
           AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND MONTH(p.dt_vencimento) <= ${mes}
           AND YEAR(pb.dt_baixa) >= g.no_exercicio_lancamento
         GROUP BY g.no_exercicio_lancamento`, 200),
-      agentQuery(`
-        SELECT g.no_exercicio_lancamento ex, SUM(pp.vl_saldo) aberto,
-               SUM(CASE WHEN p.dt_vencimento < getdate() THEN pp.vl_saldo ELSE 0 END) venc
-        FROM ${SCHEMA}.tb_dsod_guias g
-        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-        JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-        WHERE g.cd_tributo IN (${IPTU_COD}) AND p.no_parcela NOT IN (0)
-          AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND MONTH(p.dt_vencimento) <= ${mes}
-        GROUP BY g.no_exercicio_lancamento`, 200),
+      agentQuery(qAteMes(false), 200),
+      agentQuery(qAteMes(true), 200),
     ])
     const map = new Map<number, BucketAteMesIptu>()
     const get = (ex: number) => map.get(ex) ?? { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0 }
@@ -419,7 +441,8 @@ export async function bucketsIptuAteMes(mes: number): Promise<Map<number, Bucket
       const b = get(ex); b.lancado += num(r[2]); map.set(ex, b)
     }
     for (const r of arrecR.rows) { const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue; const b = get(ex); b.arrecadado = num(r[1]); map.set(ex, b) }
-    for (const r of saldoR.rows) { const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); b.inadimplente = Math.max(0, num(r[2])); map.set(ex, b) }
+    for (const r of abertoR.rows) { const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
+    for (const r of inadR.rows) { const ex = num(r[0]); if (!(ex >= 2005 && ex <= 2035)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
     return map
   })
 }
@@ -431,11 +454,22 @@ export async function bucketsIptuAteMes(mes: number): Promise<Map<number, Bucket
  *  • inadimplencia = saldo VENCIDO (dt_vencimento < hoje, em aberto) por MÊS de vencimento
  *    — distribui a inadimplência no mês real em que a parcela venceu (consistente com o card anual).
  */
-export interface IptuMes { mes: number; lancado: number; arrecadado: number; inadimplencia: number }
+export interface IptuMes { mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
 
 export async function serieMensalIptu(ano: number): Promise<IptuMes[]> {
   return cached(`iptuMensal:${ano}`, TTL_15MIN, async () => {
-    const [lancR, arrecR, inadR] = await Promise.all([
+    // em aberto (net>0) e inadimplência (vencido net>1) por MÊS de vencimento — referência 15/07
+    const qMes = (vencido: boolean) => `SELECT m, SUM(valor) vl FROM (
+        SELECT MONTH(p.dt_vencimento) m, g.cd_devedor dev, p.dt_vencimento venc, SUM(pm.vl_movimento*pm.no_sinal) valor
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (${ano}) AND p.no_parcela <> 0
+          AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${vencido ? ' AND p.dt_vencimento < getdate()-1' : ''}
+        GROUP BY MONTH(p.dt_vencimento), g.cd_devedor, p.dt_vencimento
+        HAVING SUM(pm.vl_movimento*pm.no_sinal) > ${vencido ? '1' : '0'}
+      ) t GROUP BY m`
+    const [lancR, arrecR, abertoR, inadR] = await Promise.all([
       agentQuery(`
         SELECT MONTH(p.dt_vencimento) AS m, SUM(pm.vl_movimento) AS vl
         FROM ${SCHEMA}.tb_dsod_guias g
@@ -457,23 +491,17 @@ export async function serieMensalIptu(ano: number): Promise<IptuMes[]> {
           AND g.ds_situacao NOT IN ('Recalculo','Validacao')
           AND YEAR(pb.dt_baixa) >= ${ano}
         GROUP BY MONTH(pb.dt_baixa)`, 40),
-      agentQuery(`
-        SELECT MONTH(p.dt_vencimento) AS m, SUM(pp.vl_saldo) AS vl
-        FROM ${SCHEMA}.tb_dsod_guias g
-        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-        JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-        WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento IN (${ano})
-          AND p.no_parcela NOT IN (0) AND g.ds_situacao NOT IN ('Recalculo','Validacao')
-          AND p.dt_vencimento < getdate()
-        GROUP BY MONTH(p.dt_vencimento)`, 40),
+      agentQuery(qMes(false), 40),
+      agentQuery(qMes(true), 40),
     ])
-    const lanc = new Map<number, number>(), arr = new Map<number, number>(), inad = new Map<number, number>()
+    const lanc = new Map<number, number>(), arr = new Map<number, number>(), aberto = new Map<number, number>(), inad = new Map<number, number>()
     for (const r of lancR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) lanc.set(m, num(r[1])) }
     for (const r of arrecR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) arr.set(m, num(r[1])) }
+    for (const r of abertoR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) aberto.set(m, Math.max(0, num(r[1]))) }
     for (const r of inadR.rows) { const m = num(r[0]); if (m >= 1 && m <= 12) inad.set(m, Math.max(0, num(r[1]))) }
     const out: IptuMes[] = []
     for (let m = 1; m <= 12; m++) {
-      out.push({ mes: m, lancado: lanc.get(m) ?? 0, arrecadado: arr.get(m) ?? 0, inadimplencia: inad.get(m) ?? 0 })
+      out.push({ mes: m, lancado: lanc.get(m) ?? 0, arrecadado: arr.get(m) ?? 0, emAberto: aberto.get(m) ?? 0, inadimplencia: inad.get(m) ?? 0 })
     }
     return out
   })
@@ -503,17 +531,18 @@ export async function previsaoMensalIptu(anoPrev: number): Promise<IptuMes[]> {
       const b = (n * sxy - sx * sy) / den, a0 = (sy - b * sx) / n
       return Math.max(0, a0 + b * anoPrev)
     }
-    const annL = proj(b => b.lancado), annA = proj(b => b.arrecadado), annI = proj(b => b.inadimplente)
+    const annL = proj(b => b.lancado), annA = proj(b => b.arrecadado), annE = proj(b => b.emAberto), annI = proj(b => b.inadimplente)
 
     // Sazonalidade: média da participação mensal dos 3 últimos anos reais, por métrica.
     const anosShare = [anoMax, anoMax - 1, anoMax - 2].filter(a => a >= 2005)
     const series = await Promise.all(anosShare.map(a => serieMensalIptu(a)))
-    const shL = Array(12).fill(0), shA = Array(12).fill(0), shI = Array(12).fill(0)
-    let nL = 0, nA = 0, nI = 0
+    const shL = Array(12).fill(0), shA = Array(12).fill(0), shE = Array(12).fill(0), shI = Array(12).fill(0)
+    let nL = 0, nA = 0, nE = 0, nI = 0
     for (const s of series) {
-      const tL = s.reduce((x, m) => x + m.lancado, 0), tA = s.reduce((x, m) => x + m.arrecadado, 0), tI = s.reduce((x, m) => x + m.inadimplencia, 0)
+      const tL = s.reduce((x, m) => x + m.lancado, 0), tA = s.reduce((x, m) => x + m.arrecadado, 0), tE = s.reduce((x, m) => x + m.emAberto, 0), tI = s.reduce((x, m) => x + m.inadimplencia, 0)
       if (tL > 0) { for (const m of s) shL[m.mes - 1] += m.lancado / tL; nL++ }
       if (tA > 0) { for (const m of s) shA[m.mes - 1] += m.arrecadado / tA; nA++ }
+      if (tE > 0) { for (const m of s) shE[m.mes - 1] += m.emAberto / tE; nE++ }
       if (tI > 0) { for (const m of s) shI[m.mes - 1] += m.inadimplencia / tI; nI++ }
     }
     const out: IptuMes[] = []
@@ -522,6 +551,7 @@ export async function previsaoMensalIptu(anoPrev: number): Promise<IptuMes[]> {
         mes: m,
         lancado: annL * (nL ? shL[m - 1] / nL : 1 / 12),
         arrecadado: annA * (nA ? shA[m - 1] / nA : 1 / 12),
+        emAberto: annE * (nE ? shE[m - 1] / nE : 1 / 12),
         inadimplencia: annI * (nI ? shI[m - 1] / nI : 1 / 12),
       })
     }
