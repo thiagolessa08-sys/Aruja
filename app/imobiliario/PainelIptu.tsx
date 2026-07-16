@@ -550,11 +550,10 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         ) : (obsComp.visible ? <div style={{ fontSize: 12, color: '#8a93ad', textAlign: 'center', padding: 24 }}>Carregando comparativo…</div> : null)}
       </div>
 
-      {/* ===== Arrecadação + Pesquisa (esquerda) · Insights (direita) ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+      {/* ===== Arrecadação Diária + Insights (uma linha) · Pesquisa abaixo ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
       {/* Arrecadação diária */}
-      <div ref={obsDiario.ref} style={{ ...card }}>
+      <div ref={obsDiario.ref} style={{ ...card, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Arrecadação Diária {diario ? `· ${fmtAbrev(diario.total)}` : ''}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5b6477' }}>
@@ -598,9 +597,34 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           </div>
         ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
       </div>
+      {/* ===== Insights de IPTU (item 14) — somente ao lado da Arrecadação ===== */}
+      <div style={{ borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }} />
+          </div>
+          <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>IPTU</span>
+        </div>
+        <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de IPTU {v ? `· ${v.anoRef}` : ''}</div>
+        {v ? (
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {insightsIptu(v).map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[0, 1, 2].map(i => <div key={i} style={{ height: 9, borderRadius: 5, width: i === 1 ? '85%' : '95%', background: 'rgba(255,255,255,0.18)' }} />)}
+          </div>
+        )}
+      </div>
+      </div>
 
-      {/* ===== Pesquisa de imóvel devedor ===== */}
-      <div style={{ ...card, position: 'relative' }}>
+      {/* ===== Pesquisa de imóvel devedor (largura total, abaixo) ===== */}
+      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
         {carregandoDet ? <LoadingOverlay label="Carregando imóvel…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Pesquisa de Imóvel</span>
@@ -705,32 +729,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             </div>
           )
         })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}
-      </div>
-        </div>
-        {/* ===== Insights de IPTU (item 14) — ao lado da Arrecadação e Pesquisa ===== */}
-        <div style={{ position: 'sticky', top: 14, borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }} />
-            </div>
-            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>IPTU</span>
-          </div>
-          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de IPTU {v ? `· ${v.anoRef}` : ''}</div>
-          {v ? (
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {insightsIptu(v).map((t, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
-                  <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[0, 1, 2].map(i => <div key={i} style={{ height: 9, borderRadius: 5, width: i === 1 ? '85%' : '95%', background: 'rgba(255,255,255,0.18)' }} />)}
-            </div>
-          )}
-        </div>
       </div>
 
     </div>
