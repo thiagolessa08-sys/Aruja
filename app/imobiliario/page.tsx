@@ -141,15 +141,9 @@ export default function ImobiliarioPage() {
               </>
             )}
             {tributo === 'itbi' && (
-              <>
-                <select aria-label="Exercício" value={iAno} onChange={e => setIAno(Number(e.target.value))} style={selectPill}>
-                  {optsItbi.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-                </select>
-                <select aria-label="Natureza da transação" value={iNat} onChange={e => setINat(e.target.value)} style={selectPill}>
-                  <option value="">Natureza: Todas</option>
-                  {optsItbi.naturezas.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
-                </select>
-              </>
+              <select aria-label="Exercício" value={iAno} onChange={e => setIAno(Number(e.target.value))} style={selectPill}>
+                {optsItbi.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+              </select>
             )}
             {tributo === 'isscc' && (
               <div style={{ ...selectPill, cursor: 'default', color: '#5b6477', maxWidth: 'none' }}>ISS Construção Civil · todos os exercícios</div>

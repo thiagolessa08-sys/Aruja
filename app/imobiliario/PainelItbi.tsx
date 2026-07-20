@@ -1,456 +1,230 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import LinhaDuplaSerie from '../_components/LinhaDuplaSerie'
+import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import LoadingOverlay from '../_components/LoadingOverlay'
 
 export interface FiltrosItbiUI { ano: number | ''; natureza: string }
 
-interface Tip { chart: 'linha' | 'scatter'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string; l3?: string }
-
-interface PorAno { ano: number; arrecadado: number }
-interface Transm { ano: number; qt: number }
-interface Natureza { id: string; label: string; qt: number }
-interface Exercicio { ano: number; transmissoes: number; movimentado: number; arrecadado: number; ticket: number }
-interface Graficos {
-  porAno: PorAno[]
-  transmissoes: Transm[]
-  naturezas: Natureza[]
-  financiamento: { financiado: number; naoFinanciado: number }
-  exercicios: Exercicio[]
+// Busca com retry (o túnel do agente às vezes devolve 502/HTML; sem isso a tela fica em branco).
+async function fetchJson(url: string, tries = 3): Promise<any | null> {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url)
+      if (r.ok) { const d = await r.json(); if (d && !d.error) return d }
+    } catch { /* rede — tenta de novo */ }
+    if (i < tries - 1) await new Promise(res => setTimeout(res, 1200 * (i + 1)))
+  }
+  return null
 }
-interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
-const fmtMoney = (v: number) =>
-  Math.abs(v) >= 1e9 ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
-    : Math.abs(v) >= 1e6 ? (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
-      : (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mil'
-const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
+interface Cmp { atual: number; ant: number; pct: number }
+interface Visao {
+  dataAtualizacao: string | null
+  anos: number[]
+  anoRef: number
+  cards: {
+    lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp; transmissoes: Cmp
+  }
+  evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; previsto: boolean; arrecPct: number; inadPct: number }[]
+}
+
+const fmtAbrev = (v: number) => {
+  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mi'
+  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' k'
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
+}
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+const fmtPct = (p: number) => (p >= 0 ? '+' : '') + p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
+const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
 
-const KPIS_FALLBACK: KpiCard[] = [
-  { label: 'ITBI Arrecadado', value: 'R$ 9,22 mi', subLabel: 'Ano Anterior', subValue: 'R$ 26,01 mi', pct: '-64,56%', dir: 'down' },
-  { label: 'Transmissões', value: '528', subLabel: 'Ano Anterior', subValue: '1.430', pct: '-63,08%', dir: 'down' },
-  { label: 'Valor Movimentado', value: 'R$ 132,02 mi', subLabel: 'Ano Anterior', subValue: 'R$ 342,97 mi', pct: '-61,51%', dir: 'down' },
-  { label: 'Ticket Médio', value: 'R$ 250,0 mil', subLabel: 'Ano Anterior', subValue: 'R$ 239,8 mil', pct: '4,25%', dir: 'up' },
-  { label: 'Inadimplência', value: 'R$ 414,2 mil', subLabel: 'Ano Anterior', subValue: 'R$ 7,40 mi', pct: '-94,40%', dir: 'down' },
-]
-const FALLBACK_GRAF: Graficos = {
-  porAno: [
-    { ano: 2022, arrecadado: 11183382 },
-    { ano: 2023, arrecadado: 15870106 },
-    { ano: 2024, arrecadado: 24740703 },
-    { ano: 2025, arrecadado: 26005481 },
-    { ano: 2026, arrecadado: 9217141 },
-  ],
-  transmissoes: [
-    { ano: 2019, qt: 981 }, { ano: 2020, qt: 1030 }, { ano: 2021, qt: 1446 }, { ano: 2022, qt: 1326 },
-    { ano: 2023, qt: 1775 }, { ano: 2024, qt: 1670 }, { ano: 2025, qt: 1430 }, { ano: 2026, qt: 528 },
-  ],
-  naturezas: [
-    { id: 'compra_venda', label: 'Compra e Venda', qt: 468 },
-    { id: 'dacao', label: 'Dação em Pagamento', qt: 19 },
-    { id: 'outros', label: 'Demais atos', qt: 18 },
-    { id: 'permuta', label: 'Permuta', qt: 14 },
-    { id: 'cessao', label: 'Cessão de Direitos', qt: 5 },
-    { id: 'arrematacao', label: 'Arrematação/Adjudicação', qt: 3 },
-  ],
-  financiamento: { financiado: 124608524, naoFinanciado: 614925435 },
-  exercicios: [
-    { ano: 2026, transmissoes: 528, movimentado: 132024816, arrecadado: 9217141, ticket: 250047 },
-    { ano: 2025, transmissoes: 1430, movimentado: 342973792, arrecadado: 26005481, ticket: 239842 },
-    { ano: 2024, transmissoes: 1670, movimentado: 339408980, arrecadado: 24740703, ticket: 203239 },
-    { ano: 2023, transmissoes: 1775, movimentado: 357371143, arrecadado: 15870106, ticket: 201336 },
-    { ano: 2022, transmissoes: 1326, movimentado: 268999066, arrecadado: 11183382, ticket: 202865 },
-    { ano: 2021, transmissoes: 1446, movimentado: 498101481, arrecadado: 0, ticket: 344469 },
-  ],
-}
-const INSIGHTS_FALLBACK = [
-  'Em 2026, 528 transmissões movimentaram R$ 132,0 mi em valor venal (ticket médio de R$ 250 mil).',
-  'ITBI arrecadado de R$ 9,2 mi em 2026 — alíquota de 2% sobre o valor de transmissão.',
-  'Compra e Venda concentra 88,6% das transmissões; 83,2% do valor não é financiado.',
-]
-
-const NAT_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#aab8e3', '#e8962e', '#c0612a']
-
-// ===== Linha dupla: ITBI Arrecadado + Valor Movimentado (escala secundária) =====
-function geomLinhaDupla(porAno: PorAno[], exercicios: Exercicio[]) {
-  const xL = 38, xR = 590, yT = 26, yB = 205, n = porAno.length
-  if (!n) return null
-  const X = (i: number) => n <= 1 ? (xL + xR) / 2 : xL + (i * (xR - xL)) / (n - 1)
-
-  // Escala arrecadado (eixo esquerdo)
-  const arrVals = porAno.map(p => p.arrecadado / 1e6)
-  const hiA = Math.ceil(Math.max(1, ...arrVals) / 5) * 5
-  const YA = (v: number) => yT + ((hiA - v) / (hiA || 1)) * (yB - yT)
-
-  // Escala movimentado (eixo direito) — mesmos pontos temporais
-  const movByAno = new Map(exercicios.map(e => [e.ano, e.movimentado / 1e6]))
-  const movVals = porAno.map(p => movByAno.get(p.ano) ?? 0)
-  const hiM = Math.ceil(Math.max(1, ...movVals) / 50) * 50
-  const YM = (v: number) => yT + ((hiM - v) / (hiM || 1)) * (yB - yT)
-
-  const linhaA = porAno.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${YA(p.arrecadado / 1e6).toFixed(1)}`).join(' ')
-  const areaA = `${linhaA} L${X(n - 1).toFixed(1)} ${yB} L${X(0).toFixed(1)} ${yB} Z`
-  const linhaM = porAno.map((p, i) => {
-    const mv = movByAno.get(p.ano) ?? 0
-    return `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${YM(mv).toFixed(1)}`
-  }).join(' ')
-
-  const dotsA = porAno.map((p, i) => ({ x: X(i), y: YA(p.arrecadado / 1e6) }))
-  const dotsM = porAno.map((p, i) => ({ x: X(i), y: YM(movByAno.get(p.ano) ?? 0) }))
-  const ticksA = [hiA, hiA / 2, 0].map(t => ({ v: Math.round(t), y: YA(t) }))
-  const ticksM = [hiM, hiM / 2, 0].map(t => ({ v: Math.round(t), y: YM(t) }))
-  const labels = porAno.map((p, i) => ({ ano: p.ano, x: X(i) }))
-  const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 60
-  const hot = porAno.map((p, i) => {
-    const mv = movByAno.get(p.ano) ?? 0
-    return {
-      x: X(i) - half, w: half * 2,
-      tip: {
-        chart: 'linha' as const, title: String(p.ano),
-        l1: `ITBI Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93',
-        l2: `Valor Movimentado: ${fmtMi(mv * 1e6)}`, l2c: '#e8962e',
-        left: `${(X(i) / 630 * 100).toFixed(1)}%`, top: `${(Math.min(YA(p.arrecadado / 1e6), YM(mv)) / 230 * 100).toFixed(1)}%`,
-      },
-    }
-  })
-  return { linhaA, areaA, linhaM, dotsA, dotsM, ticksA, ticksM, labels, hot, W: 630, H: 230, yB, xL, xR }
+// cores das barras da evolução: [real, previsto]
+const CORES: Record<string, [string, string]> = {
+  lancado: ['#283e93', '#aab8e3'],
+  arrecadado: ['#1fa463', '#a7e0c2'],
+  emAberto: ['#e8962e', '#f4cf9e'],
+  inadimplencia: ['#d64545', '#f0b0b0'],
 }
 
-// ===== Scatter/bolha: transmissões × ticket × arrecadado =====
-function geomScatter(exercicios: Exercicio[]) {
-  const validos = exercicios.filter(e => e.transmissoes > 0 && e.ticket > 0)
-  if (!validos.length) return null
-  const xL = 50, xR = 560, yT = 20, yB = 220
-  const maxT = Math.max(...validos.map(e => e.transmissoes))
-  const maxK = Math.max(...validos.map(e => e.ticket))
-  const maxA = Math.max(1, ...validos.map(e => e.arrecadado))
-  const minA = Math.min(...validos.map(e => e.arrecadado))
-  const X = (t: number) => xL + (t / maxT) * (xR - xL)
-  const Y = (k: number) => yT + ((maxK - k) / maxK) * (yB - yT)
-  const R = (a: number) => 8 + ((a - minA) / (maxA - minA || 1)) * 18
-  const ticksX = [0, Math.round(maxT / 2), maxT].map(v => ({ v, x: X(v) }))
-  const ticksY = [0, Math.round(maxK / 2), maxK].map(v => ({ v: (v / 1000).toFixed(0) + 'k', y: Y(v) }))
-  const pts = validos.map(e => ({
-    ano: e.ano, x: X(e.transmissoes), y: Y(e.ticket), r: R(e.arrecadado),
-    arrec: e.arrecadado, ticket: e.ticket, transm: e.transmissoes,
-    tip: {
-      chart: 'scatter' as const, title: String(e.ano),
-      l1: `Transmissões: ${fmtInt(e.transmissoes)}`, l1c: '#283e93',
-      l2: `Ticket Médio: ${fmtMoney(e.ticket)}`, l2c: '#5870c4',
-      l3: e.arrecadado ? `ITBI Arrecadado: ${fmtMi(e.arrecadado)}` : undefined,
-      left: `${(X(e.transmissoes) / 600 * 100).toFixed(1)}%`,
-      top: `${(Y(e.ticket) / 240 * 100).toFixed(1)}%`,
-    },
-  }))
-  return { pts, ticksX, ticksY, W: 600, H: 240, xL, yT, yB, xR }
+const svg = (path: React.ReactNode) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{path}</svg>
+)
+
+// Insights de ITBI — frases derivadas dos cards já carregados.
+function insightsItbi(v: Visao): string[] {
+  const c = v.cards
+  const p1 = (x: number) => x.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%'
+  const pctLanc = (x: number) => c.lancado.atual ? (x / c.lancado.atual) * 100 : 0
+  const arr: string[] = []
+  arr.push(`Em ${v.anoRef}, o ITBI lançado soma ${fmtAbrev(c.lancado.atual)} em ${fmtInt(c.transmissoes.atual)} transmissões (${fmtPct(c.lancado.pct)} vs ${v.anoRef - 1}).`)
+  arr.push(`Arrecadado ${fmtAbrev(c.arrecadado.atual)} — ${p1(pctLanc(c.arrecadado.atual))} do lançado (${fmtPct(c.arrecadado.pct)} vs ${v.anoRef - 1}).`)
+  arr.push(`Inadimplência ${fmtAbrev(c.inadimplencia.atual)} (${p1(pctLanc(c.inadimplencia.atual))} do lançado); em aberto ${fmtAbrev(c.emAberto.atual)}.`)
+  return arr
 }
 
-function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
-  if (dir === 'up') return azul ? '#6ee0a0' : '#1fa463'
-  if (dir === 'down') return azul ? '#ff9b8a' : '#d64545'
-  return azul ? 'rgba(255,255,255,0.6)' : '#9098a8'
-}
-
-function buildQS(f: FiltrosItbiUI): string {
-  const p = new URLSearchParams()
-  if (f.ano) p.set('ano', String(f.ano))
-  if (f.natureza) p.set('natureza', f.natureza)
-  const s = p.toString()
-  return s ? `?${s}` : ''
+function EixoTick({ x, y, payload }: any) {
+  return (
+    <text x={x} y={y + 14} textAnchor="middle" fontSize={11} fill="#8a93a6" fontWeight={600}>{payload.value}</text>
+  )
 }
 
 export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
-  const [tip, setTip] = useState<Tip | null>(null)
-  const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
-  const [insights, setInsights] = useState<string[] | null>(null)
-  const [graf, setGraf] = useState<Graficos | null>(null)
+  const [v, setV] = useState<Visao | null>(null)
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState(false)
+  const [recarregar, setRecarregar] = useState(0)
 
-  const qs = buildQS(filtros)
+  const ano = filtros.ano
 
   useEffect(() => {
-    fetch(`/api/itbi/graficos${qs}`).then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setGraf(d) }).catch(() => {})
-  }, [qs])
-  useEffect(() => {
-    fetch(`/api/itbi/kpis${qs}`).then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.kpis?.length) setKpis(d.kpis) }).catch(() => {})
-  }, [qs])
-  useEffect(() => {
-    fetch(`/api/itbi/insights${qs}`).then(r => r.ok ? r.json() : null)
-      .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_FALLBACK)).catch(() => setInsights(INSIGHTS_FALLBACK))
-  }, [qs])
-
-  const g = graf ?? FALLBACK_GRAF
-  const ld = geomLinhaDupla(g.porAno, g.exercicios)
-  const sc = geomScatter(g.exercicios)
-
-  // Natureza — barras horizontais ranqueadas
-  const totNat = g.naturezas.reduce((s, n) => s + n.qt, 0)
-  const maxNat = Math.max(1, ...g.naturezas.map(n => n.qt))
-
-  // Financiamento — donut
-  const fc = g.financiamento
-  const totFin = (fc.financiado + fc.naoFinanciado) || 1
-  const donutC = 2 * Math.PI * 52
-  const pctNF = fc.naoFinanciado / totFin
-  const lenNF = pctNF * donutC
+    let vivo = true
+    setCarregando(true); setErro(false)
+    const p = new URLSearchParams()
+    if (ano) p.set('ano', String(ano))
+    fetchJson(`/api/itbi/visao?${p}`)
+      .then(d => { if (!vivo) return; if (d) setV(d); else setErro(true) })
+      .finally(() => { if (vivo) setCarregando(false) })
+    return () => { vivo = false }
+  }, [ano, recarregar])
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
-  const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
-  const dots: React.CSSProperties = { color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14, flex: 'none' }
-  const axisFont: React.CSSProperties = { fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontWeight: 500 }
 
-  function Tooltip({ t }: { t: Tip }) {
+  const cardsDef = v ? [
+    { label: 'Total Lançado', cmp: v.cards.lancado, cor: '#283e93', sub: `${fmtInt(v.cards.transmissoes.atual)} transmissões`, icon: svg(<><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h6M9 11h6M9 15h4" /></>) },
+    { label: 'Total Arrecadado', cmp: v.cards.arrecadado, cor: '#1fa463', sub: '', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M14.5 9a2.5 2 0 0 0-2.5-1.5c-1.4 0-2.5.7-2.5 1.8 0 2.6 5 1.4 5 4 0 1.2-1.1 1.9-2.5 1.9A2.6 2 0 0 1 9.4 15M12 6v1.5M12 16.5V18" /></>) },
+    { label: 'Total em Aberto', cmp: v.cards.emAberto, cor: '#e8962e', sub: 'a receber (total)', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>) },
+    { label: 'Total Inadimplência', cmp: v.cards.inadimplencia, cor: '#d64545', sub: 'vencido (atrasado)', icon: svg(<><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>) },
+    { label: 'Total Isento', cmp: v.cards.isento, cor: '#8094d6', sub: 'não incidência', icon: svg(<><path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>) },
+    { label: 'Total Suspenso', cmp: v.cards.suspenso, cor: '#5b6477', sub: '', icon: svg(<><rect x="7" y="6" width="3.2" height="12" rx="1" /><rect x="13.8" y="6" width="3.2" height="12" rx="1" /></>) },
+  ] : []
+
+  const serie = (v?.evolucao ?? []).map(e => ({ ...e, rot: e.previsto ? `${e.ano}*` : String(e.ano) }))
+  const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano
+  const insights = v ? insightsItbi(v) : null
+
+  if (erro && !v) {
     return (
-      <div style={{ position: 'absolute', left: t.left, top: t.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '9px 12px', boxShadow: '0 8px 18px rgba(20,40,90,0.25)', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{t.title}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 5 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l1c }}></span>{t.l1}
-        </div>
-        {t.l2 ? <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
-        </div> : null}
-        {t.l3 ? <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>{t.l3}</div> : null}
+      <div style={{ ...card, marginTop: 20, textAlign: 'center', padding: 40, color: '#9098a8', fontSize: 13 }}>
+        Não foi possível carregar os dados de ITBI (instabilidade do agente/banco).{' '}
+        <button onClick={() => setRecarregar(n => n + 1)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '6px 14px', fontSize: 12, marginLeft: 6 }}>Recarregar</button>
       </div>
     )
   }
 
-  const kpiIcons = [
-    <svg key="0" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><path d="M9.5 14a2.5 2.5 0 0 0 5 0c0-1.4-1-2-2.5-2.5S9.5 9.4 9.5 8a2.5 2.5 0 0 1 5 0M12 6v1.5M12 16.5V18" /></svg>,
-    <svg key="1" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h16M4 7l3-3M20 17H4m16 0l-3 3" /></svg>,
-    <svg key="2" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 17l6-6 4 4 7-7" /><path d="M14 7h6v6" /></svg>,
-    <svg key="3" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.4" /></svg>,
-    <svg key="4" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2v20" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
-  ]
-
   return (
-    <>
-      {/* ===== KPIs ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
-        {kpis.map((k, i) => {
-          const azul = i === 0
-          return (
-            <div key={k.label} style={azul
-              ? { background: '#283e93', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 20px rgba(40,62,147,0.22)' }
-              : { background: '#fff', borderRadius: 16, padding: '12px 14px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: azul ? 'rgba(255,255,255,0.88)' : '#1f2a44', lineHeight: 1.25, display: 'block' }}>{k.label}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: azul ? 'rgba(255,255,255,0.14)' : '#e9edf8', color: azul ? '#fff' : '#283e93', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{kpiIcons[i]}</div>
-                <span style={{ fontSize: 19, fontWeight: 700, color: azul ? '#fff' : '#1f2a44', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>{k.value}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
-                <span style={{ fontSize: 11, color: azul ? 'rgba(255,255,255,0.6)' : '#9098a8' }}>{k.subLabel} <span style={{ color: azul ? 'rgba(255,255,255,0.95)' : '#3a4256', fontWeight: 600 }}>{k.subValue}</span></span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: pctColor(k.dir, azul), flex: 'none' }}>{k.pct}</span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+    <div style={{ position: 'relative' }}>
+      {carregando && !v ? <div style={{ ...card, marginTop: 20, textAlign: 'center', padding: 40, color: '#9098a8', fontSize: 13 }}>Carregando ITBI…</div> : null}
 
-      {/* ===== ROW 1 ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1.2fr', gap: 18, marginTop: 20 }}>
+      {v ? (
+        <>
+          {/* Data de atualização */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+            <span style={{ fontSize: 11, color: '#9098a8' }}>Dados atualizados em <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtData(v.dataAtualizacao)}</span></span>
+          </div>
 
-        {/* LINHA DUPLA: ITBI Arrecadado + Valor Movimentado */}
-        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>ITBI Arrecadado vs Mercado</span>
-            <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 18, height: 3, background: '#283e93', display: 'inline-block', borderRadius: 2 }}></span>Arrecadado</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 18, height: 3, background: '#e8962e', display: 'inline-block', borderRadius: 2 }}></span>Movimentado</span>
-            </div>
-          </div>
-          {g.porAno.length ? (
-            <div style={{ flex: 1, minHeight: 200, marginTop: 14 }}>
-              <LinhaDuplaSerie
-                data={g.porAno.map(p => ({ ano: p.ano, v1: p.arrecadado, v2: g.exercicios.find(e => e.ano === p.ano)?.movimentado ?? 0 }))}
-                nome1="Arrecadado"
-                nome2="Movimentado"
-                fmtValor={fmtMi}
-                fmtEixo={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
-              />
-            </div>
-          ) : (
-            <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9098a8', fontSize: 13 }}>Sem dados</div>
-          )}
-          <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 4, textAlign: 'right' }}>
-            Eixo esq.: ITBI arrecadado (R$ mi) · Eixo dir.: valor movimentado (R$ mi)
-          </div>
-        </div>
-
-        {/* Insights */}
-        <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
-            </div>
-            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>ITBI</span>
-          </div>
-          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de ITBI</div>
-          {insights === null ? (
-            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[0, 1, 2].map(i => (<div key={i} style={{ height: 9, borderRadius: 5, width: i === 1 ? '85%' : '95%', background: 'rgba(255,255,255,0.18)' }} />))}
-            </div>
-          ) : (
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {insights.map((t, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
-                  <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
+          {/* 6 KPI cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginTop: 8, position: 'relative' }}>
+            {carregando ? <LoadingOverlay label="Atualizando…" /> : null}
+            {cardsDef.map(c => (
+              <div key={c.label} style={card}>
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: '#5b6477', display: 'block' }}>{c.label}</span>
+                <span style={{ fontSize: 9.5, color: '#aeb6c6', display: 'block', height: 12 }}>{c.sub || ' '}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: `${c.cor}1a`, color: c.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{c.icon}</div>
+                  <span style={{ fontSize: 20, fontWeight: 700, color: c.cor, letterSpacing: '-.5px' }}>{fmtAbrev(c.cmp.atual)}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Barras horizontais ranqueadas: Natureza da Transação */}
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Natureza da Transação</span>
-            <span style={dots}>···</span>
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtInt(totNat)} transações</div>
-          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
-            {g.naturezas.map((nt, i) => {
-              const w = (nt.qt / maxNat) * 100
-              const pct = totNat ? (nt.qt / totNat) * 100 : 0
-              return (
-                <div key={nt.id}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, color: '#3a4256', lineHeight: 1.2 }}>{nt.label}</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#1f2a44', flex: 'none', marginLeft: 6 }}>
-                      {fmtInt(nt.qt)} <span style={{ color: '#9098a8', fontWeight: 400 }}>({fmtPct(pct)})</span>
-                    </span>
-                  </div>
-                  <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: NAT_CORES[i % NAT_CORES.length], borderRadius: 5 }} />
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
+                  <span style={{ fontSize: 10.5, color: '#9098a8' }}>{v.anoRef - 1} <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtAbrev(c.cmp.ant)}</span></span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: c.cmp.pct >= 0 ? '#1fa463' : '#d64545', flex: 'none' }}>{fmtPct(c.cmp.pct)}</span>
                 </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* ===== ROW 2 ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr', gap: 18, marginTop: 18 }}>
-
-        {/* SCATTER: Transmissões × Ticket Médio (tamanho = ITBI arrecadado) */}
-        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <div>
-              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Mercado Imobiliário por Exercício</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-                Eixo X: nº de transmissões · Eixo Y: ticket médio · Tamanho: ITBI arrecadado
-              </div>
-            </div>
-            <span style={reportBadge}>Scatter</span>
-          </div>
-          {sc ? (
-            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
-              <svg viewBox={`0 0 ${sc.W} ${sc.H}`} width="100%" style={{ display: 'block' }}>
-                <defs>
-                  <radialGradient id="bubbleGrad" cx="35%" cy="35%" r="65%">
-                    <stop offset="0%" stopColor="#5870c4" stopOpacity="0.9" />
-                    <stop offset="100%" stopColor="#283e93" stopOpacity="0.7" />
-                  </radialGradient>
-                </defs>
-                {/* Grid */}
-                {sc.ticksY.map((t, i) => (
-                  <g key={i}>
-                    <line x1={sc.xL} y1={t.y.toFixed(1)} x2={sc.xR} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
-                    <text x="4" y={(t.y + 3).toFixed(1)} fontSize="7" fill="#aeb6c6" style={axisFont}>{t.v}</text>
-                  </g>
-                ))}
-                <line x1={sc.xL} y1={sc.yT} x2={sc.xL} y2={sc.yB} stroke="#e3e8f1" strokeWidth="1" />
-                <line x1={sc.xL} y1={sc.yB} x2={sc.xR} y2={sc.yB} stroke="#e3e8f1" strokeWidth="1" />
-                {sc.ticksX.map((t, i) => (
-                  <text key={i} x={t.x.toFixed(1)} y={String(sc.H - 4)} fontSize="7" fill="#aeb6c6" textAnchor="middle" style={axisFont}>{fmtInt(t.v)}</text>
-                ))}
-                {/* Bolhas */}
-                {sc.pts.map((p, i) => (
-                  <g key={i} onMouseEnter={() => setTip(p.tip)} style={{ cursor: 'pointer' }}>
-                    <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill="url(#bubbleGrad)" stroke="#fff" strokeWidth="2" />
-                    <text x={p.x.toFixed(1)} y={(p.y - p.r - 4).toFixed(1)} fontSize="7.5" fill="#283e93" textAnchor="middle" fontWeight="600" style={axisFont}>{p.ano}</text>
-                  </g>
-                ))}
-              </svg>
-              {tip?.chart === 'scatter' ? <Tooltip t={tip} /> : null}
-            </div>
-          ) : (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9098a8' }}>Sem dados</div>
-          )}
-        </div>
-
-        {/* DONUT: Financiamento */}
-        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Forma de Aquisição</span>
-            <span style={dots}>···</span>
-          </div>
-          <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>% do valor movimentado</div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, position: 'relative' }}>
-            <svg viewBox="0 0 200 200" width="250" height="250" style={{ maxWidth: '100%' }}>
-              <g transform="rotate(-90 100 100)">
-                <circle cx="100" cy="100" r="52" fill="none" stroke="#e8962e" strokeWidth="30"
-                  strokeDasharray={`${donutC.toFixed(1)} 0`} />
-                <circle cx="100" cy="100" r="52" fill="none" stroke="#283e93" strokeWidth="30"
-                  strokeDasharray={`${lenNF.toFixed(1)} ${(donutC - lenNF).toFixed(1)}`} />
-              </g>
-              <text x="100" y="92" fontSize="17" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>
-                {fmtPct(pctNF * 100)}
-              </text>
-              <text x="100" y="110" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>não financiado</text>
-            </svg>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 18 }}>
-            {[
-              { cor: '#283e93', label: 'Não Financiado', v: fc.naoFinanciado },
-              { cor: '#e8962e', label: 'Financiado', v: fc.financiado },
-            ].map(s => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 12, height: 12, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.label}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtMoney(s.v)}</span>
               </div>
             ))}
           </div>
-          </div>
-        </div>
-      </div>
 
-      {/* ===== Tabela ===== */}
-      <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Exercícios de ITBI</span>
-        <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Exercício', 'Transmissões', 'Valor Movimentado', 'ITBI Arrecadado', 'Ticket Médio'].map((h, i) => (
-                  <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+          {/* Evolução + Insights */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+            <div style={{ ...card, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Evolução do ITBI (5 anos)</span>
+                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
+                  {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }].map(m => (
+                    <span key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginTop: 16, height: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={serie} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%">
+                    <XAxis dataKey="rot" interval={0} height={24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                    <YAxis width={44} tickFormatter={(val: number) => (val / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
+                      formatter={(val, name) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                    {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia'] as const).map(dk => (
+                      <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={22} stroke="none">
+                        {serie.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
+                        <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
+                      </Bar>
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Barras claras = previsão {anoPrevisto ?? ''} (regressão linear dos últimos 5 anos)</div>
+            </div>
+
+            {/* Insights */}
+            <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
+                </div>
+                <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>ITBI</span>
+              </div>
+              <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de ITBI</div>
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {(insights ?? []).map((t, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
+                    <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
+                  </div>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {g.exercicios.map((row, ri) => {
-                const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
-                return (
-                  <tr key={row.ano}>
-                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.ano}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtInt(row.transmissoes)}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.movimentado)}</td>
-                    <td style={{ background: cellBg, color: row.arrecadado ? '#c0612a' : '#9098a8', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{row.arrecadado ? fmtReais(row.arrecadado) : '—'}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtReais(row.ticket)}</td>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabela de exercícios */}
+          <div style={{ ...card, marginTop: 18, overflowX: 'auto' }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Exercícios de ITBI</span>
+            <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+                <thead>
+                  <tr>
+                    {['Exercício', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência'].map((h, i) => (
+                      <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '11px 14px', textAlign: i === 0 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                    ))}
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
+                </thead>
+                <tbody>
+                  {(v.evolucao).map((e, ri) => {
+                    const bg = ri % 2 === 0 ? '#fff' : '#f7f9fd'
+                    return (
+                      <tr key={e.ano}>
+                        <td style={{ background: e.previsto ? '#eef1fb' : '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 14px', borderBottom: '1px solid #eef1f7' }}>{e.ano}{e.previsto ? ' *' : ''}</td>
+                        <td style={{ background: bg, color: '#283e93', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtAbrev(e.lancado)}</td>
+                        <td style={{ background: bg, color: '#1fa463', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtAbrev(e.arrecadado)}</td>
+                        <td style={{ background: bg, color: '#5b6477', fontSize: 12, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</td>
+                        <td style={{ background: bg, color: '#e8962e', fontSize: 12, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtAbrev(e.emAberto)}</td>
+                        <td style={{ background: bg, color: '#d64545', fontSize: 12, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtAbrev(e.inadimplencia)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>* exercício previsto (regressão linear). Valores por exercício de lançamento da guia (cd_tributo 10).</div>
+          </div>
+        </>
+      ) : null}
+    </div>
   )
 }
