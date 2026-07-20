@@ -6,9 +6,10 @@ import Link from 'next/link'
 import PainelIptu from './PainelIptu'
 import TopNav from '../_components/TopNav'
 import PainelItbi, { type FiltrosItbiUI } from './PainelItbi'
+import PainelTca from './PainelTca'
 import PainelTributo from '../tributo/PainelTributo'
 
-type Tributo = 'iptu' | 'itbi' | 'isscc'
+type Tributo = 'iptu' | 'itbi' | 'isscc' | 'tca'
 interface NaturezaOpt { id: string; label: string }
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
@@ -27,11 +28,15 @@ export default function ImobiliarioPage() {
   const [iAno, setIAno] = useState<number | ''>('')
   const [iNat, setINat] = useState<string>('')
 
+  // TCA
+  const [optsTca, setOptsTca] = useState<{ anos: number[] }>({ anos: [] })
+  const [tAno, setTAno] = useState<number | ''>('')
+
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
     const v = new URLSearchParams(window.location.search).get('v')
-    if (v === 'iptu' || v === 'itbi' || v === 'isscc') setTributo(v)
+    if (v === 'iptu' || v === 'itbi' || v === 'isscc' || v === 'tca') setTributo(v)
   }, [])
 
   useEffect(() => {
@@ -43,6 +48,9 @@ export default function ImobiliarioPage() {
     }).catch(() => {})
     fetch('/api/itbi/filtros').then(r => r.ok ? r.json() : null).then(d => {
       if (d && !d.error) { setOptsItbi({ anos: d.anos ?? [], naturezas: d.naturezas ?? [] }); if (d.anos?.length) setIAno(d.anos[0]) }
+    }).catch(() => {})
+    fetch('/api/tca/filtros').then(r => r.ok ? r.json() : null).then(d => {
+      if (d && !d.error) { setOptsTca({ anos: d.anos ?? [] }); if (d.anos?.length) setTAno(d.anos[0]) }
     }).catch(() => {})
   }, [])
 
@@ -74,6 +82,7 @@ export default function ImobiliarioPage() {
     { id: 'iptu', label: 'IPTU' },
     { id: 'itbi', label: 'ITBI' },
     { id: 'isscc', label: 'ISSCC' },
+    { id: 'tca', label: 'TCA' },
   ]
 
   return (
@@ -109,20 +118,6 @@ export default function ImobiliarioPage() {
                 </button>
               )
             })}
-            {/* Placeholder: tela de TCA ainda não existe — botão desabilitado (em breve) */}
-            <button
-              type="button"
-              disabled
-              title="Tela em desenvolvimento"
-              style={{
-                padding: '10px 20px', borderRadius: 24, border: 'none', cursor: 'not-allowed',
-                fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontSize: 14, fontWeight: 500,
-                background: 'transparent', color: '#aeb6c6', display: 'flex', alignItems: 'center', gap: 7,
-              }}
-            >
-              TCA
-              <span style={{ fontSize: 9, fontWeight: 700, background: '#e6eaf3', color: '#8a93a6', borderRadius: 8, padding: '2px 6px', letterSpacing: '.03em' }}>EM BREVE</span>
-            </button>
           </div>
         </div>
 
@@ -148,6 +143,11 @@ export default function ImobiliarioPage() {
             {tributo === 'isscc' && (
               <div style={{ ...selectPill, cursor: 'default', color: '#5b6477', maxWidth: 'none' }}>ISS Construção Civil · todos os exercícios</div>
             )}
+            {tributo === 'tca' && (
+              <select aria-label="Exercício" value={tAno} onChange={e => setTAno(Number(e.target.value))} style={selectPill}>
+                {optsTca.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+              </select>
+            )}
           </div>
         </div>
 
@@ -155,6 +155,7 @@ export default function ImobiliarioPage() {
         {tributo === 'iptu' && <PainelIptu ano={pAno} mes={pMes} />}
         {tributo === 'itbi' && <PainelItbi filtros={filtrosItbi} />}
         {tributo === 'isscc' && <PainelTributo grupo="isscc" titulo="ISS Construção Civil" />}
+        {tributo === 'tca' && <PainelTca ano={tAno} />}
 
       </div>
     </div>
