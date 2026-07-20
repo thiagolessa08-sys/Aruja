@@ -33,10 +33,17 @@ interface RankingImovel {
   faixas: { um: number; dois: number; tresCinco: number; seisMais: number }
 }
 interface MatchImovel { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string }
-interface Transmissao { cdItbi: number; data: string; natureza: string; valorVenal: number; aliquota: number; situacao: string; transmitente: string; adquirente: string; imposto: number }
+interface Transmissao {
+  cdItbi: number; data: string; natureza: string; valorVenal: number; aliquota: number; situacao: string
+  transmitente: string; adquirente: string; imposto: number
+  transmitenteEhProprietario: boolean; adquirenteEhProprietario: boolean
+  transmitentePJ: boolean; adquirentePJ: boolean; transmitenteMobiliario: boolean; adquirenteMobiliario: boolean
+}
 interface DetalheImovel {
-  cd: number; inscricao: string; numero: string; endereco: string; cep: string; proprietario: string; cpfCnpj: string
+  cd: number; inscricao: string; numero: string; endereco: string; cep: string; proprietario: string; cpfCnpj: string; proprietarioPJ: boolean
   indicadores: { qtTransmissoes: number; valorizacao: number; intervaloMedioAnos: number; impostoTotal: number; venalUltimo: number; venalPrimeiro: number }
+  comparativo: { coberturaTransmitente: number; coberturaAdquirente: number; ultimaAdquirenteEhProprietario: boolean; ultimaTransmitenteEhProprietario: boolean }
+  mobiliario: { temVinculo: boolean; qtdEmpresas: number; empresaEhProprietario: boolean; transmissoesComPJ: number }
   transmissoes: Transmissao[]
 }
 
@@ -371,6 +378,40 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         </div>
                       ))}
                     </div>
+                    {/* Itens 4 e 5 — Transmitente × Proprietário e Vínculo Mobiliário */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                      {(() => {
+                        const cmp = imovel.comparativo
+                        const semDados = cmp.coberturaAdquirente === 0 && cmp.coberturaTransmitente === 0
+                        const ok = cmp.ultimaAdquirenteEhProprietario
+                        const cor = semDados ? '#9098a8' : ok ? '#1fa463' : '#e8962e'
+                        const txt = semDados ? 'Partes não informadas' : ok ? 'Cadastro atualizado' : 'Possível divergência'
+                        return (
+                          <div style={{ background: '#f7f9fd', borderRadius: 10, padding: '9px 11px', borderLeft: `3px solid ${cor}` }}>
+                            <div style={{ fontSize: 10, color: '#5b6477', fontWeight: 600 }}>Transmitente × Proprietário</div>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: cor, marginTop: 2 }}>{txt}</div>
+                            <div style={{ fontSize: 9.5, color: '#aeb6c6', marginTop: 2 }}>
+                              {semDados ? 'ITBIs sem transmitente/adquirente no cadastro' : `Último adquirente ${ok ? '=' : '≠'} proprietário atual · ${cmp.coberturaAdquirente}/${imovel.transmissoes.length} c/ adquirente`}
+                            </div>
+                          </div>
+                        )
+                      })()}
+                      {(() => {
+                        const mb = imovel.mobiliario
+                        const cor = mb.temVinculo ? '#e8962e' : '#9098a8'
+                        return (
+                          <div style={{ background: '#f7f9fd', borderRadius: 10, padding: '9px 11px', borderLeft: `3px solid ${cor}` }}>
+                            <div style={{ fontSize: 10, color: '#5b6477', fontWeight: 600 }}>Vínculo Mobiliário</div>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: cor, marginTop: 2 }}>
+                              {mb.temVinculo ? `${mb.qtdEmpresas} empresa${mb.qtdEmpresas > 1 ? 's' : ''} no endereço` : 'Sem empresa no endereço'}
+                            </div>
+                            <div style={{ fontSize: 9.5, color: '#aeb6c6', marginTop: 2 }}>
+                              {imovel.proprietarioPJ ? 'Proprietário é PJ · ' : ''}{mb.transmissoesComPJ > 0 ? `${mb.transmissoesComPJ} transmissã${mb.transmissoesComPJ > 1 ? 'ões' : 'o'} com PJ` : 'Partes pessoas físicas'}
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
                     {/* Histórico de transmissões */}
                     <div style={{ marginTop: 12, border: '1px solid #e3e8f1', borderRadius: 10, overflow: 'hidden' }}>
                       <div style={{ maxHeight: 260, overflowY: 'auto' }}>
@@ -386,7 +427,16 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                             {imovel.transmissoes.map((t, ti) => (
                               <tr key={t.cdItbi}>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#1f2a44', padding: '7px 10px', borderBottom: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{t.data ? t.data.split('-').reverse().join('/') : '—'}</td>
-                                <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 10.5, color: '#5b6477', padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>{t.natureza || '—'}</td>
+                                <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 10.5, color: '#5b6477', padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>
+                                  <div>{t.natureza || '—'}</div>
+                                  {(t.transmitente || t.adquirente) ? (
+                                    <div style={{ fontSize: 9.5, color: '#aeb6c6', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                                      <span>{t.transmitente || '—'}{t.transmitentePJ ? ' (PJ)' : ''} → {t.adquirente || '—'}{t.adquirentePJ ? ' (PJ)' : ''}</span>
+                                      {t.adquirenteEhProprietario ? <span style={{ fontSize: 8.5, fontWeight: 700, color: '#1fa463', background: '#e6f6ee', borderRadius: 5, padding: '1px 5px' }}>= prop. atual</span> : null}
+                                      {t.transmitenteEhProprietario ? <span style={{ fontSize: 8.5, fontWeight: 700, color: '#e8962e', background: '#fdf1e2', borderRadius: 5, padding: '1px 5px' }}>transm.= prop.</span> : null}
+                                    </div>
+                                  ) : null}
+                                </td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#283e93', fontWeight: 600, padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{t.valorVenal ? fmtAbrev(t.valorVenal) : '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#c0612a', fontWeight: 600, padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{t.imposto ? fmtAbrev(t.imposto) : '—'}</td>
                               </tr>
