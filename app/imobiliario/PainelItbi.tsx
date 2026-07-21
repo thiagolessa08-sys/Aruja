@@ -442,6 +442,38 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         )
                       })()}
                     </div>
+                    {/* Comparativo de lançamentos no mesmo imóvel (valor venal × imposto por transmissão) */}
+                    {imovel.transmissoes.length > 1 ? (() => {
+                      const dados = [...imovel.transmissoes].reverse().map((t, i) => ({
+                        rot: t.data ? t.data.slice(2).split('-').reverse().join('/') : String(i + 1),
+                        venal: t.valorVenal, imposto: t.imposto,
+                      }))
+                      return (
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Comparativo de lançamentos no imóvel</span>
+                            <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#5b6477' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: '#283e93' }} />Valor venal</span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: '#c0612a' }} />Imposto</span>
+                            </div>
+                          </div>
+                          <div style={{ height: 170, marginTop: 8 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={dados} margin={{ top: 14, right: 6, left: 0, bottom: 0 }} barCategoryGap="18%">
+                                <XAxis dataKey="rot" interval="preserveStartEnd" tick={{ fontSize: 9, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                                <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                                <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
+                                  formatter={(val, name) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
+                                  contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                                <Bar dataKey="venal" name="Valor venal" fill="#283e93" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                                <Bar dataKey="imposto" name="Imposto" fill="#c0612a" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      )
+                    })() : null}
+
                     {/* Histórico de transmissões */}
                     <div style={{ marginTop: 12, border: '1px solid #e3e8f1', borderRadius: 10, overflow: 'hidden' }}>
                       <div style={{ maxHeight: 260, overflowY: 'auto' }}>
