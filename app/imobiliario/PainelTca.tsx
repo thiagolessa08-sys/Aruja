@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
+import SecaoBairros from '../_components/SecaoBairros'
 
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
   for (let i = 0; i < tries; i++) {
@@ -211,6 +212,9 @@ export default function PainelTca({ ano }: { ano: number | '' }) {
               </div>
             </div>
           </div>
+
+          {/* Análise por bairro/rua (todos os tipos de lançamento) */}
+          <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" />
 
           {/* Tabela de exercícios */}
           <div style={{ ...card, marginTop: 18, overflowX: 'auto' }}>
