@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import LoadingOverlay from '../_components/LoadingOverlay'
 
 export interface FiltrosContribuinteUI { ano: number | ''; pessoa: '' | 'F' | 'J' }
 
@@ -193,7 +194,8 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   ]
 
   return (
-    <>
+    <div style={{ position: 'relative' }}>
+      {!graf ? <LoadingOverlay label="Carregando…" /> : null}
       {/* ===== KPIs ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
@@ -467,6 +469,6 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
           </table>
         </div>
       </div>
-    </>
+    </div>
   )
 }

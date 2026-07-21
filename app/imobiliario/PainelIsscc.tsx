@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer, ComposedChart, Line, Legend } from 'recharts'
-import LoadingOverlay from '../_components/LoadingOverlay'
+import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
   for (let i = 0; i < tries; i++) {
@@ -129,7 +129,7 @@ export default function PainelIsscc({ ano }: { ano: number | '' }) {
 
   return (
     <div style={{ position: 'relative' }}>
-      {carregando && !v ? <div style={{ ...card, marginTop: 20, textAlign: 'center', padding: 40, color: '#9098a8', fontSize: 13 }}>Carregando ISSCC…</div> : null}
+      {carregando && !v ? <div style={{ ...card, marginTop: 20 }}><Spinner label="Carregando ISSCC…" /></div> : null}
 
       {v ? (
         <>
@@ -309,7 +309,7 @@ export default function PainelIsscc({ ano }: { ano: number | '' }) {
                 </div>
                 <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>Fonte das alterações: tb_dsod_imovel_urbano_alt_estrutura (por ano de alteração). Rótulo nas barras = nº de imóveis alterados. Área = soma da área edificada atual dos imóveis alterados no ano.</div>
               </>
-            ) : <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 24 }}>Carregando histórico de área…</div>}
+            ) : <Spinner label="Carregando histórico de área…" padding={24} />}
           </div>
         </>
       ) : null}

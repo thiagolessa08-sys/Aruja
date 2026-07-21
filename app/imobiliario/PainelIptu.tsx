@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { AreaChart, Area, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import LoadingOverlay from '../_components/LoadingOverlay'
+import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 
 // Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
@@ -478,7 +478,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             )
           })()}
         </div>
-      ) : (obsResumo.visible ? <div style={{ ...card, marginTop: 18, fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 20 }}>Carregando resumo…</div> : null)}
+      ) : (obsResumo.visible ? <div style={{ ...card, marginTop: 18 }}><Spinner label="Carregando resumo…" /></div> : null)}
       </div>
 
       {/* ===== ONDA 2: Quadros situação × status de pagamento ===== */}
@@ -557,7 +557,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             Não foi possível carregar.{' '}
             <button onClick={() => setRecarregarComp(n => n + 1)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, marginLeft: 6 }}>Recarregar</button>
           </div>
-        ) : (obsComp.visible ? <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 24 }}>Carregando comparativo…</div> : null)}
+        ) : (obsComp.visible ? <Spinner label="Carregando comparativo…" /> : null)}
       </div>
 
       {/* ===== Arrecadação Diária + Insights (uma linha) · Pesquisa abaixo ===== */}

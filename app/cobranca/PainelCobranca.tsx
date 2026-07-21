@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import LoadingOverlay from '../_components/LoadingOverlay'
 
 interface Trib { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }
 interface Resumo {
@@ -103,7 +104,8 @@ export default function PainelCobranca() {
   ]
 
   return (
-    <>
+    <div style={{ position: 'relative' }}>
+      {!d ? <LoadingOverlay label="Carregando…" /> : null}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
           const azul = i === 0
@@ -250,6 +252,6 @@ export default function PainelCobranca() {
           </table>
         </div>
       </div>
-    </>
+    </div>
   )
 }

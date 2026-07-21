@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import LoadingOverlay from '../_components/LoadingOverlay'
+import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
   for (let i = 0; i < tries; i++) {
@@ -122,7 +122,7 @@ export default function PainelTca({ ano }: { ano: number | '' }) {
 
   return (
     <div style={{ position: 'relative' }}>
-      {carregando && !v ? <div style={{ ...card, marginTop: 20, textAlign: 'center', padding: 40, color: '#9098a8', fontSize: 13 }}>Carregando TCA…</div> : null}
+      {carregando && !v ? <div style={{ ...card, marginTop: 20 }}><Spinner label="Carregando TCA…" /></div> : null}
 
       {v ? (
         <>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import LoadingOverlay from '../_components/LoadingOverlay'
 
 export interface FiltrosMobiliario { ano: number | ''; situacao: string }
 
@@ -221,7 +222,8 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
   ]
 
   return (
-    <>
+    <div style={{ position: 'relative' }}>
+      {!graf ? <LoadingOverlay label="Carregando…" /> : null}
       {/* ===== KPIs ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
@@ -415,6 +417,6 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }

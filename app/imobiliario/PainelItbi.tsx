@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import LoadingOverlay from '../_components/LoadingOverlay'
+import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 
 export interface FiltrosItbiUI { ano: number | ''; natureza: string }
 
@@ -187,7 +187,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
 
   return (
     <div style={{ position: 'relative' }}>
-      {carregando && !v ? <div style={{ ...card, marginTop: 20, textAlign: 'center', padding: 40, color: '#9098a8', fontSize: 13 }}>Carregando ITBI…</div> : null}
+      {carregando && !v ? <div style={{ ...card, marginTop: 20 }}><Spinner label="Carregando ITBI…" /></div> : null}
 
       {v ? (
         <>
@@ -354,7 +354,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                     </div>
                   </>
                 )
-              })() : <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 24 }}>Carregando ranking…</div>}
+              })() : <Spinner label="Carregando ranking…" padding={24} />}
             </div>
 
             {/* Itens 2/3 — Consulta de imóvel: histórico de lançamentos e valor venal */}
@@ -368,7 +368,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
               {/* Resultados da busca */}
               {busca.trim().length >= 2 && !imovel ? (
                 <div style={{ marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {buscando ? <div style={{ fontSize: 12, color: '#9098a8', padding: 10 }}>Buscando…</div>
+                  {buscando ? <Spinner label="Buscando…" size={30} padding={14} />
                     : matches.length ? matches.map(m => (
                       <div key={m.cd} onClick={() => abrirImovel(m.cd)} style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: 10, background: '#f7f9fd' }}>
                         <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>{m.inscricao || `Imóvel ${m.cd}`}</div>
@@ -379,7 +379,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
               ) : null}
 
               {/* Detalhe do imóvel */}
-              {carregImovel ? <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 24 }}>Carregando imóvel…</div> : null}
+              {carregImovel ? <Spinner label="Carregando imóvel…" padding={24} /> : null}
               {imovel ? (() => {
                 const ind = imovel.indicadores
                 return (

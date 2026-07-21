@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import AreaSerie from '../_components/AreaSerie'
+import { Spinner } from '../_components/LoadingOverlay'
 
 // Painel genérico movido pelo motor de tributos (/api/tributo/serie?grupo=).
 // Reutilizado por ISSCC, TFE, TFHS e Outros Tributos.
@@ -113,11 +114,9 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 20, background: '#fff', borderRadius: 22, padding: '46px 24px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)', textAlign: 'center', color: '#5b6477' }}>
-          <div style={{ width: 38, height: 38, border: '3px solid #e3e8f1', borderTopColor: '#283e93', borderRadius: '50%', margin: '0 auto', animation: 'pt-spin 0.9s linear infinite' }} />
-          <div style={{ marginTop: 14, fontSize: 14, fontWeight: 600, color: '#1f2a44' }}>Carregando dados de {titulo}…</div>
+        <div style={{ marginTop: 20, background: '#fff', borderRadius: 22, padding: '40px 24px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)', textAlign: 'center', color: '#5b6477' }}>
+          <Spinner label={`Carregando dados de ${titulo}…`} />
           <div style={{ marginTop: 4, fontSize: 12 }}>consultando o motor de arrecadação (pode levar alguns segundos na primeira carga)</div>
-          <style>{`@keyframes pt-spin{to{transform:rotate(360deg)}}`}</style>
         </div>
       </>
     )

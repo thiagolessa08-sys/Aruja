@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import LoadingOverlay from '../_components/LoadingOverlay'
 
 interface Resumo {
   total: number; administrativa: number; judicial: number; ajuizamento: number
@@ -115,7 +116,8 @@ export default function PainelDivida() {
   ]
 
   return (
-    <>
+    <div style={{ position: 'relative' }}>
+      {!d ? <LoadingOverlay label="Carregando…" /> : null}
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
@@ -270,6 +272,6 @@ export default function PainelDivida() {
           </table>
         </div>
       </div>
-    </>
+    </div>
   )
 }
