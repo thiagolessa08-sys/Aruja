@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { AreaChart, Area, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
+import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 
 // Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
@@ -269,6 +270,33 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const pctPorRot = new Map(serie.map(s => [s.rot, { arrecPct: s.arrecPct, inadPct: s.inadPct, previsto: s.previsto }]))
   // cores por métrica (tom forte = real, tom claro = previsto)
   const CORES: Record<string, [string, string]> = { lancado: ['#283e93', '#a9b6e2'], arrecadado: ['#1fa463', '#9adcbc'], emAberto: ['#e8962e', '#f3cd97'], inadimplencia: ['#d64545', '#eeaeae'], isento: ['#8094d6', '#c3ccec'], suspenso: ['#5b6477', '#b9bec8'] }
+
+  // Relatório (PDF/Excel) a partir dos cards + evolução do exercício atual.
+  function gerarRelatorio(tipo: 'pdf' | 'excel') {
+    if (!v) return
+    const c = v.cards
+    const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const dados: DadosRelatorio = {
+      titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}`,
+      subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}`,
+      cards: [
+        { rotulo: 'Lançado', valor: money(c.lancado.atual) },
+        { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
+        { rotulo: 'Em aberto', valor: money(c.emAberto.atual) },
+        { rotulo: 'Inadimplência', valor: money(c.inadimplencia.atual) },
+        { rotulo: 'Isento', valor: money(c.isento.atual) },
+        { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
+      ],
+      colunas: ['Exercício', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso'],
+      linhas: v.evolucao.map(e => [
+        e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
+        `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
+      ]),
+      arquivo: `IPTU-${v.anoRef}`,
+    }
+    const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
+    fn(dados).catch(() => alert('Não foi possível gerar o relatório. Tente novamente.'))
+  }
   // tick do eixo X: ano/mês + (no anual) % arrecadado e inadimplência frente ao lançado
   const EixoTick = (props: { x?: number; y?: number; payload?: { value?: string } }) => {
     const x = props.x ?? 0, y = props.y ?? 0, rot = props.payload?.value ?? ''
@@ -298,6 +326,17 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '8px 4px 0' }}>
           <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>Toda a tela filtrada pelo bairro: <b>{bairroSel}</b></span>
           <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>Limpar filtro</button>
+        </div>
+      ) : null}
+
+      {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução) */}
+      {v ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
+            <button key={tipo} onClick={() => gerarRelatorio(tipo)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{lbl}
+            </button>
+          ))}
         </div>
       ) : null}
 
