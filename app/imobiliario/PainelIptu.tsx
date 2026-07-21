@@ -37,7 +37,7 @@ interface Visao {
   anoRef: number
   mesRef: number
   cards: { lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp }
-  evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; previsto: boolean; arrecPct: number; inadPct: number }[]
+  evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; previsto: boolean; arrecPct: number; inadPct: number }[]
 }
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 // abreviação compacta padrão: mi (milhão) e k (milhar). Ex.: 67,6 mi / 540 k
@@ -263,12 +263,12 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
 
   // Evolução (5 anos + previsão) ou mensal (drill)
   const serie = v ? (drillAno
-    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia, previsto: drillPrevisto, arrecPct: 0, inadPct: 0 }))
-    : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, emAberto: e.emAberto, inadimplencia: e.inadimplencia, previsto: e.previsto, arrecPct: e.arrecPct, inadPct: e.inadPct }))
+    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia, isento: 0, suspenso: 0, previsto: drillPrevisto, arrecPct: 0, inadPct: 0 }))
+    : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, emAberto: e.emAberto, inadimplencia: e.inadimplencia, isento: e.isento, suspenso: e.suspenso, previsto: e.previsto, arrecPct: e.arrecPct, inadPct: e.inadPct }))
   ) : []
   const pctPorRot = new Map(serie.map(s => [s.rot, { arrecPct: s.arrecPct, inadPct: s.inadPct, previsto: s.previsto }]))
   // cores por métrica (tom forte = real, tom claro = previsto)
-  const CORES = { lancado: ['#283e93', '#a9b6e2'], arrecadado: ['#1fa463', '#9adcbc'], emAberto: ['#e8962e', '#f3cd97'], inadimplencia: ['#d64545', '#eeaeae'] }
+  const CORES: Record<string, [string, string]> = { lancado: ['#283e93', '#a9b6e2'], arrecadado: ['#1fa463', '#9adcbc'], emAberto: ['#e8962e', '#f3cd97'], inadimplencia: ['#d64545', '#eeaeae'], isento: ['#8094d6', '#c3ccec'], suspenso: ['#5b6477', '#b9bec8'] }
   // tick do eixo X: ano/mês + (no anual) % arrecadado e inadimplência frente ao lançado
   const EixoTick = (props: { x?: number; y?: number; payload?: { value?: string } }) => {
     const x = props.x ?? 0, y = props.y ?? 0, rot = props.payload?.value ?? ''
@@ -329,7 +329,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
-                {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }].map(m => (
+                {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }, { label: 'Isento', cor: '#8094d6' }, { label: 'Suspenso', cor: '#5b6477' }].map(m => (
                   <span key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
                 ))}
               </div>
@@ -349,8 +349,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
                 <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
                   formatter={(v, name) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
-                {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia'] as const).map(dk => (
-                  <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={22}
+                {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso'] as const).map(dk => (
+                  <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência', isento: 'Isento', suspenso: 'Suspenso' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={16}
                     stroke="none" activeBar={false}
                     cursor={!drillAno ? 'pointer' : 'default'}
                     onClick={(d) => {

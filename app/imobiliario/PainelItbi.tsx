@@ -26,7 +26,7 @@ interface Visao {
   cards: {
     lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp; transmissoes: Cmp
   }
-  evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; previsto: boolean; arrecPct: number; inadPct: number }[]
+  evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; previsto: boolean; arrecPct: number; inadPct: number }[]
 }
 interface RankingImovel {
   itens: { cd: number; qt: number; venal: number; inscricao: string; endereco: string }[]
@@ -62,6 +62,8 @@ const CORES: Record<string, [string, string]> = {
   arrecadado: ['#1fa463', '#a7e0c2'],
   emAberto: ['#e8962e', '#f4cf9e'],
   inadimplencia: ['#d64545', '#f0b0b0'],
+  isento: ['#8094d6', '#c3ccec'],
+  suspenso: ['#5b6477', '#b9bec8'],
 }
 
 const svg = (path: React.ReactNode) => (
@@ -173,7 +175,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
   const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano
   const insights = v ? insightsItbi(v) : null
   const chartData = drillAno && serieMes
-    ? serieMes.map(m => ({ rot: MESES_R[m.mes - 1], ano: 0, previsto: false, arrecPct: 0, inadPct: 0, lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia }))
+    ? serieMes.map(m => ({ rot: MESES_R[m.mes - 1], ano: 0, previsto: false, arrecPct: 0, inadPct: 0, lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia, isento: 0, suspenso: 0 }))
     : serie
 
   if (erro && !v) {
@@ -223,7 +225,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução do ITBI (5 anos)'}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
-                    {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }].map(m => (
+                    {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }, { label: 'Isento', cor: '#8094d6' }, { label: 'Suspenso', cor: '#5b6477' }].map(m => (
                       <span key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
                     ))}
                   </div>
@@ -243,8 +245,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                     <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
                       formatter={(val, name) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
-                    {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia'] as const).map(dk => (
-                      <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={drillAno ? 16 : 22} stroke="none">
+                    {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso'] as const).map(dk => (
+                      <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência', isento: 'Isento', suspenso: 'Suspenso' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={14} stroke="none">
                         {chartData.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
                         <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
                       </Bar>
