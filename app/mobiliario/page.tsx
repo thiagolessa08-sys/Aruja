@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSaudacaoNome } from '../_components/useSaudacao'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PainelMobiliario, { type FiltrosMobiliario } from './PainelMobiliario'
@@ -13,6 +14,7 @@ type SubAba = 'iss' | 'tfe' | 'tfhs' | 'mob'
 export default function MobiliarioPage() {
   const router = useRouter()
   const [saudacao, setSaudacao] = useState('Bom dia')
+  const nome = useSaudacaoNome()
   const [aba, setAba] = useState<SubAba>('iss')
 
   const [opts, setOpts] = useState<{ anos: number[]; situacoes: SituacaoOpt[] }>({ anos: [], situacoes: SITUACOES })
@@ -79,7 +81,7 @@ export default function MobiliarioPage() {
         {/* ===== GREETING + SUB-ABAS ===== */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 4px 0', flexWrap: 'wrap', gap: 12 }}>
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
-            {saudacao}, <span style={{ color: '#7d8fce' }}>Roberta!</span>
+            {saudacao}, <span style={{ color: '#7d8fce' }}>{nome}!</span>
           </h1>
           <div role="radiogroup" aria-label="Sub-aba do Mobiliário" style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
             {SUBABAS.map(t => {

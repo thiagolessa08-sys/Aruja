@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSaudacaoNome } from './useSaudacao'
 import TopNav, { type AbaTopo } from './TopNav'
 
 export default function EmConstrucao({ ativo, titulo, descricao }: { ativo: AbaTopo; titulo: string; descricao: string }) {
   const [saudacao, setSaudacao] = useState('Bom dia')
+  const nome = useSaudacaoNome()
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
@@ -16,7 +18,7 @@ export default function EmConstrucao({ ativo, titulo, descricao }: { ativo: AbaT
         <TopNav ativo={ativo} />
         <div style={{ margin: '26px 4px 0' }}>
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
-            {saudacao}, <span style={{ color: '#7d8fce' }}>Roberta!</span>
+            {saudacao}, <span style={{ color: '#7d8fce' }}>{nome}!</span>
           </h1>
         </div>
         <div style={{ marginTop: 22, background: '#fff', borderRadius: 22, padding: '48px 32px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)', textAlign: 'center' }}>

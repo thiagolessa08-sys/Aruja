@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useSaudacaoNome } from '../_components/useSaudacao'
 import TopNav from '../_components/TopNav'
 
 interface AnoBase { ano: number; qt: number; base: number; iss: number }
@@ -20,6 +21,7 @@ const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits:
 
 export default function ReformaTributariaPage() {
   const [saudacao, setSaudacao] = useState('Bom dia')
+  const nome = useSaudacaoNome()
   const [anos, setAnos] = useState<AnoBase[]>(FALLBACK)
   const [aliqIbs, setAliqIbs] = useState(3.6)     // alíquota municipal efetiva sob o IBS (%)
   const [cresc, setCresc] = useState(0)           // crescimento projetado da base (%)
@@ -85,7 +87,7 @@ export default function ReformaTributariaPage() {
         <TopNav ativo="reforma" />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 4px 0' }}>
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
-            {saudacao}, <span style={{ color: '#7d8fce' }}>Roberta!</span>
+            {saudacao}, <span style={{ color: '#7d8fce' }}>{nome}!</span>
           </h1>
           <span style={{ fontSize: 13, color: '#5b6477' }}>Calculadora do IBS potencial · simulação sobre a base de serviços (NFS-e)</span>
         </div>

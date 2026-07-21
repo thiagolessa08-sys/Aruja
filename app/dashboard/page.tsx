@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSaudacaoNome } from '../_components/useSaudacao'
 import PainelReceita, { type FiltrosReceita } from './PainelReceita'
 import PainelDespesa, { type FiltrosDespesa } from './PainelDespesa'
 import ImpostoTaxaSelect from '../_components/ImpostoTaxaSelect'
@@ -12,6 +13,7 @@ const INDICADORES = ['Dotação Inicial', 'Dotação Atualizada', 'Empenhado', '
 export default function DashboardPage() {
   const [tipo, setTipo] = useState<'receita' | 'despesa'>('receita')
   const [saudacao, setSaudacao] = useState('Bom dia')
+  const nome = useSaudacaoNome()
 
   // Opções e estado dos filtros (painel de Despesa)
   const [opts, setOpts] = useState<{ anos: number[]; secretarias: { uo: string; nome: string }[] }>({ anos: [], secretarias: [] })
@@ -101,7 +103,7 @@ export default function DashboardPage() {
         {/* ===== GREETING ROW ===== */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 4px 0' }}>
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
-            {saudacao}, <span style={{ color: '#7d8fce' }}>Roberta!</span>
+            {saudacao}, <span style={{ color: '#7d8fce' }}>{nome}!</span>
           </h1>
           <div role="radiogroup" aria-label="Tipo" style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f4f7fc', borderRadius: 30, padding: 5 }}>
             {(['receita', 'despesa'] as const).map(op => {
