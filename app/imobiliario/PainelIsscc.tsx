@@ -72,6 +72,8 @@ export default function PainelIsscc({ ano }: { ano: number | '' }) {
   const [carregMes, setCarregMes] = useState(false)
   // Item 2 — histórico de área edificada × quantidade de ISSCC
   const [areaHist, setAreaHist] = useState<{ ano: number; imoveisAlterados: number; areaEdificada: number; qtdIsscc: number; valorIsscc: number }[] | null>(null)
+  // Vínculos mobiliários/imobiliários (agregado)
+  const [vinculos, setVinculos] = useState<{ imoveis: number; comMobiliario: number; proprietarioPJ: number } | null>(null)
 
   useEffect(() => {
     let vivo = true
@@ -94,6 +96,14 @@ export default function PainelIsscc({ ano }: { ano: number | '' }) {
     return () => { vivo = false }
   }, [drillAno])
   useEffect(() => { setDrillAno(null) }, [ano])
+
+  // Vínculos (agregado) por exercício
+  useEffect(() => {
+    if (!ano) return
+    let vivo = true; setVinculos(null)
+    fetchJson(`/api/isscc/vinculos?ano=${ano}`).then(d => { if (vivo && d && !d.error) setVinculos(d) })
+    return () => { vivo = false }
+  }, [ano])
 
   useEffect(() => {
     let vivo = true
@@ -220,6 +230,36 @@ export default function PainelIsscc({ ano }: { ano: number | '' }) {
 
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
           <SecaoBairros endpoint="/api/isscc/bairros" ano={ano} titulo="ISSCC por Bairro" />
+
+          {/* Vínculos mobiliários e imobiliários (agregado) */}
+          <div style={{ ...card, marginTop: 18 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Vínculos mobiliários e imobiliários</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Imóveis com lançamento de ISSCC no exercício e seus vínculos</div>
+            {vinculos ? (() => {
+              const base = Math.max(1, vinculos.imoveis)
+              const itens = [
+                { l: 'Imóveis com ISSCC', v: vinculos.imoveis, c: '#283e93', pct: 100 },
+                { l: 'Com empresa no endereço (mobiliário)', v: vinculos.comMobiliario, c: '#e8962e', pct: 100 * vinculos.comMobiliario / base },
+                { l: 'Proprietário PJ (imobiliário)', v: vinculos.proprietarioPJ, c: '#1fa463', pct: 100 * vinculos.proprietarioPJ / base },
+              ]
+              return (
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 13 }}>
+                  {itens.map((it, i) => (
+                    <div key={i}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                        <span style={{ color: '#3a4256', fontWeight: 600 }}>{it.l}</span>
+                        <span style={{ color: it.c, fontWeight: 700 }}>{it.v.toLocaleString('pt-BR')} {i > 0 ? <span style={{ color: '#9098a8', fontWeight: 400 }}>({it.pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%)</span> : null}</span>
+                      </div>
+                      <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.max(2, it.pct).toFixed(1)}%`, borderRadius: 8, background: it.c }} />
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 10, color: '#aeb6c6' }}>Mobiliário = empresa registrada no endereço do imóvel. Imobiliário = proprietário pessoa jurídica.</div>
+                </div>
+              )
+            })() : <Spinner label="Carregando vínculos…" padding={20} />}
+          </div>
 
           {/* Tabela de exercícios */}
           <div style={{ ...card, marginTop: 18, overflowX: 'auto' }}>
