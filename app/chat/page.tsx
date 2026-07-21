@@ -742,6 +742,11 @@ function pedeRelatorioExcel(text: string): boolean {
   return /\b(excel|planilha|xlsx|xls|csv)\b/i.test(text)
 }
 
+// Detecta pedido de relatório em QUALQUER formato (para oferecer PDF ou Excel à escolha).
+function pedeRelatorio(text: string): boolean {
+  return /\brelat[óo]rios?\b|\breport\b/i.test(text) || pedeRelatorioPdf(text) || pedeRelatorioExcel(text)
+}
+
 // Remove marcações inline (**, *, `) e sanitiza para a fonte do PDF (CP1252): a Helvetica
 // do jsPDF não suporta emojis/símbolos fora do Latin-1 e embaralha o texto. Converte os
 // símbolos comuns de status em texto e remove o restante (acentos do pt-BR são mantidos).
@@ -1320,24 +1325,21 @@ export default function ChatPage() {
                     )}
 
                     {isAssistant && msg.content && i > 0 && messages[i - 1].role === 'user' && !(isLast && loading)
-                      && (pedeRelatorioPdf(messages[i - 1].content) || pedeRelatorioExcel(messages[i - 1].content)) && (
-                      <div style={{ marginLeft: '44px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {pedeRelatorioPdf(messages[i - 1].content) && (
-                          <button className="kc-pdf-btn" onClick={() => { baixarRelatorioPdf(msg.content).catch(() => alert('Não foi possível gerar o PDF. Tente novamente.')) }} title="Baixar este relatório em PDF">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
-                            </svg>
-                            Baixar PDF
-                          </button>
-                        )}
-                        {pedeRelatorioExcel(messages[i - 1].content) && (
-                          <button className="kc-pdf-btn" onClick={() => { baixarRelatorioExcel(msg.content).catch(() => alert('Não foi possível gerar o Excel. Tente novamente.')) }} title="Baixar este relatório em Excel">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 9h16M4 15h16M10 3v18" />
-                            </svg>
-                            Baixar Excel
-                          </button>
-                        )}
+                      && pedeRelatorio(messages[i - 1].content) && (
+                      <div style={{ marginLeft: '44px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, color: '#8a93a6', marginRight: 2 }}>Baixar relatório:</span>
+                        <button className="kc-pdf-btn" onClick={() => { baixarRelatorioPdf(msg.content).catch(() => alert('Não foi possível gerar o PDF. Tente novamente.')) }} title="Baixar este relatório em PDF">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
+                          </svg>
+                          PDF
+                        </button>
+                        <button className="kc-pdf-btn" onClick={() => { baixarRelatorioExcel(msg.content).catch(() => alert('Não foi possível gerar o Excel. Tente novamente.')) }} title="Baixar este relatório em Excel">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 9h16M4 15h16M10 3v18" />
+                          </svg>
+                          Excel
+                        </button>
                       </div>
                     )}
                   </div>
