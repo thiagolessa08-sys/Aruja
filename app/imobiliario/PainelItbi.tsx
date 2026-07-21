@@ -85,6 +85,8 @@ function EixoTick({ x, y, payload }: any) {
     <text x={x} y={y + 14} textAnchor="middle" fontSize={11} fill="#8a93a6" fontWeight={600}>{payload.value}</text>
   )
 }
+const MESES_R = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+interface MesItbi { mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
 
 export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
   const [v, setV] = useState<Visao | null>(null)
@@ -100,6 +102,9 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
   const [buscando, setBuscando] = useState(false)
   const [imovel, setImovel] = useState<DetalheImovel | null>(null)
   const [carregImovel, setCarregImovel] = useState(false)
+  const [drillAno, setDrillAno] = useState<number | null>(null)
+  const [serieMes, setSerieMes] = useState<MesItbi[] | null>(null)
+  const [carregMes, setCarregMes] = useState(false)
 
   const ano = filtros.ano
 
@@ -142,6 +147,17 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       .finally(() => setCarregImovel(false))
   }
 
+  // Drill por mês ao clicar num ano do gráfico
+  useEffect(() => {
+    if (!drillAno) { setSerieMes(null); return }
+    let vivo = true; setCarregMes(true)
+    fetchJson(`/api/itbi/mensal?ano=${drillAno}`)
+      .then(d => { if (vivo) setSerieMes(d?.meses ?? null) })
+      .finally(() => { if (vivo) setCarregMes(false) })
+    return () => { vivo = false }
+  }, [drillAno])
+  useEffect(() => { setDrillAno(null) }, [ano])
+
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
   const cardsDef = v ? [
@@ -156,6 +172,9 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
   const serie = (v?.evolucao ?? []).map(e => ({ ...e, rot: e.previsto ? `${e.ano}*` : String(e.ano) }))
   const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano
   const insights = v ? insightsItbi(v) : null
+  const chartData = drillAno && serieMes
+    ? serieMes.map(m => ({ rot: MESES_R[m.mes - 1], ano: 0, previsto: false, arrecPct: 0, inadPct: 0, lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia }))
+    : serie
 
   if (erro && !v) {
     return (
@@ -198,33 +217,42 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
 
           {/* Evolução + Insights */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
-            <div style={{ ...card, minWidth: 0 }}>
+            <div style={{ ...card, minWidth: 0, position: 'relative' }}>
+              {carregMes ? <LoadingOverlay label="Carregando meses…" /> : null}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Evolução do ITBI (5 anos)</span>
-                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
-                  {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }].map(m => (
-                    <span key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
-                  ))}
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução do ITBI (5 anos)'}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
+                    {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }].map(m => (
+                      <span key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
+                    ))}
+                  </div>
+                  {drillAno ? <button onClick={() => setDrillAno(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button> : null}
                 </div>
               </div>
-              <div style={{ marginTop: 16, height: 300 }}>
+              <div style={{ marginTop: 16, height: 300, cursor: !drillAno ? 'pointer' : 'default' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={serie} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%">
+                  <BarChart data={chartData} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
+                    onClick={(e) => {
+                      const st = e as unknown as { activePayload?: { payload?: { ano?: number; previsto?: boolean } }[] }
+                      const pl = st?.activePayload?.[0]?.payload
+                      if (!drillAno && pl?.ano && !pl.previsto) setDrillAno(pl.ano)
+                    }}>
                     <XAxis dataKey="rot" interval={0} height={24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                     <YAxis width={44} tickFormatter={(val: number) => (val / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                     <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
                       formatter={(val, name) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
                     {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia'] as const).map(dk => (
-                      <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={22} stroke="none">
-                        {serie.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
+                      <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={drillAno ? 16 : 22} stroke="none">
+                        {chartData.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
                         <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
                       </Bar>
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Barras claras = previsão {anoPrevisto ?? ''} (regressão linear dos últimos 5 anos)</div>
+              <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>{drillAno ? `Meses de ${drillAno} · lançado/em aberto por mês de vencimento, arrecadado por mês de baixa` : `Clique num ano para detalhar por mês · barras claras = previsão ${anoPrevisto ?? ''} (regressão linear dos últimos 5 anos)`}</div>
             </div>
 
             {/* Insights */}
