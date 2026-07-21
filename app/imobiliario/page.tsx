@@ -7,7 +7,7 @@ import PainelIptu from './PainelIptu'
 import TopNav from '../_components/TopNav'
 import PainelItbi, { type FiltrosItbiUI } from './PainelItbi'
 import PainelTca from './PainelTca'
-import PainelTributo from '../tributo/PainelTributo'
+import PainelIsscc from './PainelIsscc'
 
 type Tributo = 'iptu' | 'itbi' | 'isscc' | 'tca'
 interface NaturezaOpt { id: string; label: string }
@@ -32,6 +32,10 @@ export default function ImobiliarioPage() {
   const [optsTca, setOptsTca] = useState<{ anos: number[] }>({ anos: [] })
   const [tAno, setTAno] = useState<number | ''>('')
 
+  // ISSCC
+  const [optsIsscc, setOptsIsscc] = useState<{ anos: number[] }>({ anos: [] })
+  const [sAno, setSAno] = useState<number | ''>('')
+
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
@@ -51,6 +55,9 @@ export default function ImobiliarioPage() {
     }).catch(() => {})
     fetch('/api/tca/filtros').then(r => r.ok ? r.json() : null).then(d => {
       if (d && !d.error) { setOptsTca({ anos: d.anos ?? [] }); if (d.anos?.length) setTAno(d.anos[0]) }
+    }).catch(() => {})
+    fetch('/api/isscc/filtros').then(r => r.ok ? r.json() : null).then(d => {
+      if (d && !d.error) { setOptsIsscc({ anos: d.anos ?? [] }); if (d.anos?.length) setSAno(d.anos[0]) }
     }).catch(() => {})
   }, [])
 
@@ -141,7 +148,9 @@ export default function ImobiliarioPage() {
               </select>
             )}
             {tributo === 'isscc' && (
-              <div style={{ ...selectPill, cursor: 'default', color: '#5b6477', maxWidth: 'none' }}>ISS Construção Civil · todos os exercícios</div>
+              <select aria-label="Exercício" value={sAno} onChange={e => setSAno(Number(e.target.value))} style={selectPill}>
+                {optsIsscc.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+              </select>
             )}
             {tributo === 'tca' && (
               <select aria-label="Exercício" value={tAno} onChange={e => setTAno(Number(e.target.value))} style={selectPill}>
@@ -154,7 +163,7 @@ export default function ImobiliarioPage() {
         {/* ===== PAINEL ===== */}
         {tributo === 'iptu' && <PainelIptu ano={pAno} mes={pMes} />}
         {tributo === 'itbi' && <PainelItbi filtros={filtrosItbi} />}
-        {tributo === 'isscc' && <PainelTributo grupo="isscc" titulo="ISS Construção Civil" />}
+        {tributo === 'isscc' && <PainelIsscc ano={sAno} />}
         {tributo === 'tca' && <PainelTca ano={tAno} />}
 
       </div>
