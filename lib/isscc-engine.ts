@@ -113,6 +113,33 @@ export async function qtdIsscc(): Promise<Map<number, number>> {
   })
 }
 
+/**
+ * Item 2 — Histórico de alterações de área edificada por ano (para cruzar com ISSCC).
+ * Fonte: tb_dsod_imovel_urbano_alt_estrutura (registra cada alteração estrutural do imóvel,
+ * com dt_alteracao). A metragem vem da área edificada ATUAL do imóvel (vl_area_edificaca),
+ * somada 1× por imóvel/ano (MAX por imóvel para não multiplicar por nº de alterações).
+ */
+export interface AreaAno { imoveisAlterados: number; areaEdificada: number }
+
+export async function historicoAreaEdificada(): Promise<Map<number, AreaAno>> {
+  return cached('issccAreaHist', TTL_15MIN, async () => {
+    const r = await agentQuery(`
+      SELECT ano, COUNT(*) imoveis, SUM(area) area FROM (
+        SELECT YEAR(ae.dt_alteracao) ano, ae.cd_imovel_urbano, MAX(iu.vl_area_edificaca) area
+        FROM ${S}.tb_dsod_imovel_urbano_alt_estrutura ae
+        JOIN ${S}.tb_dsod_imovel_urbano iu ON iu.cd_imovel_urbano = ae.cd_imovel_urbano
+        WHERE ae.dt_alteracao IS NOT NULL
+        GROUP BY YEAR(ae.dt_alteracao), ae.cd_imovel_urbano
+      ) t GROUP BY ano`, 60)
+    const map = new Map<number, AreaAno>()
+    for (const row of r.rows) {
+      const ano = num(row[0]); if (!(ano >= 2005 && ano <= 2035)) continue
+      map.set(ano, { imoveisAlterados: num(row[1]), areaEdificada: num(row[2]) })
+    }
+    return map
+  })
+}
+
 /** Data de atualização (carga) = MAX(dt_alter_ods) das guias de ISSCC. */
 export async function dataAtualizacaoIsscc(): Promise<string | null> {
   return cached('dataAtualizIsscc', TTL_15MIN, async () => {

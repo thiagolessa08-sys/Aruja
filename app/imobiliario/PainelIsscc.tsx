@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer, ComposedChart, Line, Legend } from 'recharts'
 import LoadingOverlay from '../_components/LoadingOverlay'
 
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
@@ -64,6 +64,8 @@ export default function PainelIsscc({ ano }: { ano: number | '' }) {
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(false)
   const [recarregar, setRecarregar] = useState(0)
+  // Item 2 — histórico de área edificada × quantidade de ISSCC
+  const [areaHist, setAreaHist] = useState<{ ano: number; imoveisAlterados: number; areaEdificada: number; qtdIsscc: number; valorIsscc: number }[] | null>(null)
 
   useEffect(() => {
     let vivo = true
@@ -75,6 +77,12 @@ export default function PainelIsscc({ ano }: { ano: number | '' }) {
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
   }, [ano, recarregar])
+
+  useEffect(() => {
+    let vivo = true
+    fetchJson('/api/isscc/area-historico').then(d => { if (vivo && d?.serie) setAreaHist(d.serie) })
+    return () => { vivo = false }
+  }, [])
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
@@ -211,6 +219,69 @@ export default function PainelIsscc({ ano }: { ano: number | '' }) {
               </table>
             </div>
             <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>* exercício previsto (regressão linear). Valores por exercício de lançamento da guia (cd_tributo 40/17/18).</div>
+          </div>
+
+          {/* ===== Item 2 — Área edificada × quantidade de ISSCC ===== */}
+          <div style={{ ...card, marginTop: 18, overflowX: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Alterações de Área Edificada × ISSCC</span>
+              <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#5870c4' }} />Área edificada (m²)</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 3, borderRadius: 2, background: '#e8962e' }} />Qtd. ISSCC</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Imóveis com alteração estrutural no ano vs quantidade de ISSCC lançados — mede se a atividade de construção acompanha o tributo.</div>
+            {areaHist ? (
+              <>
+                <div style={{ marginTop: 16, height: 300, minWidth: 560 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={areaHist} margin={{ top: 22, right: 12, left: 0, bottom: 0 }}>
+                      <XAxis dataKey="ano" tick={{ fontSize: 11, fill: '#8a93a6', fontWeight: 600 }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                      <YAxis yAxisId="area" width={48} tickFormatter={(val: number) => (val / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + 'k'} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="qtd" orientation="right" width={40} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        formatter={(val, name) => {
+                          const n = Number(val) || 0
+                          if (name === 'Área edificada (m²)') return [n.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' m²', name] as [string, string]
+                          return [n.toLocaleString('pt-BR'), name] as [string, string]
+                        }}
+                        contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                      <Bar yAxisId="area" dataKey="areaEdificada" name="Área edificada (m²)" fill="#5870c4" radius={[3, 3, 0, 0]} maxBarSize={34}>
+                        <LabelList dataKey="imoveisAlterados" position="top" formatter={(val) => (Number(val) ? `${Number(val)} im.` : '')} fontSize={8.5} fill="#8a93a6" />
+                      </Bar>
+                      <Line yAxisId="qtd" type="monotone" dataKey="qtdIsscc" name="Qtd. ISSCC" stroke="#e8962e" strokeWidth={2.5} dot={{ r: 3, fill: '#e8962e' }} />
+                      <Legend wrapperStyle={{ display: 'none' }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ marginTop: 8, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+                    <thead>
+                      <tr>
+                        {['Ano', 'Imóveis alterados', 'Área edificada (m²)', 'Qtd. ISSCC', 'ISSCC lançado'].map((h, i) => (
+                          <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 600, padding: '10px 14px', textAlign: i === 0 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...areaHist].reverse().map((r, ri) => {
+                        const bg = ri % 2 === 0 ? '#fff' : '#f7f9fd'
+                        return (
+                          <tr key={r.ano}>
+                            <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 14px', borderBottom: '1px solid #eef1f7' }}>{r.ano}</td>
+                            <td style={{ background: bg, color: '#1f2a44', fontSize: 12, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtInt(r.imoveisAlterados)}</td>
+                            <td style={{ background: bg, color: '#5870c4', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtInt(r.areaEdificada)}</td>
+                            <td style={{ background: bg, color: '#e8962e', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtInt(r.qtdIsscc)}</td>
+                            <td style={{ background: bg, color: '#283e93', fontSize: 12, fontWeight: 600, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtAbrev(r.valorIsscc)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>Fonte das alterações: tb_dsod_imovel_urbano_alt_estrutura (por ano de alteração). Rótulo nas barras = nº de imóveis alterados. Área = soma da área edificada atual dos imóveis alterados no ano.</div>
+              </>
+            ) : <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: 24 }}>Carregando histórico de área…</div>}
           </div>
         </>
       ) : null}
