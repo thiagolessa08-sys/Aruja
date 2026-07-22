@@ -96,6 +96,70 @@ async function bucketsIssccRaw(): Promise<Map<number, BucketsIssccAno>> {
   return map
 }
 
+/**
+ * Buckets do ISSCC ACUMULADOS até um mês (vencimento da parcela <= mês), por exercício.
+ * Espelha bucketsIptuAteMes/bucketsItbiAteMes. Isento/suspenso NÃO usam mês (mesma
+ * convenção do IPTU/ITBI — são buckets anuais/posição, não fluxo acumulável).
+ */
+export interface BucketAteMesIsscc { lancado: number; arrecadado: number; emAberto: number; inadimplente: number }
+
+function qAteMesIsscc(vencido: boolean, mes: number): string {
+  const venc = vencido ? ' AND p.dt_vencimento < getdate()-1' : ''
+  const th = vencido ? '1' : '0'
+  return `SELECT ex, SUM(valor) vl FROM (
+      SELECT g.no_exercicio_lancamento ex, g.cd_devedor dev, SUM(pm.vl_movimento * pm.no_sinal) valor
+      FROM ${S}.tb_dsod_guias g
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo IN (${ISSCC}) AND g.no_exercicio_lancamento >= 2016 AND p.no_parcela <> 0
+        AND MONTH(p.dt_vencimento) <= ${mes}
+        AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${venc}
+      GROUP BY g.no_exercicio_lancamento, g.cd_devedor
+      HAVING SUM(pm.vl_movimento * pm.no_sinal) > ${th}
+    ) t GROUP BY ex`
+}
+
+export async function bucketsIssccAteMes(mes: number): Promise<Map<number, BucketAteMesIsscc>> {
+  return cached(`bucketsIssccAteMes:${mes}`, TTL_15MIN, async () => {
+    const [lancR, arrecR, abertoR, inadR] = await Promise.all([
+      agentQuery(`
+        SELECT g.no_exercicio_lancamento ex, g.ds_situacao sit, SUM(pm.vl_movimento) vl
+        FROM ${S}.tb_dsod_guias g
+        JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (${ISSCC}) AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela <> 0
+          AND MONTH(p.dt_vencimento) <= ${mes}
+        GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 600),
+      agentQuery(`
+        SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
+        FROM ${S}.tb_dsod_guias g
+        JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+        JOIN ${S}.tb_dsod_tipo_baixa tb ON tb.cd_tipo_baixa = pb.cd_tipo_baixa
+        WHERE g.cd_tributo IN (${ISSCC}) AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+          AND p.no_parcela <> 0 AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          AND tb.ds_tipo_baixa <> 'Estorno de Baixa'
+          AND MONTH(p.dt_vencimento) <= ${mes}
+        GROUP BY g.no_exercicio_lancamento`, 300),
+      agentQuery(qAteMesIsscc(false, mes), 300),
+      agentQuery(qAteMesIsscc(true, mes), 300),
+    ])
+    const map = new Map<number, BucketAteMesIsscc>()
+    const get = (ex: number) => map.get(ex) ?? { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0 }
+    const ok = (ex: number) => ex >= 2005 && ex <= 2035
+    for (const r of lancR.rows) {
+      const ex = num(r[0]); if (!ok(ex)) continue
+      if (LANC_SIT_EXCLUIR.has(String(r[1] ?? '').trim())) continue
+      const b = get(ex); b.lancado += num(r[2]); map.set(ex, b)
+    }
+    for (const r of arrecR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.arrecadado = num(r[1]); map.set(ex, b) }
+    for (const r of abertoR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
+    for (const r of inadR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
+    return map
+  })
+}
+
 /** Quantidade de guias/lançamentos de ISSCC por exercício (exclui Recalculo/Validacao). */
 export async function qtdIsscc(): Promise<Map<number, number>> {
   return cached('qtdIsscc', TTL_15MIN, async () => {
