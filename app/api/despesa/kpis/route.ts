@@ -76,9 +76,9 @@ export async function GET(req: NextRequest) {
 
     // Acumulado (YTD) de janeiro até o mês de referência — quando um mês é selecionado,
     // Empenhado/Liquidado/Pago somam o período (jan..mês), não só o mês isolado.
-    const soma = (m: Map<string, number>, a: number, ateMes: number = mesRef) => {
+    const soma = (m: Map<string, number>, a: number) => {
       let s = 0
-      for (let i = 1; i <= ateMes; i++) s += m.get(`${a}-${i}`) ?? 0
+      for (let i = 1; i <= mesRef; i++) s += m.get(`${a}-${i}`) ?? 0
       return s
     }
 
@@ -93,9 +93,8 @@ export async function GET(req: NextRequest) {
     const dotAtuAnt = (loa.get(anoAnt) ?? 0) + (alt.get(anoAnt) ?? 0)
 
     const empA = soma(emp, ano), empB = soma(emp, anoAnt)
-    // Liquidado: com mês filtrado, Ano Anterior segue a mesma regra do valor de cima (YTD até o mês);
-    // sem filtro de mês, Ano Anterior é o ano completo (não só até o último mês com dado no ano atual).
-    const liqA = soma(liq, ano), liqB = soma(liq, anoAnt, f.mes ? mesRef : 12)
+    // Ano Anterior sempre no mesmo período do valor de cima (jan..mesRef), com ou sem filtro de mês.
+    const liqA = soma(liq, ano), liqB = soma(liq, anoAnt)
     const pagoA = soma(pago, ano), pagoB = soma(pago, anoAnt)
 
     const subAno = `Ano Anterior`
