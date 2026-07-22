@@ -63,7 +63,10 @@ export default function ImobiliarioPage() {
       if (d && !d.error) { setOptsTca({ anos: d.anos ?? [] }); if (d.anos?.length) setTAno(d.anos[0]) }
     }).catch(() => {})
     fetch('/api/isscc/filtros').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && !d.error) { setOptsIsscc({ anos: d.anos ?? [] }); if (d.anos?.length) setSAno(d.anos[0]) }
+      if (d && !d.error) {
+        const anos = (d.anos ?? []).filter((a: number) => a >= 2020) // ISSCC a partir de 2020
+        setOptsIsscc({ anos }); if (anos.length) setSAno(anos[0])
+      }
     }).catch(() => {})
   }, [])
 
