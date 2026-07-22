@@ -307,8 +307,19 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     <div style={{ position: 'relative', marginTop: 18 }}>
       {carregando ? <LoadingOverlay /> : null}
 
+      {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução) */}
+      {v ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
+          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
+            <button key={tipo} onClick={() => gerarRelatorio(tipo)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{lbl}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Cabeçalho + data de atualização */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, margin: '0 4px 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, margin: '8px 4px 4px' }}>
         <span style={{ fontSize: 18, fontWeight: 700, color: '#283e93' }}>Visão Geral do IPTU {v ? `· ${v.anoRef}` : ''}{mes ? ` · até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
         <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
           Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(v?.dataAtualizacao ?? null)}</b>
@@ -320,17 +331,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '8px 4px 0' }}>
           <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>Toda a tela filtrada pelo bairro: <b>{bairroSel}</b></span>
           <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>Limpar filtro</button>
-        </div>
-      ) : null}
-
-      {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução) */}
-      {v ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
-            <button key={tipo} onClick={() => gerarRelatorio(tipo)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{lbl}
-            </button>
-          ))}
         </div>
       ) : null}
 
