@@ -103,7 +103,9 @@ export async function GET(req: NextRequest) {
     const arrecMes = get(anoAtual, mesAtual)
     const arrecMesAnt = get(anoAnt, mesAtual)
     const arrecYtd = ytd(anoAtual, mesAtual)
-    const arrecAnoAntTotal = ytd(anoAnt, 12) // ano anterior completo (não só até o mês)
+    // Com mês filtrado, Ano Anterior segue a mesma regra do valor de cima (YTD até o mês);
+    // sem filtro de mês, Ano Anterior é o ano completo (não só até o último mês com dado no ano atual).
+    const arrecAnoAntTotal = ytd(anoAnt, f.mes ? mesAtual : 12)
     const arrecMesAnterior = get(mesAntAno, mesAntMes)
 
     // Com filtro de mês, valores menores → usa K/mi conforme a base (Receita item 1)

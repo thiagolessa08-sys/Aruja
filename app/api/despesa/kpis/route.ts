@@ -93,7 +93,9 @@ export async function GET(req: NextRequest) {
     const dotAtuAnt = (loa.get(anoAnt) ?? 0) + (alt.get(anoAnt) ?? 0)
 
     const empA = soma(emp, ano), empB = soma(emp, anoAnt)
-    const liqA = soma(liq, ano), liqB = soma(liq, anoAnt, 12) // Ano Anterior = ano completo, não YTD
+    // Liquidado: com mês filtrado, Ano Anterior segue a mesma regra do valor de cima (YTD até o mês);
+    // sem filtro de mês, Ano Anterior é o ano completo (não só até o último mês com dado no ano atual).
+    const liqA = soma(liq, ano), liqB = soma(liq, anoAnt, f.mes ? mesRef : 12)
     const pagoA = soma(pago, ano), pagoB = soma(pago, anoAnt)
 
     const subAno = `Ano Anterior`
