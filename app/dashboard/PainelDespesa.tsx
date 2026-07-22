@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import AreaSerie from '../_components/AreaSerie'
 import LoadingOverlay from '../_components/LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Tip {
   chart: 'report' | 'arrec'
@@ -43,17 +44,8 @@ interface Graficos {
 }
 
 const parseBR = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.')) || 0
-const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
-const fmtM = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M'
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
-// Rótulo curto p/ barras (só o número em milhões, 1 casa) — evita sobreposição
-const fmtBar = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-function fmtCompact(v: number): string {
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M'
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'K'
-  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-}
 
 // Fallback com valores reais (substituído pelo fetch de /api/orcamento/graficos)
 const _A2025 = [60899312.06, 59622020.95, 47029868.84, 60347748.41, 45822535.10, 49114933.97, 61364457.01, 45837000.04, 55988948.69, 51201371.49, 49437783.52, 92478116.43]
@@ -162,7 +154,7 @@ function geomLinha(d: PorAno[]) {
   const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
   const hot = d.map((p, i) => ({
     x: X(i) - half, w: half * 2,
-    tip: { chart: 'report' as const, title: String(p.ano), l1: `Pago: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
+    tip: { chart: 'report' as const, title: String(p.ano), l1: `Pago: ${fmtAbrev(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
   }))
   return { linha, area, ticks, labels, dots, hot }
 }
@@ -180,7 +172,7 @@ function geomBar(d: PorMes[]) {
       cx, nome: m.nome, pct: fmtPct(m.pct), vAnt: m.anoAnterior, vAtu: m.anoAtual,
       ant: { x: cx - 28, y: bottom - hAnt, h: hAnt },
       atu: m.anoAtual > 0 ? { x: cx + 4, y: bottom - hAtu, h: hAtu } : null,
-      tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtMi(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtMi(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hAnt, hAtu)) / H * 100).toFixed(1)}%` },
+      tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtAbrev(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtAbrev(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hAnt, hAtu)) / H * 100).toFixed(1)}%` },
     }
   })
   const media = d.reduce((s, m) => s + m.anoAnterior, 0) / 12
@@ -400,8 +392,8 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
               data={despesaAno.map(p => ({ ano: p.ano, valor: p.arrecadado }))}
               cor="#283e93"
               nome={ind}
-              fmtValor={fmtMi}
-              fmtEixoY={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              fmtValor={fmtAbrev}
+              fmtEixoY={fmtAbrev}
             />
           </div>
         </div>
@@ -464,7 +456,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                     <div style={{ flex: 1, height: 14, background: '#eef1f7', borderRadius: 7, overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${pct.toFixed(1)}%`, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', borderRadius: 7 }} />
                     </div>
-                    <span style={{ flex: 'none', fontSize: 11, fontWeight: 600, color: '#283e93', minWidth: 48, textAlign: 'right' }}>{fmtM(it.liquidado)}</span>
+                    <span style={{ flex: 'none', fontSize: 11, fontWeight: 600, color: '#283e93', minWidth: 48, textAlign: 'right' }}>{fmtAbrev(it.liquidado)}</span>
                   </div>
                 )
               })
@@ -496,8 +488,8 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                 <g key={i}>
                   <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill="url(#arrAnt)" />
                   {b.atu ? <rect x={b.atu.x.toFixed(1)} y={b.atu.y.toFixed(1)} width="24" height={b.atu.h.toFixed(1)} rx="6" fill="url(#arrAtu)" /> : null}
-                  {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtBar(b.vAnt)}</text> : null}
-                  {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtBar(b.vAtu)}</text> : null}
+                  {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
+                  {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
                   <text x={b.cx.toFixed(1)} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.nome}</text>
                   <text x={b.cx.toFixed(1)} y="350" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="middle">{b.pct}</text>
                 </g>
@@ -551,7 +543,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                           <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
                           <span title={s.grupo} style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.grupo}</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44', flex: 'none' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
                         </div>
                       ))}
                     </div>
@@ -584,7 +576,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                     <div key={i} onClick={() => { if (temGrupo) setCatDrill(s.nome) }} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: temGrupo ? 'pointer' : 'default' }}>
                       <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
                       <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtAbrev(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
                     </div>
                   )
                 })}

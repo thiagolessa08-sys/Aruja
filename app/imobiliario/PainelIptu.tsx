@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { AreaChart, Area, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 // Busca com retry (o túnel do agente às vezes devolve 502; sem isso a tela fica em branco).
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
@@ -41,14 +42,7 @@ interface Visao {
   evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; previsto: boolean; arrecPct: number; inadPct: number }[]
 }
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
-// abreviação compacta padrão: mi (milhão) e k (milhar). Ex.: 67,6 mi / 540 k
-const fmtAbrev = (v: number) => {
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mi'
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' k'
-  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-}
-
-const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const MESES =['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const fmtPct = (p: number) => (p >= 0 ? '+' : '') + p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
 const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
 

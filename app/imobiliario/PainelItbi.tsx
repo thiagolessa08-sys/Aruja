@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 export interface FiltrosItbiUI { ano: number | ''; natureza: string }
 
@@ -47,11 +48,6 @@ interface DetalheImovel {
   transmissoes: Transmissao[]
 }
 
-const fmtAbrev = (v: number) => {
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mi'
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' k'
-  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-}
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => (p >= 0 ? '+' : '') + p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
 const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'

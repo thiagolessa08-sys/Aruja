@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import AreaSerie from '../_components/AreaSerie'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 export interface FiltrosImobiliario { ano: number | ''; faixa: number | '' }
 
@@ -29,7 +30,6 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
@@ -109,7 +109,7 @@ function geomLinha(d: PorAno[]) {
   const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
   const hot = d.map((p, i) => ({
     x: X(i) - half, w: half * 2,
-    tip: { chart: 'linha' as const, title: String(p.ano), l1: `IPTU Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 100 * 100).toFixed(1)}%` },
+    tip: { chart: 'linha' as const, title: String(p.ano), l1: `IPTU Arrecadado: ${fmtAbrev(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 100 * 100).toFixed(1)}%` },
   }))
   return { linha, area, ticks, labels, dots, hot }
 }
@@ -270,8 +270,8 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
               data={g.porAno.map(p => ({ ano: p.ano, valor: p.arrecadado }))}
               cor="#283e93"
               nome="Arrecadado"
-              fmtValor={fmtMi}
-              fmtEixoY={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              fmtValor={fmtAbrev}
+              fmtEixoY={fmtAbrev}
             />
           </div>
         </div>
@@ -369,7 +369,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
                   <div style={{ marginBottom: 5 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                       <span style={{ fontSize: 11, color: '#9098a8', width: 80, flex: 'none' }}>Lançado</span>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>{fmtMoney(row.lancado ?? 0)}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>{fmtAbrev(row.lancado ?? 0)}</span>
                     </div>
                     <div style={{ height: 20, borderRadius: 6, background: '#e9edf8', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${row.wL.toFixed(1)}%`, background: 'linear-gradient(90deg,#283e93,#7d8fce)', borderRadius: 6 }} />
@@ -379,7 +379,7 @@ export default function PainelImobiliario({ filtros }: { filtros: FiltrosImobili
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                     <span style={{ fontSize: 11, color: '#9098a8', width: 80, flex: 'none' }}>Arrecadado</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#c0612a' }}>{fmtMoney(row.arrecadado)}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#c0612a' }}>{fmtAbrev(row.arrecadado)}</span>
                   </div>
                   <div style={{ height: 20, borderRadius: 6, background: '#e9edf8', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${row.wA.toFixed(1)}%`, background: 'linear-gradient(90deg,#e8962e,#f5c47d)', borderRadius: 6 }} />

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import AreaSerie from '../_components/AreaSerie'
 import { Spinner } from '../_components/LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 // Painel genérico movido pelo motor de tributos (/api/tributo/serie?grupo=).
 // Reutilizado por ISSCC, TFE, TFHS e Outros Tributos.
@@ -13,7 +14,6 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
 interface Tip { chart: 'bar' | 'area'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
@@ -48,8 +48,8 @@ function geomBars(d: SerieItem[]) {
       topY: bottom - Math.max(hL, hA),
       tip: {
         chart: 'bar' as const, title: String(x.ano),
-        l1: `Lançado: ${fmtMi(x.lancado)}`, l1c: '#283e93',
-        l2: `Arrecadado: ${fmtMi(x.arrecadado)}`, l2c: '#e8962e',
+        l1: `Lançado: ${fmtAbrev(x.lancado)}`, l1c: '#283e93',
+        l2: `Arrecadado: ${fmtAbrev(x.arrecadado)}`, l2c: '#e8962e',
         left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hL, hA)) / H * 100).toFixed(1)}%`,
       },
     }
@@ -73,7 +73,7 @@ function geomArea(d: SerieItem[]) {
   const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
   const hot = d.map((x, i) => ({
     x: X(i) - half, w: half * 2,
-    tip: { chart: 'area' as const, title: String(x.ano), l1: `Inadimplência: ${fmtMi(x.saldo)}`, l1c: '#d64545', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(x.saldo) / 100 * 100).toFixed(1)}%` },
+    tip: { chart: 'area' as const, title: String(x.ano), l1: `Inadimplência: ${fmtAbrev(x.saldo)}`, l1c: '#d64545', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(x.saldo) / 100 * 100).toFixed(1)}%` },
   }))
   return { area, linha, dots, labels, ticks, hot }
 }
@@ -300,9 +300,9 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
             </svg>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 4 }}>
-            <div style={{ textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, color: '#1fa463' }}>{fmtMoney(arrecadado)}</div><div style={{ fontSize: 10, color: '#9098a8' }}>Arrecadado</div></div>
+            <div style={{ textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, color: '#1fa463' }}>{fmtAbrev(arrecadado)}</div><div style={{ fontSize: 10, color: '#9098a8' }}>Arrecadado</div></div>
             <div style={{ width: 1, background: '#e3e8f1' }} />
-            <div style={{ textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, color: '#d64545' }}>{fmtMoney(saldo)}</div><div style={{ fontSize: 10, color: '#9098a8' }}>Inadimplência</div></div>
+            <div style={{ textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, color: '#d64545' }}>{fmtAbrev(saldo)}</div><div style={{ fontSize: 10, color: '#9098a8' }}>Inadimplência</div></div>
           </div>
         </div>
       </div>
@@ -321,8 +321,8 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
               data={s.map(x => ({ ano: x.ano, valor: x.saldo }))}
               cor="#d64545"
               nome="Inadimplência"
-              fmtValor={fmtMi}
-              fmtEixoY={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              fmtValor={fmtAbrev}
+              fmtEixoY={fmtAbrev}
             />
           </div>
         </div>
@@ -338,7 +338,7 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
               <g transform="rotate(-90 100 100)">
                 {donut.map((s2, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s2.cor} strokeWidth="26" strokeDasharray={`${s2.len.toFixed(1)} ${(donutC - s2.len).toFixed(1)}`} strokeDashoffset={s2.off.toFixed(1)} />))}
               </g>
-              <text x="100" y="96" fontSize="17" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtMoney(lancado)}</text>
+              <text x="100" y="96" fontSize="17" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtAbrev(lancado)}</text>
               <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>lançado</text>
             </svg>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -346,7 +346,7 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                   <span style={{ width: 11, height: 11, borderRadius: 3, background: s2.cor, flex: 'none' }}></span>
                   <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s2.label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtMoney(s2.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s2.pct)})</span></span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtAbrev(s2.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s2.pct)})</span></span>
                 </div>
               ))}
             </div>

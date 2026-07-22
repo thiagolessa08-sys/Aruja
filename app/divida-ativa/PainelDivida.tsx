@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Resumo {
   total: number; administrativa: number; judicial: number; ajuizamento: number
@@ -13,7 +14,6 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
 const FALLBACK: Resumo = {
@@ -155,7 +155,7 @@ export default function PainelDivida() {
                 <div key={t.nome}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <span style={{ fontSize: 11.5, color: '#3a4256', lineHeight: 1.2, paddingRight: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtMoney(t.valor)}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(t.valor)}</span>
                   </div>
                   <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: TRIB_CORES[i % TRIB_CORES.length], borderRadius: 5 }} />
@@ -197,7 +197,7 @@ export default function PainelDivida() {
               <g transform="rotate(-90 100 100)">
                 {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
               </g>
-              <text x="100" y="96" fontSize="16" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtMoney(g.total)}</text>
+              <text x="100" y="96" fontSize="16" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtAbrev(g.total)}</text>
               <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>total</text>
             </svg>
           </div>
@@ -239,7 +239,7 @@ export default function PainelDivida() {
           {tip ? (
             <div style={{ position: 'absolute', left: tip.left, top: tip.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tip.ano}</div>
-              <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>Dívida: {fmtMi(tip.valor)}</div>
+              <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>Dívida: {fmtAbrev(tip.valor)}</div>
             </div>
           ) : null}
         </div>

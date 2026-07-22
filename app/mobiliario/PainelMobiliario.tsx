@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 export interface FiltrosMobiliario { ano: number | ''; situacao: string }
 
@@ -23,7 +24,6 @@ interface KpiCard { label: string; value: string; subLabel: string; subValue: st
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
-const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 
@@ -92,7 +92,7 @@ function geomBarISS(d: PorAno[]) {
       cx, ano: p.ano, iss: p.iss, x: cx - bw / 2, y: bottom - h, h,
       tip: {
         chart: 'bar' as const, title: String(p.ano),
-        l1: `ISS Arrecadado: ${fmtMi(p.iss)}`, l1c: '#283e93',
+        l1: `ISS Arrecadado: ${fmtAbrev(p.iss)}`, l1c: '#283e93',
         left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - h) / H * 100).toFixed(1)}%`,
       },
     }
@@ -274,7 +274,7 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
                 <g key={i}>
                   <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="7" fill="url(#issBar)" />
                   <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="19" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
-                  <text x={b.cx.toFixed(1)} y={(b.y - 8).toFixed(1)} fontSize="16" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtMi(b.iss)}</text>
+                  <text x={b.cx.toFixed(1)} y={(b.y - 8).toFixed(1)} fontSize="16" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtAbrev(b.iss)}</text>
                 </g>
               ))}
               {gb.bars.map((b, i) => (

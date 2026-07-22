@@ -2,16 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import LoadingOverlay from './LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 // Seção "Análise por bairro/rua" reutilizável (TCA, ISSCC…). Consome um endpoint que
 // recebe ?ano&metrica&bairro e devolve { bairros: [{ nome, imoveis, valor }] }.
 // Métrica alterna o tipo de lançamento; clicar num bairro detalha por rua (ds_endereco).
-
-const fmtAbrev = (v: number) => {
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mi'
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' k'
-  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-}
 
 interface Bairro { nome: string; imoveis: number; valor: number }
 type Metrica = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso'

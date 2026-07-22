@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import AreaSerie from '../_components/AreaSerie'
 import LoadingOverlay from '../_components/LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Tip {
   chart: 'report' | 'arrec'
@@ -53,17 +54,8 @@ const NIVEIS_DRILL: { campo: keyof NoTree; titulo: string }[] = [
 const DRILL_MAX = NIVEIS_DRILL.length - 1 // último nível (Origem) não permite drill
 
 const parseBR = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.')) || 0
-const fmtMi = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' mi'
-const fmtM = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M'
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
-// Rótulo curto p/ barras (só o número em milhões, 1 casa) — evita sobreposição
-const fmtBar = (v: number) => (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-function fmtCompact(v: number): string {
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M'
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'K'
-  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-}
 
 // Fallback com valores reais (substituído pelo fetch de /api/orcamento/graficos)
 const _A2025 = [60899312.06, 59622020.95, 47029868.84, 60347748.41, 45822535.10, 49114933.97, 61364457.01, 45837000.04, 55988948.69, 51201371.49, 49437783.52, 92478116.43]
@@ -120,7 +112,7 @@ function geomLinha(d: PorAno[]) {
   const half = n > 1 ? (xR - xL) / (n - 1) / 2 : 40
   const hot = d.map((p, i) => ({
     x: X(i) - half, w: half * 2,
-    tip: { chart: 'report' as const, title: String(p.ano), l1: `Arrecadado: ${fmtMi(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
+    tip: { chart: 'report' as const, title: String(p.ano), l1: `Arrecadado: ${fmtAbrev(p.arrecadado)}`, l1c: '#283e93', left: `${(X(i) / 300 * 100).toFixed(1)}%`, top: `${(Y(mi(p.arrecadado)) / 130 * 100).toFixed(1)}%` },
   }))
   return { linha, area, ticks, labels, dots, hot }
 }
@@ -138,7 +130,7 @@ function geomBar(d: PorMes[]) {
       cx, nome: m.nome, pct: fmtPct(m.pct), vAnt: m.anoAnterior, vAtu: m.anoAtual,
       ant: { x: cx - 28, y: bottom - hAnt, h: hAnt },
       atu: m.anoAtual > 0 ? { x: cx + 4, y: bottom - hAtu, h: hAtu } : null,
-      tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtMi(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtMi(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hAnt, hAtu)) / H * 100).toFixed(1)}%` },
+      tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtAbrev(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtAbrev(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hAnt, hAtu)) / H * 100).toFixed(1)}%` },
     }
   })
   const media = d.reduce((s, m) => s + m.anoAnterior, 0) / 12
@@ -326,8 +318,8 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
               data={g.porAno.map(p => ({ ano: p.ano, valor: p.arrecadado }))}
               cor="#283e93"
               nome="Arrecadado"
-              fmtValor={fmtMi}
-              fmtEixoY={(v) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              fmtValor={fmtAbrev}
+              fmtEixoY={fmtAbrev}
             />
           </div>
         </div>
@@ -399,10 +391,10 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                     const w = Math.max(6, 100 * it.v / maxV)
                     const alt = drill.length === 0 ? 40 : 22 // 1º nível bem mais grosso
                     return (
-                      <div key={i} onClick={() => { if (canDrill) setDrill([...drill, it.label]) }} title={`${it.label}: ${fmtM(it.v)}`} style={{ cursor: canDrill ? 'pointer' : 'default' }}>
+                      <div key={i} onClick={() => { if (canDrill) setDrill([...drill, it.label]) }} title={`${it.label}: ${fmtAbrev(it.v)}`} style={{ cursor: canDrill ? 'pointer' : 'default' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 4 }}>
                           <span title={it.label} style={{ color: '#3a4256', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
-                          <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtM(it.v)}</span>
+                          <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtAbrev(it.v)}</span>
                         </div>
                         <div style={{ height: alt, borderRadius: alt / 2, background: '#eef1f7', overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: alt / 2, background: 'linear-gradient(90deg,#283e93 0%,#8094d6 100%)' }} />
@@ -413,7 +405,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                   {resto.length ? (
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: '#9098a8', paddingTop: 2 }}>
                       <span>+{resto.length} outras</span>
-                      <span style={{ fontWeight: 600 }}>{fmtM(restoV)}</span>
+                      <span style={{ fontWeight: 600 }}>{fmtAbrev(restoV)}</span>
                     </div>
                   ) : null}
                   {!vis.length ? <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados neste nível.</div> : null}
@@ -448,8 +440,8 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                 <g key={i}>
                   <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill="url(#arrAnt)" />
                   {b.atu ? <rect x={b.atu.x.toFixed(1)} y={b.atu.y.toFixed(1)} width="24" height={b.atu.h.toFixed(1)} rx="6" fill="url(#arrAtu)" /> : null}
-                  {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtBar(b.vAnt)}</text> : null}
-                  {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtBar(b.vAtu)}</text> : null}
+                  {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
+                  {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
                   <text x={b.cx.toFixed(1)} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.nome}</text>
                   <text x={b.cx.toFixed(1)} y="350" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="middle">{b.pct}</text>
                 </g>
@@ -503,7 +495,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                           <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
                           <span title={s.nat} style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nat}</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44', flex: 'none' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
                         </div>
                       ))}
                     </div>
@@ -536,7 +528,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                     <div key={i} onClick={() => { if (temNat) setDaDrill(s.nome) }} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: temNat ? 'pointer' : 'default' }}>
                       <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
                       <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.nome}</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtCompact(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtAbrev(s.v)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
                     </div>
                   )
                 })}
