@@ -236,9 +236,15 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
                     onClick={(e) => {
-                      const st = e as unknown as { activePayload?: { payload?: { ano?: number; previsto?: boolean } }[] }
+                      const st = e as unknown as { activePayload?: { payload?: { ano?: number; previsto?: boolean } }[]; activeLabel?: string }
                       const pl = st?.activePayload?.[0]?.payload
-                      if (!drillAno && pl?.ano && !pl.previsto) setDrillAno(pl.ano)
+                      if (drillAno) return
+                      // Clique caiu exatamente na barra → usa o payload (respeita previsto).
+                      if (pl?.ano) { if (!pl.previsto) setDrillAno(pl.ano); return }
+                      // Fallback: clique na coluna mas fora da barra — activeLabel é "2027*" p/ previsão
+                      // (Number(...) vira NaN, então já exclui o ano previsto naturalmente).
+                      const anoFallback = Number(st?.activeLabel)
+                      if (anoFallback) setDrillAno(anoFallback)
                     }}>
                     <XAxis dataKey="rot" interval={0} height={24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                     <YAxis width={44} tickFormatter={(val: number) => (val / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
