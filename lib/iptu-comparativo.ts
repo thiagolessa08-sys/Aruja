@@ -71,7 +71,7 @@ export function comparativoIptu(ano: number, bairro: string | null) {
       const variacao = a - b
       const pct = b ? (variacao / b) * 100 : (a > 0 ? 100 : 0)
       return { categoria: l.categoria, a, b, variacao, pct, pendente: !l.key }
-    })
+    }).filter(l => l.a !== 0 || l.b !== 0) // remove categorias vazias (sem valor nos dois exercícios)
     return { anoA: ano, anoB: ano - 1, linhas }
   })
 }
