@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { bucketsItbi, qtdTransmissoesItbi, dataAtualizacaoItbi, type BucketsItbiAno } from '@/lib/itbi-engine'
+import { bucketsItbi, bucketsItbiAteMes, qtdTransmissoesItbi, dataAtualizacaoItbi, type BucketsItbiAno } from '@/lib/itbi-engine'
 
 const ANO_MIN = 2018
 
@@ -22,8 +22,13 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
   try {
-    const [buckets, transm, dataAtualizacao] = await Promise.all([
+    // Mês selecionado (acumulado) — mesma convenção do IPTU: lançado/arrecadado/em aberto/
+    // inadimplência passam a ser YTD até o mês; isento/suspenso continuam anuais.
+    const mesSel = Number(req.nextUrl.searchParams.get('mes')) || null
+    const usaAteMes = !!mesSel
+    const [buckets, ateMes, transm, dataAtualizacao] = await Promise.all([
       bucketsItbi(),
+      usaAteMes ? bucketsItbiAteMes(mesSel!) : Promise.resolve(null),
       qtdTransmissoesItbi(),
       dataAtualizacaoItbi(),
     ])
@@ -39,13 +44,17 @@ export async function GET(req: NextRequest) {
     const zero: BucketsItbiAno = { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 }
     const bRef = buckets.get(anoRef) ?? zero
     const bAnt = buckets.get(anoAnt) ?? zero
+    const lancMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.lancado ?? 0) : (buckets.get(a)?.lancado ?? 0)
+    const arrecMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.arrecadado ?? 0) : (buckets.get(a)?.arrecadado ?? 0)
+    const abertoMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.emAberto ?? 0) : (buckets.get(a)?.emAberto ?? 0)
+    const inadMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.inadimplente ?? 0) : (buckets.get(a)?.inadimplente ?? 0)
 
     const cmp = (atual: number, ant: number) => ({ atual, ant, pct: ant ? ((atual - ant) / ant) * 100 : (atual > 0 ? 100 : 0) })
     const cards = {
-      lancado: cmp(bRef.lancado, bAnt.lancado),
-      arrecadado: cmp(bRef.arrecadado, bAnt.arrecadado),
-      inadimplencia: cmp(bRef.inadimplente, bAnt.inadimplente),
-      emAberto: cmp(bRef.emAberto, bAnt.emAberto),
+      lancado: cmp(lancMes(anoRef), lancMes(anoAnt)),
+      arrecadado: cmp(arrecMes(anoRef), arrecMes(anoAnt)),
+      inadimplencia: cmp(inadMes(anoRef), inadMes(anoAnt)),
+      emAberto: cmp(abertoMes(anoRef), abertoMes(anoAnt)),
       isento: cmp(bRef.isento, bAnt.isento),
       suspenso: cmp(bRef.suspenso, bAnt.suspenso),
       transmissoes: cmp(transm.get(anoRef) ?? 0, transm.get(anoAnt) ?? 0),
@@ -60,7 +69,7 @@ export async function GET(req: NextRequest) {
     for (let a = anoMax - 4; a <= anoMax; a++) histAnos.push(a)
     const hist = histAnos.map(a => {
       const b = buckets.get(a) ?? zero
-      return { ano: a, lancado: b.lancado, arrecadado: b.arrecadado, emAberto: b.emAberto, inadimplencia: b.inadimplente, isento: b.isento, suspenso: b.suspenso }
+      return { ano: a, lancado: lancMes(a), arrecadado: arrecMes(a), emAberto: abertoMes(a), inadimplencia: inadMes(a), isento: b.isento, suspenso: b.suspenso }
     })
     const evolucao = hist.map(h => ({
       ano: h.ano, lancado: h.lancado, arrecadado: h.arrecadado, emAberto: h.emAberto, inadimplencia: h.inadimplencia, isento: h.isento, suspenso: h.suspenso, previsto: false, ...pctFn(h.lancado, h.arrecadado, h.inadimplencia),
@@ -78,7 +87,7 @@ export async function GET(req: NextRequest) {
       arrecPct: pl ? (pa / pl) * 100 : 0, inadPct: pl ? (pi / pl) * 100 : 0,
     })
 
-    return NextResponse.json({ dataAtualizacao, anos, anoRef, cards, evolucao })
+    return NextResponse.json({ dataAtualizacao, anos, anoRef, mesRef: mesSel, cards, evolucao })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

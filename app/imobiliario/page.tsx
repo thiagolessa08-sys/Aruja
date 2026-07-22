@@ -28,6 +28,7 @@ export default function ImobiliarioPage() {
   // ITBI
   const [optsItbi, setOptsItbi] = useState<{ anos: number[]; naturezas: NaturezaOpt[] }>({ anos: [], naturezas: [] })
   const [iAno, setIAno] = useState<number | ''>('')
+  const [iMes, setIMes] = useState<number | ''>('') // mês selecionado (acumulado); '' = ano todo
   const [iNat, setINat] = useState<string>('')
 
   // TCA
@@ -88,7 +89,7 @@ export default function ImobiliarioPage() {
     backgroundRepeat: 'no-repeat', backgroundPosition: 'right 11px center', backgroundImage: chevron('%23283e93'),
   }
 
-  const filtrosItbi: FiltrosItbiUI = { ano: iAno, natureza: iNat }
+  const filtrosItbi: FiltrosItbiUI = { ano: iAno, natureza: iNat, mes: iMes }
 
   const TRIBUTOS: { id: Tributo; label: string }[] = [
     { id: 'iptu', label: 'IPTU' },
@@ -148,9 +149,15 @@ export default function ImobiliarioPage() {
               </>
             )}
             {tributo === 'itbi' && (
-              <select aria-label="Exercício" value={iAno} onChange={e => setIAno(Number(e.target.value))} style={selectPill}>
-                {optsItbi.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-              </select>
+              <>
+                <select aria-label="Exercício" value={iAno} onChange={e => setIAno(Number(e.target.value))} style={selectPill}>
+                  {optsItbi.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+                </select>
+                <select aria-label="Mês" value={iMes} onChange={e => setIMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
+                  <option value="">Mês: Ano todo</option>
+                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </>
             )}
             {tributo === 'isscc' && (
               <select aria-label="Exercício" value={sAno} onChange={e => setSAno(Number(e.target.value))} style={selectPill}>

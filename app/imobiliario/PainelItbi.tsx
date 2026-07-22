@@ -5,7 +5,7 @@ import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContai
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
-export interface FiltrosItbiUI { ano: number | ''; natureza: string }
+export interface FiltrosItbiUI { ano: number | ''; natureza: string; mes?: number | '' }
 
 // Busca com retry (o túnel do agente às vezes devolve 502/HTML; sem isso a tela fica em branco).
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
@@ -24,6 +24,7 @@ interface Visao {
   dataAtualizacao: string | null
   anos: number[]
   anoRef: number
+  mesRef: number | null
   cards: {
     lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp; transmissoes: Cmp
   }
@@ -84,6 +85,7 @@ function EixoTick({ x, y, payload }: any) {
   )
 }
 const MESES_R = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 interface MesItbi { mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
 
 export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
@@ -105,17 +107,19 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
   const [carregMes, setCarregMes] = useState(false)
 
   const ano = filtros.ano
+  const mes = filtros.mes
 
   useEffect(() => {
     let vivo = true
     setCarregando(true); setErro(false)
     const p = new URLSearchParams()
     if (ano) p.set('ano', String(ano))
+    if (mes) p.set('mes', String(mes))
     fetchJson(`/api/itbi/visao?${p}`)
       .then(d => { if (!vivo) return; if (d) setV(d); else setErro(true) })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
-  }, [ano, recarregar])
+  }, [ano, mes, recarregar])
 
   // Ranking de imóveis (item 6) — carrega uma vez
   useEffect(() => {
@@ -191,7 +195,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         <>
           {/* Data de atualização */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-            <span style={{ fontSize: 11, color: '#9098a8' }}>Dados atualizados em <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtData(v.dataAtualizacao)}</span></span>
+            <span style={{ fontSize: 11, color: '#9098a8' }}>Dados atualizados em <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtData(v.dataAtualizacao)}</span>{mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
           </div>
 
           {/* 6 KPI cards */}
