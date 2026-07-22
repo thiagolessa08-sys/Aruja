@@ -617,6 +617,12 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
             lista = [...lista].sort((a, b) => dir === 'asc' ? a[col] - b[col] : b[col] - a[col])
           }
           if (top10) lista = lista.slice(0, 10)
+          // Total do rodapé reflete a lista exibida (busca/Top 10), não o total geral da API
+          const totalLista = lista.reduce((acc, f) => ({
+            empenhado: acc.empenhado + f.empenhado,
+            liquidado: acc.liquidado + f.liquidado,
+            pago: acc.pago + f.pago,
+          }), { empenhado: 0, liquidado: 0, pago: 0 })
           const COLS: { label: string; key: 'empenhado' | 'liquidado' | 'pago' }[] = [
             { label: 'Empenhado', key: 'empenhado' }, { label: 'Liquidado', key: 'liquidado' }, { label: 'Pago', key: 'pago' },
           ]
@@ -661,7 +667,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                   <tfoot>
                     <tr>
                       <td style={{ position: 'sticky', bottom: 0, background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', borderRight: '1px solid rgba(255,255,255,0.18)' }}>Total</td>
-                      {[fornecedores.total.empenhado, fornecedores.total.liquidado, fornecedores.total.pago].map((v, ci) => (
+                      {[totalLista.empenhado, totalLista.liquidado, totalLista.pago].map((v, ci) => (
                         <td key={ci} style={{ position: 'sticky', bottom: 0, background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 16px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{fmtReais(v)}</td>
                       ))}
                     </tr>
