@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
     const arrecMes = get(anoAtual, mesAtual)
     const arrecMesAnt = get(anoAnt, mesAtual)
     const arrecYtd = ytd(anoAtual, mesAtual)
-    const arrecYtdAnt = ytd(anoAnt, mesAtual)
+    const arrecAnoAntTotal = ytd(anoAnt, 12) // ano anterior completo (não só até o mês)
     const arrecMesAnterior = get(mesAntAno, mesAntMes)
 
     // Com filtro de mês, valores menores → usa K/mi conforme a base (Receita item 1)
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
       { label: 'Orçado', value: fmt(orcAtual), subLabel: 'Ano Anterior', subValue: fmt(orcAnt), ...variacao(orcAtual, orcAnt) },
       { label: 'Orçado Atualizado', value: fmt(orcAtualizadoAtual), subLabel: 'Ano Anterior', subValue: fmt(orcAtualizadoAnt), ...variacao(orcAtualizadoAtual, orcAtualizadoAnt) },
       { label: 'Arrecadação Mês', value: fmt(arrecMes), subLabel: `${MESES[mesAtual]}/${String(anoAnt).slice(2)}`, subValue: fmt(arrecMesAnt), ...variacao(arrecMes, arrecMesAnt) },
-      { label: 'Arrecadação Até o Mês', value: fmt(arrecYtd), subLabel: 'Ano Anterior', subValue: fmt(arrecYtdAnt), ...variacao(arrecYtd, arrecYtdAnt) },
+      { label: 'Arrecadação Até o Mês', value: fmt(arrecYtd), subLabel: 'Ano Anterior', subValue: fmt(arrecAnoAntTotal), ...variacao(arrecYtd, arrecAnoAntTotal) },
       // "Mês Anterior" agora compara com o MÊS ATUAL (não com o mesmo mês do ano passado)
       { label: 'Arrecadação Mês Anterior', value: fmt(arrecMesAnterior), subLabel: `${MESES[mesAtual]}/${String(anoAtual).slice(2)}`, subValue: fmt(arrecMes), ...variacao(arrecMes, arrecMesAnterior) },
     ]
