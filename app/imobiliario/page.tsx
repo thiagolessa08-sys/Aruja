@@ -53,7 +53,10 @@ export default function ImobiliarioPage() {
       }
     }).catch(() => {})
     fetch('/api/itbi/filtros').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && !d.error) { setOptsItbi({ anos: d.anos ?? [], naturezas: d.naturezas ?? [] }); if (d.anos?.length) setIAno(d.anos[0]) }
+      if (d && !d.error) {
+        const anos = (d.anos ?? []).filter((a: number) => a >= 2020) // ITBI a partir de 2020
+        setOptsItbi({ anos, naturezas: d.naturezas ?? [] }); if (anos.length) setIAno(anos[0])
+      }
     }).catch(() => {})
     fetch('/api/tca/filtros').then(r => r.ok ? r.json() : null).then(d => {
       if (d && !d.error) { setOptsTca({ anos: d.anos ?? [] }); if (d.anos?.length) setTAno(d.anos[0]) }
