@@ -132,6 +132,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [carregandoComp, setCarregandoComp] = useState(false)
   const [compErro, setCompErro] = useState(false)
   const [recarregarComp, setRecarregarComp] = useState(0)
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
@@ -265,31 +266,44 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   // cores por métrica (tom forte = real, tom claro = previsto)
   const CORES: Record<string, [string, string]> = { lancado: ['#283e93', '#a9b6e2'], arrecadado: ['#1fa463', '#9adcbc'], emAberto: ['#e8962e', '#f3cd97'], inadimplencia: ['#d64545', '#eeaeae'], isento: ['#8094d6', '#c3ccec'], suspenso: ['#5b6477', '#b9bec8'] }
 
-  // Relatório (PDF/Excel) a partir dos cards + evolução do exercício atual.
-  function gerarRelatorio(tipo: 'pdf' | 'excel') {
-    if (!v) return
-    const c = v.cards
-    const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    const dados: DadosRelatorio = {
-      titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}`,
-      subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}`,
-      cards: [
-        { rotulo: 'Lançado', valor: money(c.lancado.atual) },
-        { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
-        { rotulo: 'Em aberto', valor: money(c.emAberto.atual) },
-        { rotulo: 'Inadimplência', valor: money(c.inadimplencia.atual) },
-        { rotulo: 'Isento', valor: money(c.isento.atual) },
-        { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
-      ],
-      colunas: ['Exercício', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso'],
-      linhas: v.evolucao.map(e => [
-        e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
-        `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
-      ]),
-      arquivo: `IPTU-${v.anoRef}`,
+  // Relatório (PDF/Excel): sem bairro selecionado → 1 linha por BAIRRO; com bairro
+  // selecionado → 1 linha por CONTRIBUINTE daquele bairro. Sempre respeita ano/mês da tela.
+  async function gerarRelatorio(tipo: 'pdf' | 'excel') {
+    if (!v || gerandoRelatorio) return
+    setGerandoRelatorio(true)
+    try {
+      const c = v.cards
+      const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const p = new URLSearchParams({ ano: String(v.anoRef) })
+      if (mes) p.set('mes', String(mes))
+      if (bairroSel) p.set('bairro', bairroSel)
+      const rel = await fetchJson(`/api/imobiliario/iptu-relatorio?${p}`)
+      if (!rel?.itens) { alert('Não foi possível gerar o relatório. Tente novamente.'); return }
+      const itens: { nome: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; imoveis: number; espolio: number; semNumero: number }[] = rel.itens
+      const dados: DadosRelatorio = {
+        titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}`,
+        cards: [
+          { rotulo: 'Lançado', valor: money(c.lancado.atual) },
+          { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
+          { rotulo: 'Em aberto', valor: money(c.emAberto.atual) },
+          { rotulo: 'Inadimplência', valor: money(c.inadimplencia.atual) },
+          { rotulo: 'Isento', valor: money(c.isento.atual) },
+          { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
+        ],
+        colunas: [bairroSel ? 'Contribuinte' : 'Bairro', 'Lançado', 'Arrecadado', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso', 'Imóveis', 'Espólio', 'Sem número'],
+        linhas: itens.map(l => [
+          l.nome, money(l.lancado), money(l.arrecadado), money(l.emAberto), money(l.inadimplencia), money(l.isento), money(l.suspenso), l.imoveis, l.espolio, l.semNumero,
+        ]),
+        arquivo: `IPTU-${bairroSel ? bairroSel.replace(/\s+/g, '-') : 'bairros'}-${v.anoRef}`,
+      }
+      const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
+      await fn(dados)
+    } catch {
+      alert('Não foi possível gerar o relatório. Tente novamente.')
+    } finally {
+      setGerandoRelatorio(false)
     }
-    const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
-    fn(dados).catch(() => alert('Não foi possível gerar o relatório. Tente novamente.'))
   }
   // tick do eixo X: ano/mês + (no anual) % arrecadado e inadimplência frente ao lançado
   const EixoTick = (props: { x?: number; y?: number; payload?: { value?: string } }) => {
@@ -311,8 +325,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       {v ? (
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
           {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
-            <button key={tipo} onClick={() => gerarRelatorio(tipo)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{lbl}
+            <button key={tipo} onClick={() => gerarRelatorio(tipo)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
             </button>
           ))}
         </div>
