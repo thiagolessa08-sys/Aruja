@@ -60,7 +60,10 @@ export default function ImobiliarioPage() {
       }
     }).catch(() => {})
     fetch('/api/tca/filtros').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && !d.error) { setOptsTca({ anos: d.anos ?? [] }); if (d.anos?.length) setTAno(d.anos[0]) }
+      if (d && !d.error) {
+        const anos = (d.anos ?? []).filter((a: number) => a >= 2020) // TCA a partir de 2020
+        setOptsTca({ anos }); if (anos.length) setTAno(anos[0])
+      }
     }).catch(() => {})
     fetch('/api/isscc/filtros').then(r => r.ok ? r.json() : null).then(d => {
       if (d && !d.error) {
