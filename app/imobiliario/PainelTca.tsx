@@ -22,6 +22,7 @@ interface Visao {
   dataAtualizacao: string | null
   anos: number[]
   anoRef: number
+  mesRef: number | null
   cards: { lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp; imoveis: Cmp }
   evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; previsto: boolean; arrecPct: number; inadPct: number }[]
 }
@@ -45,6 +46,7 @@ function EixoTick({ x, y, payload }: any) {
   return <text x={x} y={y + 14} textAnchor="middle" fontSize={11} fill="#8a93a6" fontWeight={600}>{payload.value}</text>
 }
 const MESES_R = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 interface Mes { mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
 
 // Insights da TCA — frases derivadas dos cards.
@@ -60,7 +62,7 @@ function insightsTca(v: Visao): string[] {
   return arr
 }
 
-export default function PainelTca({ ano }: { ano: number | '' }) {
+export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number | '' }) {
   const [v, setV] = useState<Visao | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(false)
@@ -74,11 +76,12 @@ export default function PainelTca({ ano }: { ano: number | '' }) {
     setCarregando(true); setErro(false)
     const p = new URLSearchParams()
     if (ano) p.set('ano', String(ano))
+    if (mes) p.set('mes', String(mes))
     fetchJson(`/api/tca/visao?${p}`)
       .then(d => { if (!vivo) return; if (d) setV(d); else setErro(true) })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
-  }, [ano, recarregar])
+  }, [ano, mes, recarregar])
 
   // Drill por mês ao clicar num ano do gráfico
   useEffect(() => {
@@ -127,7 +130,7 @@ export default function PainelTca({ ano }: { ano: number | '' }) {
         <>
           {/* Data de atualização */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-            <span style={{ fontSize: 11, color: '#9098a8' }}>Dados atualizados em <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtData(v.dataAtualizacao)}</span></span>
+            <span style={{ fontSize: 11, color: '#9098a8' }}>Dados atualizados em <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtData(v.dataAtualizacao)}</span>{mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
           </div>
 
           {/* 6 KPI cards */}

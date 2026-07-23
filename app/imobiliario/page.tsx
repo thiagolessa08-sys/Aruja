@@ -34,6 +34,7 @@ export default function ImobiliarioPage() {
   // TCA
   const [optsTca, setOptsTca] = useState<{ anos: number[] }>({ anos: [] })
   const [tAno, setTAno] = useState<number | ''>('')
+  const [tMes, setTMes] = useState<number | ''>('') // mês selecionado (acumulado); '' = ano todo
 
   // ISSCC
   const [optsIsscc, setOptsIsscc] = useState<{ anos: number[] }>({ anos: [] })
@@ -178,9 +179,15 @@ export default function ImobiliarioPage() {
               </>
             )}
             {tributo === 'tca' && (
-              <select aria-label="Exercício" value={tAno} onChange={e => setTAno(Number(e.target.value))} style={selectPill}>
-                {optsTca.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-              </select>
+              <>
+                <select aria-label="Exercício" value={tAno} onChange={e => setTAno(Number(e.target.value))} style={selectPill}>
+                  {optsTca.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+                </select>
+                <select aria-label="Mês" value={tMes} onChange={e => setTMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
+                  <option value="">Mês: Ano todo</option>
+                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </>
             )}
           </div>
         </div>
@@ -189,7 +196,7 @@ export default function ImobiliarioPage() {
         {tributo === 'iptu' && <PainelIptu ano={pAno} mes={pMes} />}
         {tributo === 'itbi' && <PainelItbi filtros={filtrosItbi} />}
         {tributo === 'isscc' && <PainelIsscc ano={sAno} mes={sMes} />}
-        {tributo === 'tca' && <PainelTca ano={tAno} />}
+        {tributo === 'tca' && <PainelTca ano={tAno} mes={tMes} />}
 
       </div>
     </div>
