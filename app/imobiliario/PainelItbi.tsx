@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
+import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 export interface FiltrosItbiUI { ano: number | ''; natureza: string; mes?: number | '' }
@@ -105,6 +106,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
   const [drillAno, setDrillAno] = useState<number | null>(null)
   const [serieMes, setSerieMes] = useState<MesItbi[] | null>(null)
   const [carregMes, setCarregMes] = useState(false)
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
   const ano = filtros.ano
   const mes = filtros.mes
@@ -155,6 +157,40 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       .finally(() => setCarregImovel(false))
   }
 
+  // Relatório (PDF/Excel) a partir dos cards + evolução do exercício atual.
+  async function gerarRelatorio(tipo: 'pdf' | 'excel') {
+    if (!v || gerandoRelatorio) return
+    setGerandoRelatorio(true)
+    try {
+      const c = v.cards
+      const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const dados: DadosRelatorio = {
+        titulo: `ITBI — Exercício ${v.anoRef}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}`,
+        cards: [
+          { rotulo: 'Lançado', valor: money(c.lancado.atual) },
+          { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
+          { rotulo: 'Em aberto', valor: money(c.emAberto.atual) },
+          { rotulo: 'Inadimplência', valor: money(c.inadimplencia.atual) },
+          { rotulo: 'Isento', valor: money(c.isento.atual) },
+          { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
+        ],
+        colunas: ['Exercício', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso'],
+        linhas: v.evolucao.map(e => [
+          e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
+          `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
+        ]),
+        arquivo: `ITBI-${v.anoRef}`,
+      }
+      const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
+      await fn(dados)
+    } catch {
+      alert('Não foi possível gerar o relatório. Tente novamente.')
+    } finally {
+      setGerandoRelatorio(false)
+    }
+  }
+
   // Drill por mês ao clicar num ano do gráfico
   useEffect(() => {
     if (!drillAno) { setSerieMes(null); return }
@@ -199,8 +235,17 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
 
       {v ? (
         <>
+          {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução) */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+            {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
+              <button key={tipo} onClick={() => gerarRelatorio(tipo)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+              </button>
+            ))}
+          </div>
+
           {/* Data de atualização */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
             <span style={{ fontSize: 11, color: '#9098a8' }}>Dados atualizados em <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtData(v.dataAtualizacao)}</span>{mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
           </div>
 
