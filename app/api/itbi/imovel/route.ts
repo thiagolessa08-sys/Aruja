@@ -7,7 +7,9 @@ const num = (v: unknown) => Number(v) || 0
 const esc = (s: string) => s.replace(/'/g, "''")
 
 // Busca de imóveis (mesma base do IPTU): inscrição / código / nome do proprietário.
-async function buscar(q: string, tipo: string) {
+// Marca (noPeriodo) e prioriza os imóveis com transmissão de ITBI no ano/mês filtrado
+// na tela — o detalhe (ao abrir) continua trazendo o histórico completo do imóvel.
+async function buscar(q: string, tipo: string, ano: number | null, mes: number | null) {
   const qn = q.replace(/\D/g, '')
   const escQ = esc(q.toUpperCase())
   let cond: string
@@ -17,15 +19,25 @@ async function buscar(q: string, tipo: string) {
   else cond = /^\d+$/.test(q)
     ? `(i.cd_imovel_urbano = ${qn || 0} OR i.no_inscricao_imovel LIKE '%${escQ}%')`
     : `(cp.nm_rsocial LIKE '%${escQ}%' OR i.no_inscricao_imovel LIKE '%${escQ}%')`
-  const r = await agentQuery(`SELECT TOP 20 i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, c.ds_endereco, c.nm_bairro, cp.nm_rsocial
+  const filtroData = ano ? ` AND YEAR(it2.dt_lancamento) = ${ano}${mes ? ` AND MONTH(it2.dt_lancamento) <= ${mes}` : ''}` : ''
+  const noPeriodoSel = ano
+    ? `CASE WHEN EXISTS (
+        SELECT 1 FROM ${S}.tb_dsod_itbi_imovel_urbano iiu2
+        JOIN ${S}.tb_dsod_itbi it2 ON it2.cd_itbi = iiu2.cd_itbi
+        WHERE iiu2.cd_imovel_urbano = i.cd_imovel_urbano AND it2.vl_total > 0${filtroData}
+      ) THEN 1 ELSE 0 END`
+    : '0'
+  const r = await agentQuery(`SELECT TOP 20 i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, c.ds_endereco, c.nm_bairro, cp.nm_rsocial, ${noPeriodoSel} noPeriodo
     FROM ${S}.tb_dsod_imovel_urbano i
     LEFT JOIN ${S}.tb_dsod_cep c ON i.cd_cep = c.cd_cep
     LEFT JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario
-    WHERE ${cond}`, 20)
+    WHERE ${cond}
+    ORDER BY noPeriodo DESC`, 20)
   return r.rows.map(x => ({
     cd: num(x[0]), inscricao: String(x[1] ?? '').trim(), numero: String(x[2] ?? '').trim(),
     endereco: `${String(x[3] ?? '').trim()}${String(x[4] ?? '').trim() ? ' — ' + String(x[4]).trim() : ''}`,
     proprietario: String(x[5] ?? '').trim(),
+    noPeriodo: num(x[6]) === 1,
   }))
 }
 
@@ -159,7 +171,9 @@ export async function GET(req: NextRequest) {
     const q = (sp.get('q') || '').trim()
     const tipo = (sp.get('tipo') || '').trim()
     if (q.length < 2) return NextResponse.json({ matches: [] })
-    return NextResponse.json({ matches: await buscar(q, tipo) })
+    const ano = Number(sp.get('ano')) || null
+    const mes = Number(sp.get('mes')) || null
+    return NextResponse.json({ matches: await buscar(q, tipo, ano, mes) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

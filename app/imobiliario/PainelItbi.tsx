@@ -34,7 +34,7 @@ interface RankingImovel {
   itens: { cd: number; qt: number; venal: number; inscricao: string; endereco: string }[]
   faixas: { um: number; dois: number; tresCinco: number; seisMais: number }
 }
-interface MatchImovel { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string }
+interface MatchImovel { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string; noPeriodo?: boolean }
 interface Transmissao {
   cdItbi: number; data: string; natureza: string; valorVenal: number; aliquota: number; situacao: string
   transmitente: string; adquirente: string; imposto: number
@@ -121,26 +121,32 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
     return () => { vivo = false }
   }, [ano, mes, recarregar])
 
-  // Ranking de imóveis (item 6) — carrega uma vez
+  // Ranking de imóveis (item 6) — respeita o ano/mês selecionados na tela
   useEffect(() => {
     let vivo = true
-    fetchJson('/api/itbi/ranking-imovel?top=20').then(d => { if (vivo && d) setRanking(d) })
+    const p = new URLSearchParams({ top: '20' })
+    if (ano) p.set('ano', String(ano))
+    if (mes) p.set('mes', String(mes))
+    fetchJson(`/api/itbi/ranking-imovel?${p}`).then(d => { if (vivo && d) setRanking(d) })
     return () => { vivo = false }
-  }, [])
+  }, [ano, mes])
 
-  // Busca de imóvel (itens 2/3) — debounce simples
+  // Busca de imóvel (itens 2/3) — debounce simples; destaca imóveis c/ ITBI no ano/mês selecionado
   useEffect(() => {
     const q = busca.trim()
     if (q.length < 2) { setMatches([]); return }
     let vivo = true
     setBuscando(true)
     const t = setTimeout(() => {
-      fetchJson(`/api/itbi/imovel?q=${encodeURIComponent(q)}`)
+      const p = new URLSearchParams({ q })
+      if (ano) p.set('ano', String(ano))
+      if (mes) p.set('mes', String(mes))
+      fetchJson(`/api/itbi/imovel?${p}`)
         .then(d => { if (vivo) setMatches(d?.matches ?? []) })
         .finally(() => { if (vivo) setBuscando(false) })
     }, 350)
     return () => { vivo = false; clearTimeout(t) }
-  }, [busca])
+  }, [busca, ano, mes])
 
   function abrirImovel(id: number) {
     setCarregImovel(true); setImovel(null)
@@ -320,8 +326,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
 
             {/* Item 6 — Ranking de imóveis por nº de transmissões */}
             <div style={card}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis mais transmitidos</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de ITBI por imóvel · clique para ver o histórico</div>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis mais transmitidos{ano ? ` · ${ano}` : ''}</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de ITBI por imóvel{mes ? ` até ${MESES_LONGO[Number(mes) - 1]}` : ''} · clique para ver o histórico</div>
               {ranking ? (() => {
                 const fx = ranking.faixas
                 const totFx = Math.max(1, fx.um + fx.dois + fx.tresCinco + fx.seisMais)
@@ -378,8 +384,11 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 <div style={{ marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {buscando ? <Spinner label="Buscando…" size={30} padding={14} />
                     : matches.length ? matches.map(m => (
-                      <div key={m.cd} onClick={() => abrirImovel(m.cd)} style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: 10, background: '#f7f9fd' }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>{m.inscricao || `Imóvel ${m.cd}`}</div>
+                      <div key={m.cd} onClick={() => abrirImovel(m.cd)} style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: 10, background: m.noPeriodo ? '#eef1fb' : '#f7f9fd', border: m.noPeriodo ? '1px solid #cdd5ef' : '1px solid transparent' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>{m.inscricao || `Imóvel ${m.cd}`}</div>
+                          {m.noPeriodo ? <span style={{ fontSize: 9.5, fontWeight: 600, color: '#283e93', background: '#dde3f8', borderRadius: 8, padding: '1px 7px' }}>ITBI no período</span> : null}
+                        </div>
                         <div style={{ fontSize: 11, color: '#5b6477' }}>{m.endereco}{m.proprietario ? ` · ${m.proprietario}` : ''}</div>
                       </div>
                     )) : <div style={{ fontSize: 12, color: '#9098a8', padding: 10 }}>Nenhum imóvel encontrado.</div>}
