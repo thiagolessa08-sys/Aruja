@@ -321,7 +321,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
 
       const dados: DadosRelatorio = {
         titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}`,
-        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}${metricaBairro !== 'todos' ? ` · coluna: ${TODAS_COLUNAS_RELATORIO.find(cl => cl.id === metricaBairro)?.label}` : ''}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}`,
         cards: idsAtivos.map(cl => cardPorId[cl.id]).filter((x): x is { rotulo: string; valor: string } => !!x),
         colunas: [bairroSel ? 'Contribuinte' : 'Bairro', ...idsAtivos.map(cl => cl.label)],
         linhas: itens.map(l => [l.nome, ...idsAtivos.map(cl => valorPorId[cl.id](l))]),
