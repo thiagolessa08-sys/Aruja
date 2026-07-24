@@ -277,12 +277,15 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       const p = new URLSearchParams({ ano: String(v.anoRef) })
       if (mes) p.set('mes', String(mes))
       if (bairroSel) p.set('bairro', bairroSel)
+      if (espolio) p.set('espolio', '1')
+      if (semNumero) p.set('semnumero', '1')
       const rel = await fetchJson(`/api/imobiliario/iptu-relatorio?${p}`)
       if (!rel?.itens) { alert('Não foi possível gerar o relatório. Tente novamente.'); return }
       const itens: { nome: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; imoveis: number; espolio: number; semNumero: number }[] = rel.itens
+      const filtroExtra = [espolio ? 'espólio' : '', semNumero ? 'sem número' : ''].filter(Boolean).join(' + ')
       const dados: DadosRelatorio = {
         titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}`,
-        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}`,
         cards: [
           { rotulo: 'Lançado', valor: money(c.lancado.atual) },
           { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },

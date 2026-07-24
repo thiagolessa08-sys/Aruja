@@ -10,7 +10,7 @@ const num = (v: unknown) => Number(v) || 0
 const MOV_ABERTO = '0,1,2,3,11,12,14,20', LANC_ABERTO = '0,4,7,10,1'
 const SEM_RV = ` AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
 
-export interface FiltrosRelatorioIptu { ano: number; mes: number | null; bairro: string | null }
+export interface FiltrosRelatorioIptu { ano: number; mes: number | null; bairro: string | null; espolio: boolean; semNumero: boolean }
 export interface LinhaRelatorioIptu {
   nome: string
   lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number
@@ -20,6 +20,9 @@ export interface LinhaRelatorioIptu {
 function base(f: FiltrosRelatorioIptu) {
   let w = `g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${f.ano} AND p.no_parcela <> 0`
   if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
+  // Filtros combináveis (um ou ambos ativos), mesmos usados no gráfico interativo de bairros.
+  if (f.espolio) w += ` AND cp.nm_rsocial LIKE '%ESP_LIO%'`
+  if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)`
   const from = `FROM ${S}.tb_dsod_guias g
     JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_devedor
     JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep
