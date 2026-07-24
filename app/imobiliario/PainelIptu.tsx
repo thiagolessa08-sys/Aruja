@@ -65,7 +65,9 @@ const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'arrecadado', label: 'Arrecadado', cor: '#1fa463' },
   { id: 'inadimplencia', label: 'Inadimplência', cor: '#d64545' },
 ]
-// Métricas do gráfico IPTU por Bairro (itens 7,8,9) — cada uma refetcha do backend
+// Métricas do gráfico IPTU por Bairro (itens 7,8,9) — cada uma refetcha do backend.
+// O mesmo seletor também controla quais colunas o relatório (PDF/Excel) exporta:
+// "Todos" (padrão) exporta tudo; qualquer outra opção exporta só aquela métrica.
 type MetricaBairroUI = 'lancado' | 'arrecadado' | 'inadimplencia' | 'emAberto' | 'isento' | 'suspenso'
 const METRICAS_BAIRRO: { id: MetricaBairroUI; label: string; cor: string }[] = [
   { id: 'lancado', label: 'Lançado', cor: '#283e93' },
@@ -75,8 +77,12 @@ const METRICAS_BAIRRO: { id: MetricaBairroUI; label: string; cor: string }[] = [
   { id: 'isento', label: 'Isento', cor: '#8094d6' },
   { id: 'suspenso', label: 'Suspenso', cor: '#5b6477' },
 ]
-// Colunas selecionáveis do relatório (PDF/Excel). Nenhuma marcada = exporta todas.
-const COLUNAS_RELATORIO: { id: string; label: string }[] = [
+const METRICAS_BAIRRO_BOTOES: { id: MetricaBairroUI | 'todos'; label: string }[] = [
+  { id: 'todos', label: 'Todos' },
+  ...METRICAS_BAIRRO,
+]
+// Colunas do relatório (PDF/Excel) — mesma ordem exibida na tabela/cards exportados.
+const TODAS_COLUNAS_RELATORIO: { id: string; label: string }[] = [
   { id: 'lancado', label: 'Lançado' },
   { id: 'arrecadado', label: 'Arrecadado' },
   { id: 'emAberto', label: 'Em aberto' },
@@ -123,7 +129,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [bairroSel, setBairroSel] = useState<string | null>(null)
   const [espolio, setEspolio] = useState(false)
   const [semNumero, setSemNumero] = useState(false)
-  const [metricaBairro, setMetricaBairro] = useState<MetricaBairroUI>('lancado')
+  const [metricaBairro, setMetricaBairro] = useState<MetricaBairroUI | 'todos'>('todos')
   const [buscaBairro, setBuscaBairro] = useState('') // item 13
   const [ordenarBairro, setOrdenarBairro] = useState<'valor' | 'imoveis'>('valor') // item 7
   const [carregandoBairros, setCarregandoBairros] = useState(false)
@@ -145,7 +151,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [compErro, setCompErro] = useState(false)
   const [recarregarComp, setRecarregarComp] = useState(0)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
-  const [colRelatorio, setColRelatorio] = useState<Set<string>>(new Set()) // vazio = exporta todas as colunas
 
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
@@ -226,7 +231,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     if (!ano || !obsBairros.visible) return
     let vivo = true
     setCarregandoBairros(true); setBairrosErro(false)
-    const p = new URLSearchParams({ ano: String(ano), metrica: metricaBairro })
+    const p = new URLSearchParams({ ano: String(ano), metrica: metricaBairro === 'todos' ? 'lancado' : metricaBairro })
     if (espolio) p.set('espolio', '1')
     if (semNumero) p.set('semnumero', '1')
     if (bairroSel) p.set('bairro', bairroSel)
@@ -297,8 +302,9 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       const itens: { nome: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; imoveis: number; espolio: number; semNumero: number }[] = rel.itens
       const filtroExtra = [espolio ? 'espólio' : '', semNumero ? 'sem número' : ''].filter(Boolean).join(' + ')
 
-      // Colunas: se nada marcado em COLUNAS_RELATORIO, exporta todas; senão, só as marcadas.
-      const idsAtivos = colRelatorio.size > 0 ? COLUNAS_RELATORIO.filter(cl => colRelatorio.has(cl.id)) : COLUNAS_RELATORIO
+      // Colunas: "Todos" (seletor de métrica do gráfico IPTU por Bairro) exporta tudo;
+      // qualquer métrica específica selecionada exporta só aquela coluna.
+      const idsAtivos = metricaBairro === 'todos' ? TODAS_COLUNAS_RELATORIO : TODAS_COLUNAS_RELATORIO.filter(cl => cl.id === metricaBairro)
       const valorPorId: Record<string, (l: typeof itens[number]) => string | number> = {
         lancado: l => money(l.lancado), arrecadado: l => money(l.arrecadado), emAberto: l => money(l.emAberto),
         inadimplencia: l => money(l.inadimplencia), isento: l => money(l.isento), suspenso: l => money(l.suspenso),
@@ -315,7 +321,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
 
       const dados: DadosRelatorio = {
         titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}`,
-        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}${metricaBairro !== 'todos' ? ` · coluna: ${TODAS_COLUNAS_RELATORIO.find(cl => cl.id === metricaBairro)?.label}` : ''}`,
         cards: idsAtivos.map(cl => cardPorId[cl.id]).filter((x): x is { rotulo: string; valor: string } => !!x),
         colunas: [bairroSel ? 'Contribuinte' : 'Bairro', ...idsAtivos.map(cl => cl.label)],
         linhas: itens.map(l => [l.nome, ...idsAtivos.map(cl => valorPorId[cl.id](l))]),
@@ -345,22 +351,15 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     <div style={{ position: 'relative', marginTop: 18 }}>
       {carregando ? <LoadingOverlay /> : null}
 
-      {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução) */}
+      {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução). As colunas exportadas
+          seguem o seletor de métrica do gráfico "IPTU por Bairro" abaixo (Todos = tudo). */}
       {v ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, margin: '0 4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <span style={{ fontSize: 10.5, color: '#9098a8', marginRight: 2 }}>{colRelatorio.size > 0 ? 'Colunas do relatório:' : 'Colunas do relatório (nenhuma marcada = tudo):'}</span>
-            {COLUNAS_RELATORIO.map(cl => {
-              const ativo = colRelatorio.has(cl.id)
-              return (
-                <button key={cl.id} onClick={() => setColRelatorio(prev => {
-                  const next = new Set(prev)
-                  if (next.has(cl.id)) next.delete(cl.id); else next.add(cl.id)
-                  return next
-                })} style={{ border: 'none', cursor: 'pointer', borderRadius: 14, padding: '4px 10px', fontSize: 10.5, fontWeight: 600, background: ativo ? '#283e93' : '#eef1f7', color: ativo ? '#fff' : '#5b6477' }}>{cl.label}</button>
-              )
-            })}
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, margin: '0 4px' }}>
+          {metricaBairro !== 'todos' ? (
+            <span style={{ fontSize: 10.5, color: '#9098a8' }}>
+              Exportando só <b style={{ color: '#283e93' }}>{TODAS_COLUNAS_RELATORIO.find(cl => cl.id === metricaBairro)?.label}</b> (seletor "IPTU por Bairro" abaixo)
+            </span>
+          ) : null}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
               <button key={tipo} onClick={() => gerarRelatorio(tipo)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
@@ -470,8 +469,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
               <input type="checkbox" checked={semNumero} onChange={e => setSemNumero(e.target.checked)} /> Sem número
             </label>
             <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3, flexWrap: 'wrap' }}>
-              {METRICAS_BAIRRO.map(m => (
-                <button key={m.id} onClick={() => setMetricaBairro(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metricaBairro === m.id ? '#283e93' : 'transparent', color: metricaBairro === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
+              {METRICAS_BAIRRO_BOTOES.map(m => (
+                <button key={m.id} onClick={() => setMetricaBairro(m.id)} title={m.id === 'todos' ? 'Relatório exporta todas as colunas' : `Relatório exporta só ${m.label}`} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metricaBairro === m.id ? '#283e93' : 'transparent', color: metricaBairro === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
               ))}
             </div>
             {/* item 7: ordenar por valor (da métrica) ou por qtd de imóveis */}
@@ -492,7 +491,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           </div>
         </div>
         {(() => {
-          const corM = METRICAS_BAIRRO.find(m => m.id === metricaBairro)!.cor
+          const metricaEfetiva: MetricaBairroUI = metricaBairro === 'todos' ? 'lancado' : metricaBairro
+          const corM = METRICAS_BAIRRO.find(m => m.id === metricaEfetiva)!.cor
           const q = buscaBairro.trim().toLowerCase()
           const filtrados = q ? bairros.filter(b => b.nome.toLowerCase().includes(q)) : bairros
           if (!filtrados.length) return bairrosErro ? (
@@ -504,7 +504,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           // Ordena por valor da métrica OU por qtd de imóveis (item 7)
           const lista = [...filtrados].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
           const mx = Math.max(1, ...lista.map(b => Math.abs(b.valor)))
-          const metLabel = METRICAS_BAIRRO.find(m => m.id === metricaBairro)!.label
+          const metLabel = METRICAS_BAIRRO.find(m => m.id === metricaEfetiva)!.label
           return (
             <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
               {lista.map((b, i) => {
