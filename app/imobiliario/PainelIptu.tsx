@@ -170,14 +170,15 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   }, [qs, bairroQ, mesQ])
 
   // Resumo — lazy (abaixo da dobra); reflete os mesmos filtros do gráfico IPTU por Bairro
-  // (bairro, rua, espólio, sem número), além do ano.
+  // (bairro, rua, espólio, sem número) e o mês selecionado (o card "Com ITBI" é um fluxo
+  // do ano — o mês restringe seu limite superior para a visão acumulada).
   useEffect(() => {
     if (!obsResumo.visible) return
     let vivo = true
-    fetchJson(`/api/imobiliario/iptu-resumo${qs}${bairroQ}${filtrosImovelQ}`)
+    fetchJson(`/api/imobiliario/iptu-resumo${qs}${bairroQ}${filtrosImovelQ}${mesQ}`)
       .then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
-  }, [qs, bairroQ, filtrosImovelQ, obsResumo.visible])
+  }, [qs, bairroQ, filtrosImovelQ, mesQ, obsResumo.visible])
 
   // Comparativo Detalhado (item 16) — lazy; reage ao bairro selecionado
   useEffect(() => {

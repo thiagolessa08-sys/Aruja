@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
       rua: bairro ? (sp.get('rua') || null) : null,
       espolio: sp.get('espolio') === '1',
       semNumero: sp.get('semnumero') === '1',
+      mes: sp.get('mes') ? Number(sp.get('mes')) : null,
     }))
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
