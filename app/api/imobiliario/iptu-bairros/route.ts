@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams
     const bairro = sp.get('bairro') || null
+    const rua = bairro ? (sp.get('rua') || null) : null
     const met = sp.get('metrica') as MetricaBairro
     const metrica = METRICAS_OK.includes(met) ? met : 'lancado'
     const itens = await bairrosIptu({
@@ -17,9 +18,11 @@ export async function GET(req: NextRequest) {
       espolio: sp.get('espolio') === '1',
       semNumero: sp.get('semnumero') === '1',
       bairro,
+      rua,
       metrica,
     })
-    return NextResponse.json({ nivel: bairro ? 'rua' : 'bairro', bairro, itens })
+    const nivel = rua ? 'imovel' : bairro ? 'rua' : 'bairro'
+    return NextResponse.json({ nivel, bairro, rua, itens })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

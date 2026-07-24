@@ -123,10 +123,11 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [recarregarDiario, setRecarregarDiario] = useState(0)
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
-  // Onda 3 — bairros
-  const [bairros, setBairros] = useState<{ nome: string; imoveis: number; valor: number }[]>([])
-  const [nivelBairro, setNivelBairro] = useState<'bairro' | 'rua'>('bairro')
+  // Onda 3 — bairros (drill: bairro → rua → imóveis)
+  const [bairros, setBairros] = useState<{ nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }[]>([])
+  const [nivelBairro, setNivelBairro] = useState<'bairro' | 'rua' | 'imovel'>('bairro')
   const [bairroSel, setBairroSel] = useState<string | null>(null)
+  const [ruaSel, setRuaSel] = useState<string | null>(null)
   const [espolio, setEspolio] = useState(false)
   const [semNumero, setSemNumero] = useState(false)
   const [metricaBairro, setMetricaBairro] = useState<MetricaBairroUI | 'todos'>('todos')
@@ -235,11 +236,16 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     if (espolio) p.set('espolio', '1')
     if (semNumero) p.set('semnumero', '1')
     if (bairroSel) p.set('bairro', bairroSel)
+    if (bairroSel && ruaSel) p.set('rua', ruaSel)
     fetchJson(`/api/imobiliario/iptu-bairros?${p}`)
       .then(d => { if (!vivo) return; if (d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) } else setBairrosErro(true) })
       .finally(() => { if (vivo) setCarregandoBairros(false) })
     return () => { vivo = false }
-  }, [ano, espolio, semNumero, bairroSel, metricaBairro, obsBairros.visible, recarregarBairros])
+  }, [ano, espolio, semNumero, bairroSel, ruaSel, metricaBairro, obsBairros.visible, recarregarBairros])
+
+  // Seleciona um bairro no drill, limpando eventual rua já selecionada.
+  function selecionarBairro(nome: string) { setBairroSel(nome); setRuaSel(null) }
+  function limparBairro() { setBairroSel(null); setRuaSel(null) }
 
 
   // Busca de imóvel (debounce simples) — por inscrição, código ou nome
@@ -375,7 +381,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       {bairroSel ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '8px 4px 0' }}>
           <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>Toda a tela filtrada pelo bairro: <b>{bairroSel}</b></span>
-          <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>Limpar filtro</button>
+          <button onClick={limparBairro} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>Limpar filtro</button>
         </div>
       ) : null}
 
@@ -451,7 +457,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         {carregandoBairros ? <LoadingOverlay label="Agregando por bairro…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
-            {nivelBairro === 'rua' ? `Ruas de ${bairroSel}` : 'IPTU por Bairro'}
+            {nivelBairro === 'imovel' ? `Imóveis · ${ruaSel}` : nivelBairro === 'rua' ? `Ruas de ${bairroSel}` : 'IPTU por Bairro'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {/* filtros */}
@@ -478,9 +484,10 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             {/* item 13: pesquisa */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-              <input value={buscaBairro} onChange={e => setBuscaBairro(e.target.value)} placeholder={nivelBairro === 'rua' ? 'Buscar rua…' : 'Buscar bairro…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 130, fontFamily: 'inherit' }} />
+              <input value={buscaBairro} onChange={e => setBuscaBairro(e.target.value)} placeholder={nivelBairro === 'imovel' ? 'Buscar imóvel…' : nivelBairro === 'rua' ? 'Buscar rua…' : 'Buscar bairro…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 130, fontFamily: 'inherit' }} />
             </div>
-            {bairroSel ? <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
+            {ruaSel ? <button onClick={() => setRuaSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar às ruas</button> : null}
+            {bairroSel ? <button onClick={limparBairro} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
           </div>
         </div>
         {(() => {
@@ -502,11 +509,19 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
               {lista.map((b, i) => {
                 const w = Math.max(2, 100 * Math.abs(b.valor) / mx)
-                const podeDrill = nivelBairro === 'bairro'
+                const clicavel = nivelBairro === 'bairro' || nivelBairro === 'rua' || (nivelBairro === 'imovel' && !!b.cd)
+                const acao = () => {
+                  if (nivelBairro === 'bairro') selecionarBairro(b.nome)
+                  else if (nivelBairro === 'rua') setRuaSel(b.nome)
+                  else if (nivelBairro === 'imovel' && b.cd) abrirImovel(b.cd)
+                }
+                const detalheImovel = [b.inscricao ? `Insc. ${b.inscricao}` : '', b.numero ? `Nº ${b.numero}` : ''].filter(Boolean).join(' · ')
                 return (
-                  <div key={i} onClick={() => { if (podeDrill) setBairroSel(b.nome) }} style={{ cursor: podeDrill ? 'pointer' : 'default' }}>
+                  <div key={i} onClick={clicavel ? acao : undefined} style={{ cursor: clicavel ? 'pointer' : 'default' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
-                      <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {b.imoveis.toLocaleString('pt-BR')} im. ({metLabel})</span></span>
+                      <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {nivelBairro === 'imovel' ? (detalheImovel || `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`) : `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`}</span>
+                      </span>
                       <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.valor)}</span>
                     </div>
                     <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
@@ -518,7 +533,9 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             </div>
           )
         })()}
-        {nivelBairro === 'bairro' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div> : null}
+        {nivelBairro === 'bairro' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div>
+          : nivelBairro === 'rua' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique numa rua para detalhar por imóvel</div>
+          : <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num imóvel para ver o detalhamento completo (abre na Pesquisa de Imóvel, abaixo)</div>}
       </div>
 
       {/* ===== ONDA 2: Resumo de imóveis (lazy) ===== */}

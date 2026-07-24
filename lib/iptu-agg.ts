@@ -12,7 +12,7 @@ const num = (v: unknown) => Number(v) || 0
 // Reescrito conforme as queries de referência (15/07): ponte imóvel = g.cd_devedor
 // (NÃO cd_origem), e cada métrica tem sua fórmula exata + qtd de imóveis própria.
 export type MetricaBairro = 'lancado' | 'arrecadado' | 'inadimplencia' | 'emAberto' | 'isento' | 'suspenso'
-export interface FiltrosBairro { ano: number; espolio: boolean; semNumero: boolean; bairro: string | null; metrica?: MetricaBairro }
+export interface FiltrosBairro { ano: number; espolio: boolean; semNumero: boolean; bairro: string | null; rua?: string | null; metrica?: MetricaBairro }
 
 // FROM + WHERE base (ponte cd_devedor→imóvel→cep); junta contribuinte só p/ filtro de espólio.
 function baseBairro(f: FiltrosBairro) {
@@ -21,6 +21,7 @@ function baseBairro(f: FiltrosBairro) {
   if (f.espolio) w += ` AND cp.nm_rsocial LIKE '%ESP_LIO%'`
   if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)`
   if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
+  if (f.rua) w += ` AND c.ds_endereco = '${f.rua.replace(/'/g, "''")}'`
   const from = `FROM ${S}.tb_dsod_guias g
       JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_devedor
       JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep
@@ -84,16 +85,48 @@ function queryMetricaBairro(f: FiltrosBairro, grupo: string): string {
 async function agregadoBairro(f: FiltrosBairro, grupo: string) {
   const r = await agentQuery(queryMetricaBairro(f, grupo), 4000)
   return r.rows
-    .map(x => ({ nome: String(x[0] ?? '').trim() || '—', imoveis: num(x[1]), valor: num(x[2]) }))
+    .map(x => ({ chave: String(x[0] ?? '').trim(), imoveis: num(x[1]), valor: num(x[2]) }))
     .filter(b => b.valor !== 0 || b.imoveis > 0)
     .sort((a, b) => b.valor - a.valor)
 }
 
-export function bairrosIptu(f: FiltrosBairro) {
-  const grupo = f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
+// Nível imóvel do drill (bairro → rua → imóveis): busca inscrição/número/proprietário
+// de cada cd_imovel_urbano agregado, para exibir a lista já identificada.
+async function detalhesImoveis(cds: string[]) {
+  const map = new Map<string, { inscricao: string; numero: string; proprietario: string }>()
+  if (!cds.length) return map
+  const e = await agentQuery(`SELECT i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, cp.nm_rsocial
+    FROM ${S}.tb_dsod_imovel_urbano i
+    LEFT JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario
+    WHERE i.cd_imovel_urbano IN (${cds.join(',')})`, 400)
+  for (const row of e.rows) {
+    map.set(String(row[0]), { inscricao: String(row[1] ?? '').trim(), numero: String(row[2] ?? '').trim(), proprietario: String(row[3] ?? '').trim() })
+  }
+  return map
+}
+
+export interface ItemBairro { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }
+
+export function bairrosIptu(f: FiltrosBairro): Promise<ItemBairro[]> {
+  const grupo = f.rua ? 'g.cd_devedor' : f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
   const met = f.metrica ?? 'lancado'
-  const key = `iptuBairros:${f.ano}:${met}:${f.espolio ? 1 : 0}:${f.semNumero ? 1 : 0}:${f.bairro ?? ''}`
-  return cached(key, CACHE_TTL, () => agregadoBairro({ ...f, metrica: met }, grupo))
+  const key = `iptuBairros:${f.ano}:${met}:${f.espolio ? 1 : 0}:${f.semNumero ? 1 : 0}:${f.bairro ?? ''}:${f.rua ?? ''}`
+  return cached(key, CACHE_TTL, async () => {
+    const base = await agregadoBairro({ ...f, metrica: met }, grupo)
+    if (!f.rua) return base.map(b => ({ nome: b.chave || '—', imoveis: b.imoveis, valor: b.valor }))
+    const det = await detalhesImoveis(base.map(b => b.chave).filter(c => c && c !== '0'))
+    return base.map(b => {
+      const d = det.get(b.chave)
+      return {
+        nome: d?.proprietario || `Imóvel ${b.chave}`,
+        imoveis: b.imoveis,
+        valor: b.valor,
+        cd: Number(b.chave) || undefined,
+        inscricao: d?.inscricao || '',
+        numero: d?.numero || '',
+      }
+    })
+  })
 }
 
 // ===================== RANKING (100 maiores) =====================
