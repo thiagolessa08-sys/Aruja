@@ -242,9 +242,12 @@ export function resumoIptu(f: FiltrosResumo) {
     // (com filtro, a base já fica restrita → ITBI/empresa deixam de ficar congelados)
     const baseIptu = `SELECT DISTINCT g2.cd_origem FROM ${S}.tb_dsod_guias g2 WHERE g2.cd_tributo=1 AND g2.no_exercicio_lancamento=${ano} AND g2.ds_situacao NOT IN ('Recalculo','Validacao')${inFiltroSub}`
     const tiItbi = filtroImovelDireto(f, 'i3', 'c3', 'cp3')
-    // ITBI é fluxo (lançamentos ao longo do ano) — quando um mês de referência é escolhido
-    // (visão acumulada), restringe o limite superior ao fim daquele mês; senão, até ontem.
-    const fimItbi = mes ? `'${ano}-${String(mes).padStart(2, '0')}-${new Date(ano, mes, 0).getDate()}'` : 'getdate()-1'
+    // Fim do mês de referência (visão acumulada), quando selecionado — usado nos indicadores
+    // que são FLUXO ao longo do ano (ITBI lançado, empresa que passou a existir no endereço).
+    // "Com IPTU"/"Com TCA"/situação/total NÃO usam mês: são lançamento único em lote (a
+    // maioria em dezembro, conforme geração do exercício), não uma série mensal.
+    const fimMes = mes ? `'${ano}-${String(mes).padStart(2, '0')}-${new Date(ano, mes, 0).getDate()}'` : null
+    const fimItbi = fimMes ?? 'getdate()-1'
     const [comIptuR, totalImR, sitR, tcaR, itbiR, empR, semTcaR, forma, formaFiltroR] = await Promise.all([
       // Com IPTU = qtd de imóveis que compõem o lançado do exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}`, 1),
@@ -261,8 +264,9 @@ export function resumoIptu(f: FiltrosResumo) {
         JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = itb.cd_itbi
         ${temFiltro ? `JOIN (SELECT i3.cd_imovel_urbano FROM ${tiItbi.from} WHERE 1=1${tiItbi.where}) fi ON fi.cd_imovel_urbano = iiu.cd_imovel_urbano` : ''}
         WHERE itb.dt_lancamento BETWEEN '${ano}-01-01' AND ${fimItbi} AND itb.vl_total > 0`, 1),
-      // …quantos têm empresa no mesmo endereço
-      agentQuery(`SELECT COUNT(DISTINCT mf.cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico mf WHERE mf.cd_imovel_urbano IN (${baseIptu})`, 1),
+      // …quantos têm empresa no mesmo endereço — dt_inicial é distribuída ao longo do ano
+      // (diferente de dt_geracao das guias), então respeita o mês de referência quando ativo.
+      agentQuery(`SELECT COUNT(DISTINCT mf.cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico mf WHERE mf.cd_imovel_urbano IN (${baseIptu})${fimMes ? ` AND mf.dt_inicial <= ${fimMes}` : ''}`, 1),
       // …quantos têm IPTU e NÃO tiveram lançamento de TCA no exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw} AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo=67 AND t.no_exercicio_lancamento=${ano})`, 1),
       formaPagamentoIptu(),
