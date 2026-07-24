@@ -1,0 +1,112 @@
+// Agregação "ITBI por Bairro" (drill: bairro → rua → imóveis) — espelha bairrosIptu
+// (lib/iptu-agg.ts), mas para cd_tributo=10 e com a ponte oficial guia→itbi
+// (g.cd_origem = it.cd_itbi) + filtro it.vl_total>0 (ver comentários de lib/itbi-engine.ts).
+import { agentQuery } from '@/lib/agent'
+import { cached, CACHE_TTL } from '@/lib/cache'
+import { detalhesImoveis, type ItemBairro } from '@/lib/iptu-agg'
+
+const S = 'pref_aruja_sp'
+const num = (v: unknown) => Number(v) || 0
+const JITBI = `JOIN ${S}.tb_dsod_itbi it ON it.cd_itbi = g.cd_origem`
+
+export type MetricaBairroItbi = 'lancado' | 'arrecadado' | 'inadimplencia' | 'emAberto' | 'isento' | 'suspenso'
+export interface FiltrosBairroItbi { ano: number; espolio: boolean; semNumero: boolean; bairro: string | null; rua?: string | null; metrica?: MetricaBairroItbi }
+
+// FROM + WHERE base (ponte guia→itbi→devedor→imóvel→cep); junta contribuinte só p/ espólio.
+function baseBairroItbi(f: FiltrosBairroItbi) {
+  const joinProp = f.espolio ? `JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario` : ''
+  let w = `g.cd_tributo = 10 AND g.no_exercicio_lancamento = ${f.ano} AND p.no_parcela <> 0 AND it.vl_total > 0`
+  if (f.espolio) w += ` AND cp.nm_rsocial LIKE '%ESP_LIO%'`
+  if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)`
+  if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
+  if (f.rua) w += ` AND c.ds_endereco = '${f.rua.replace(/'/g, "''")}'`
+  const from = `FROM ${S}.tb_dsod_guias g
+      ${JITBI}
+      JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_devedor
+      JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep
+      ${joinProp}
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas`
+  return { from, where: w }
+}
+
+// Monta a query da métrica (retorna: grupo, qtd de imóveis, valor) — fórmulas espelham
+// bucketsItbiRaw (lib/itbi-engine.ts), a "fonte da verdade" já validada para os KPIs de ITBI.
+function queryMetricaBairroItbi(f: FiltrosBairroItbi, grupo: string): string {
+  const b = baseBairroItbi(f)
+  const semRV = ` AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
+  switch (f.metrica) {
+    case 'arrecadado':
+      return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
+        ${b.from}
+        JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+        JOIN ${S}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+        WHERE ${b.where}${semRV} AND g.ds_situacao NOT IN ('Cancelada') AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+          AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
+        GROUP BY ${grupo}`
+    case 'isento':
+      // Não Incidência de ITBI usa a ponte oficial cd_itbi→imóvel (1:N), diferente das
+      // demais métricas — ver isentoItbiPorExercicio em lib/itbi-engine.ts.
+      return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
+        ${b.from}
+        JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = it.cd_itbi
+        WHERE ${b.where}${semRV} AND pm.cd_tipo_movimento <= 3
+          AND iiu.cd_imovel_urbano IN (SELECT e.cd_origem FROM ${S}.tb_extr_isencoes e WHERE e.ds_isencao IN ('Não Incidência de ITBI'))
+        GROUP BY ${grupo}`
+    case 'suspenso': // mov 20
+      return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
+        ${b.from}
+        WHERE ${b.where} AND pm.cd_tipo_movimento = 20
+        GROUP BY ${grupo}`
+    case 'emAberto': // saldo líquido em aberto (net>0)
+      return `SELECT k, COUNT(DISTINCT cd_devedor) im, SUM(valor) vl FROM (
+        SELECT ${grupo} k, g.cd_devedor cd_devedor, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
+        ${b.from}
+        WHERE ${b.where} AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+        GROUP BY ${grupo}, g.cd_devedor, p.dt_vencimento HAVING SUM(pm.vl_movimento * pm.no_sinal) > 0
+      ) t GROUP BY k`
+    case 'inadimplencia': // saldo líquido VENCIDO (net>1)
+      return `SELECT k, COUNT(DISTINCT cd_devedor) im, SUM(valor) vl FROM (
+        SELECT ${grupo} k, g.cd_devedor cd_devedor, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
+        ${b.from}
+        WHERE ${b.where} AND p.dt_vencimento < getdate()-1
+          AND pm.cd_tipo_movimento IN (0,1,2,3,12,11,14,20) AND pm.cd_tipo_lancamento IN (4,7,0,10,1)
+        GROUP BY ${grupo}, g.cd_devedor, p.dt_vencimento HAVING SUM(pm.vl_movimento * pm.no_sinal) > 1
+      ) t GROUP BY k`
+    default: // 'lancado'
+      return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
+        ${b.from}
+        WHERE ${b.where}${semRV} AND pm.cd_tipo_movimento <= 3
+        GROUP BY ${grupo}`
+  }
+}
+
+async function agregadoBairroItbi(f: FiltrosBairroItbi, grupo: string) {
+  const r = await agentQuery(queryMetricaBairroItbi(f, grupo), 4000)
+  return r.rows
+    .map(x => ({ chave: String(x[0] ?? '').trim(), imoveis: num(x[1]), valor: num(x[2]) }))
+    .filter(b => b.valor !== 0 || b.imoveis > 0)
+    .sort((a, b) => b.valor - a.valor)
+}
+
+export function bairrosItbi(f: FiltrosBairroItbi): Promise<ItemBairro[]> {
+  const grupo = f.rua ? 'g.cd_devedor' : f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
+  const met = f.metrica ?? 'lancado'
+  const key = `itbiBairros:${f.ano}:${met}:${f.espolio ? 1 : 0}:${f.semNumero ? 1 : 0}:${f.bairro ?? ''}:${f.rua ?? ''}`
+  return cached(key, CACHE_TTL, async () => {
+    const base = await agregadoBairroItbi({ ...f, metrica: met }, grupo)
+    if (!f.rua) return base.map(b => ({ nome: b.chave || '—', imoveis: b.imoveis, valor: b.valor }))
+    const det = await detalhesImoveis(base.map(b => b.chave).filter(c => c && c !== '0'))
+    return base.map(b => {
+      const d = det.get(b.chave)
+      return {
+        nome: d?.proprietario || `Imóvel ${b.chave}`,
+        imoveis: b.imoveis,
+        valor: b.valor,
+        cd: Number(b.chave) || undefined,
+        inscricao: d?.inscricao || '',
+        numero: d?.numero || '',
+      }
+    })
+  })
+}

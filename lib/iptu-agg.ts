@@ -91,8 +91,9 @@ async function agregadoBairro(f: FiltrosBairro, grupo: string) {
 }
 
 // Nível imóvel do drill (bairro → rua → imóveis): busca inscrição/número/proprietário
-// de cada cd_imovel_urbano agregado, para exibir a lista já identificada.
-async function detalhesImoveis(cds: string[]) {
+// de cada cd_imovel_urbano agregado, para exibir a lista já identificada. Exportada porque
+// o mesmo enriquecimento é reaproveitado pelo drill "ITBI por Bairro" (lib/itbi-agg.ts).
+export async function detalhesImoveis(cds: string[]) {
   const map = new Map<string, { inscricao: string; numero: string; proprietario: string }>()
   if (!cds.length) return map
   const e = await agentQuery(`SELECT i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, cp.nm_rsocial

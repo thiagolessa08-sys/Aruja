@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
@@ -19,6 +19,32 @@ async function fetchJson(url: string, tries = 3): Promise<any | null> {
   }
   return null
 }
+
+// Dispara true quando o elemento entra na viewport (lazy-load do gráfico ITBI por Bairro).
+function useOnScreen<T extends Element>() {
+  const ref = useRef<T | null>(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || visible) return
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect() } }, { rootMargin: '250px' })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [visible])
+  return { ref, visible }
+}
+
+// Métricas do gráfico ITBI por Bairro — espelha as do IPTU por Bairro.
+type MetricaBairroItbiUI = 'lancado' | 'arrecadado' | 'inadimplencia' | 'emAberto' | 'isento' | 'suspenso'
+const METRICAS_BAIRRO_ITBI: { id: MetricaBairroItbiUI; label: string; cor: string }[] = [
+  { id: 'lancado', label: 'Lançado', cor: '#283e93' },
+  { id: 'arrecadado', label: 'Arrecadado', cor: '#1fa463' },
+  { id: 'emAberto', label: 'Em aberto', cor: '#e8962e' },
+  { id: 'inadimplencia', label: 'Inadimplência', cor: '#d64545' },
+  { id: 'isento', label: 'Isento', cor: '#8094d6' },
+  { id: 'suspenso', label: 'Suspenso', cor: '#5b6477' },
+]
+interface ItemBairroItbi { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }
 
 interface Cmp { atual: number; ant: number; pct: number }
 interface Visao {
@@ -107,6 +133,21 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
   const [serieMes, setSerieMes] = useState<MesItbi[] | null>(null)
   const [carregMes, setCarregMes] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+
+  // ITBI por Bairro (drill: bairro → rua → imóveis) — espelha o gráfico do IPTU
+  const [bairros, setBairros] = useState<ItemBairroItbi[]>([])
+  const [nivelBairro, setNivelBairro] = useState<'bairro' | 'rua' | 'imovel'>('bairro')
+  const [bairroSel, setBairroSel] = useState<string | null>(null)
+  const [ruaSel, setRuaSel] = useState<string | null>(null)
+  const [espolio, setEspolio] = useState(false)
+  const [semNumero, setSemNumero] = useState(false)
+  const [metricaBairro, setMetricaBairro] = useState<MetricaBairroItbiUI>('lancado')
+  const [buscaBairro, setBuscaBairro] = useState('')
+  const [ordenarBairro, setOrdenarBairro] = useState<'valor' | 'imoveis'>('valor')
+  const [carregandoBairros, setCarregandoBairros] = useState(false)
+  const [bairrosErro, setBairrosErro] = useState(false)
+  const [recarregarBairros, setRecarregarBairros] = useState(0)
+  const obsBairros = useOnScreen<HTMLDivElement>()
 
   const ano = filtros.ano
   const mes = filtros.mes
@@ -201,6 +242,26 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
     return () => { vivo = false }
   }, [drillAno])
   useEffect(() => { setDrillAno(null) }, [ano])
+
+  // Seleciona um bairro no drill, limpando eventual rua já selecionada.
+  function selecionarBairroItbi(nome: string) { setBairroSel(nome); setRuaSel(null) }
+  useEffect(() => { setBairroSel(null); setRuaSel(null) }, [ano])
+
+  // ITBI por Bairro (drill: bairro → rua → imóveis) — lazy, só busca quando aparece na tela
+  useEffect(() => {
+    if (!ano || !obsBairros.visible) return
+    let vivo = true
+    setCarregandoBairros(true); setBairrosErro(false)
+    const p = new URLSearchParams({ ano: String(ano), metrica: metricaBairro })
+    if (espolio) p.set('espolio', '1')
+    if (semNumero) p.set('semnumero', '1')
+    if (bairroSel) p.set('bairro', bairroSel)
+    if (bairroSel && ruaSel) p.set('rua', ruaSel)
+    fetchJson(`/api/itbi/bairros?${p}`)
+      .then(d => { if (!vivo) return; if (d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) } else setBairrosErro(true) })
+      .finally(() => { if (vivo) setCarregandoBairros(false) })
+    return () => { vivo = false }
+  }, [ano, espolio, semNumero, bairroSel, ruaSel, metricaBairro, obsBairros.visible, recarregarBairros])
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
@@ -332,6 +393,87 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* ===== ITBI por Bairro (drill: bairro → rua → imóveis) ===== */}
+          <div ref={obsBairros.ref} style={{ ...card, marginTop: 18, position: 'relative' }}>
+            {carregandoBairros ? <LoadingOverlay label="Agregando por bairro…" /> : null}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
+                {nivelBairro === 'imovel' ? `Imóveis · ${ruaSel}` : nivelBairro === 'rua' ? `Ruas de ${bairroSel}` : 'ITBI por Bairro'}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#5b6477', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={espolio} onChange={e => setEspolio(e.target.checked)} /> Espólio
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#5b6477', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={semNumero} onChange={e => setSemNumero(e.target.checked)} /> Sem número
+                </label>
+                <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3, flexWrap: 'wrap' }}>
+                  {METRICAS_BAIRRO_ITBI.map(m => (
+                    <button key={m.id} onClick={() => setMetricaBairro(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metricaBairro === m.id ? '#283e93' : 'transparent', color: metricaBairro === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: '#9098a8' }}>
+                  <span>Ordenar:</span>
+                  <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3 }}>
+                    {([['valor', 'Valor'], ['imoveis', 'Qtd. imóveis']] as const).map(([id, lbl]) => (
+                      <button key={id} onClick={() => setOrdenarBairro(id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 9px', fontSize: 11, fontWeight: 600, background: ordenarBairro === id ? '#283e93' : 'transparent', color: ordenarBairro === id ? '#fff' : '#5b6477' }}>{lbl}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                  <input value={buscaBairro} onChange={e => setBuscaBairro(e.target.value)} placeholder={nivelBairro === 'imovel' ? 'Buscar imóvel…' : nivelBairro === 'rua' ? 'Buscar rua…' : 'Buscar bairro…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 130, fontFamily: 'inherit' }} />
+                </div>
+                {ruaSel ? <button onClick={() => setRuaSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar às ruas</button> : null}
+                {bairroSel ? <button onClick={() => { setBairroSel(null); setRuaSel(null) }} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
+              </div>
+            </div>
+            {(() => {
+              const corM = METRICAS_BAIRRO_ITBI.find(m => m.id === metricaBairro)!.cor
+              const metLabel = METRICAS_BAIRRO_ITBI.find(m => m.id === metricaBairro)!.label
+              const q = buscaBairro.trim().toLowerCase()
+              const filtrados = q ? bairros.filter(b => b.nome.toLowerCase().includes(q)) : bairros
+              if (!filtrados.length) return bairrosErro ? (
+                <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>
+                  Não foi possível carregar (consulta pesada / instabilidade).{' '}
+                  <button onClick={() => setRecarregarBairros(n => n + 1)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, marginLeft: 6 }}>Recarregar</button>
+                </div>
+              ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>{q ? 'Nenhum resultado para a busca.' : 'Sem dados para os filtros selecionados.'}</div>
+              const lista = [...filtrados].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
+              const mx = Math.max(1, ...lista.map(b => Math.abs(b.valor)))
+              return (
+                <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
+                  {lista.map((b, i) => {
+                    const w = Math.max(2, 100 * Math.abs(b.valor) / mx)
+                    const clicavel = nivelBairro === 'bairro' || nivelBairro === 'rua' || (nivelBairro === 'imovel' && !!b.cd)
+                    const acao = () => {
+                      if (nivelBairro === 'bairro') selecionarBairroItbi(b.nome)
+                      else if (nivelBairro === 'rua') setRuaSel(b.nome)
+                      else if (nivelBairro === 'imovel' && b.cd) abrirImovel(b.cd)
+                    }
+                    const detalheImovel = [b.inscricao ? `Insc. ${b.inscricao}` : '', b.numero ? `Nº ${b.numero}` : ''].filter(Boolean).join(' · ')
+                    return (
+                      <div key={i} onClick={clicavel ? acao : undefined} style={{ cursor: clicavel ? 'pointer' : 'default' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
+                          <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {nivelBairro === 'imovel' ? (detalheImovel || `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`) : `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`}</span>
+                          </span>
+                          <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.valor)}</span>
+                        </div>
+                        <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 8, background: corM }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+            {nivelBairro === 'bairro' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div>
+              : nivelBairro === 'rua' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique numa rua para detalhar por imóvel</div>
+              : <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num imóvel para ver o histórico de transmissões (abre em Consultar Imóvel, abaixo)</div>}
           </div>
 
           {/* Tabela de exercícios */}
