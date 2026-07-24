@@ -75,6 +75,18 @@ const METRICAS_BAIRRO: { id: MetricaBairroUI; label: string; cor: string }[] = [
   { id: 'isento', label: 'Isento', cor: '#8094d6' },
   { id: 'suspenso', label: 'Suspenso', cor: '#5b6477' },
 ]
+// Colunas selecionáveis do relatório (PDF/Excel). Nenhuma marcada = exporta todas.
+const COLUNAS_RELATORIO: { id: string; label: string }[] = [
+  { id: 'lancado', label: 'Lançado' },
+  { id: 'arrecadado', label: 'Arrecadado' },
+  { id: 'emAberto', label: 'Em aberto' },
+  { id: 'inadimplencia', label: 'Inadimplência' },
+  { id: 'isento', label: 'Isento' },
+  { id: 'suspenso', label: 'Suspenso' },
+  { id: 'imoveis', label: 'Imóveis' },
+  { id: 'espolio', label: 'Espólio' },
+  { id: 'semNumero', label: 'Sem número' },
+]
 
 interface ImovelMatch { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string }
 interface ImovelDet {
@@ -133,6 +145,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [compErro, setCompErro] = useState(false)
   const [recarregarComp, setRecarregarComp] = useState(0)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [colRelatorio, setColRelatorio] = useState<Set<string>>(new Set()) // vazio = exporta todas as colunas
 
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
@@ -283,21 +296,29 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       if (!rel?.itens) { alert('Não foi possível gerar o relatório. Tente novamente.'); return }
       const itens: { nome: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; imoveis: number; espolio: number; semNumero: number }[] = rel.itens
       const filtroExtra = [espolio ? 'espólio' : '', semNumero ? 'sem número' : ''].filter(Boolean).join(' + ')
+
+      // Colunas: se nada marcado em COLUNAS_RELATORIO, exporta todas; senão, só as marcadas.
+      const idsAtivos = colRelatorio.size > 0 ? COLUNAS_RELATORIO.filter(cl => colRelatorio.has(cl.id)) : COLUNAS_RELATORIO
+      const valorPorId: Record<string, (l: typeof itens[number]) => string | number> = {
+        lancado: l => money(l.lancado), arrecadado: l => money(l.arrecadado), emAberto: l => money(l.emAberto),
+        inadimplencia: l => money(l.inadimplencia), isento: l => money(l.isento), suspenso: l => money(l.suspenso),
+        imoveis: l => l.imoveis, espolio: l => l.espolio, semNumero: l => l.semNumero,
+      }
+      const cardPorId: Record<string, { rotulo: string; valor: string }> = {
+        lancado: { rotulo: 'Lançado', valor: money(c.lancado.atual) },
+        arrecadado: { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
+        emAberto: { rotulo: 'Em aberto', valor: money(c.emAberto.atual) },
+        inadimplencia: { rotulo: 'Inadimplência', valor: money(c.inadimplencia.atual) },
+        isento: { rotulo: 'Isento', valor: money(c.isento.atual) },
+        suspenso: { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
+      }
+
       const dados: DadosRelatorio = {
         titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}`,
         subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}`,
-        cards: [
-          { rotulo: 'Lançado', valor: money(c.lancado.atual) },
-          { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
-          { rotulo: 'Em aberto', valor: money(c.emAberto.atual) },
-          { rotulo: 'Inadimplência', valor: money(c.inadimplencia.atual) },
-          { rotulo: 'Isento', valor: money(c.isento.atual) },
-          { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
-        ],
-        colunas: [bairroSel ? 'Contribuinte' : 'Bairro', 'Lançado', 'Arrecadado', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso', 'Imóveis', 'Espólio', 'Sem número'],
-        linhas: itens.map(l => [
-          l.nome, money(l.lancado), money(l.arrecadado), money(l.emAberto), money(l.inadimplencia), money(l.isento), money(l.suspenso), l.imoveis, l.espolio, l.semNumero,
-        ]),
+        cards: idsAtivos.map(cl => cardPorId[cl.id]).filter((x): x is { rotulo: string; valor: string } => !!x),
+        colunas: [bairroSel ? 'Contribuinte' : 'Bairro', ...idsAtivos.map(cl => cl.label)],
+        linhas: itens.map(l => [l.nome, ...idsAtivos.map(cl => valorPorId[cl.id](l))]),
         arquivo: `IPTU-${bairroSel ? bairroSel.replace(/\s+/g, '-') : 'bairros'}-${v.anoRef}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
@@ -326,12 +347,27 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
 
       {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução) */}
       {v ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
-          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
-            <button key={tipo} onClick={() => gerarRelatorio(tipo)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
-            </button>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, margin: '0 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: 10.5, color: '#9098a8', marginRight: 2 }}>{colRelatorio.size > 0 ? 'Colunas do relatório:' : 'Colunas do relatório (nenhuma marcada = tudo):'}</span>
+            {COLUNAS_RELATORIO.map(cl => {
+              const ativo = colRelatorio.has(cl.id)
+              return (
+                <button key={cl.id} onClick={() => setColRelatorio(prev => {
+                  const next = new Set(prev)
+                  if (next.has(cl.id)) next.delete(cl.id); else next.add(cl.id)
+                  return next
+                })} style={{ border: 'none', cursor: 'pointer', borderRadius: 14, padding: '4px 10px', fontSize: 10.5, fontWeight: 600, background: ativo ? '#283e93' : '#eef1f7', color: ativo ? '#fff' : '#5b6477' }}>{cl.label}</button>
+              )
+            })}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
+              <button key={tipo} onClick={() => gerarRelatorio(tipo)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 
