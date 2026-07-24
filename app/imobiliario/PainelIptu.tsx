@@ -354,19 +354,12 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução). As colunas exportadas
           seguem o seletor de métrica do gráfico "IPTU por Bairro" abaixo (Todos = tudo). */}
       {v ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, margin: '0 4px' }}>
-          {metricaBairro !== 'todos' ? (
-            <span style={{ fontSize: 10.5, color: '#9098a8' }}>
-              Exportando só <b style={{ color: '#283e93' }}>{TODAS_COLUNAS_RELATORIO.find(cl => cl.id === metricaBairro)?.label}</b> (seletor "IPTU por Bairro" abaixo)
-            </span>
-          ) : null}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
-              <button key={tipo} onClick={() => gerarRelatorio(tipo)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
-              </button>
-            ))}
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
+          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tipo, lbl]) => (
+            <button key={tipo} onClick={() => gerarRelatorio(tipo)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+            </button>
+          ))}
         </div>
       ) : null}
 
