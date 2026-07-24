@@ -24,7 +24,7 @@ async function runAll() {
   try { await formaPagamentoIptu() } catch { /* ignora */ }
 
   // --- IPTU: seções pesadas do ano atual (Resumo, Bairros, Rankings) ---
-  try { await resumoIptu(anoAtual, null) } catch { /* ignora */ }
+  try { await resumoIptu({ ano: anoAtual, bairro: null }) } catch { /* ignora */ }
   try { await bairrosIptu({ ano: anoAtual, espolio: false, semNumero: false, bairro: null }) } catch { /* ignora */ }
   for (const tipo of ['imovel', 'proprietario'] as const) {
     for (const met of ['lancado', 'arrecadado', 'emAberto', 'inadimplencia'] as const) {

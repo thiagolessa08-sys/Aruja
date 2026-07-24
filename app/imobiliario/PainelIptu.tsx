@@ -156,6 +156,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const qs = ano ? `?ano=${ano}` : ''
   const bairroQ = bairroSel ? `&bairro=${encodeURIComponent(bairroSel)}` : '' // filtro global de bairro
   const mesQ = ano && mes ? `&mes=${mes}` : '' // mês selecionado → visão acumulada até o mês
+  const ruaQ = bairroSel && ruaSel ? `&rua=${encodeURIComponent(ruaSel)}` : '' // drill de rua (só com bairro selecionado)
+  const filtrosImovelQ = `${ruaQ}${espolio ? '&espolio=1' : ''}${semNumero ? '&semnumero=1' : ''}` // espólio/sem número/rua — mesmos filtros do gráfico IPTU por Bairro
 
   // Visão geral (carrega já — é o topo da tela); reflete o bairro e o mês selecionados
   useEffect(() => {
@@ -167,14 +169,15 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     return () => { vivo = false }
   }, [qs, bairroQ, mesQ])
 
-  // Resumo — lazy (abaixo da dobra)
+  // Resumo — lazy (abaixo da dobra); reflete os mesmos filtros do gráfico IPTU por Bairro
+  // (bairro, rua, espólio, sem número), além do ano.
   useEffect(() => {
     if (!obsResumo.visible) return
     let vivo = true
-    fetchJson(`/api/imobiliario/iptu-resumo${qs}${bairroQ}`)
+    fetchJson(`/api/imobiliario/iptu-resumo${qs}${bairroQ}${filtrosImovelQ}`)
       .then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
-  }, [qs, bairroQ, obsResumo.visible])
+  }, [qs, bairroQ, filtrosImovelQ, obsResumo.visible])
 
   // Comparativo Detalhado (item 16) — lazy; reage ao bairro selecionado
   useEffect(() => {

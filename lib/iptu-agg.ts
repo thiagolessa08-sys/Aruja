@@ -198,39 +198,72 @@ export function rankingIptu(tipo: 'imovel' | 'proprietario', ano: number, metric
 }
 
 // ===================== RESUMO =====================
-export function resumoIptu(ano: number, bairro: string | null) {
-  return cached(`iptuResumo:${ano}:${bairro ?? ''}`, CACHE_TTL, async () => {
-    const bq = bairro ? bairro.replace(/'/g, "''") : ''
-    const jb = bairro ? `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem=iu.cd_imovel_urbano JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep AND ce.nm_bairro='${bq}'` : ''
-    // Imóveis do bairro (para restringir as contagens que passam por baseIptu)
-    const imoveisBairro = bairro ? `(SELECT iu2.cd_imovel_urbano FROM ${S}.tb_dsod_imovel_urbano iu2 JOIN ${S}.tb_dsod_cep ce2 ON iu2.cd_cep=ce2.cd_cep WHERE ce2.nm_bairro='${bq}')` : ''
-    const inBairroSub = bairro ? ` AND g2.cd_origem IN ${imoveisBairro}` : ''
+export interface FiltrosResumo { ano: number; bairro: string | null; rua?: string | null; espolio?: boolean; semNumero?: boolean }
+
+// Filtro geográfico/perfil (bairro, rua, espólio, sem número) aplicado direto no cadastro
+// de imóveis (sem passar pela guia) — usado no "Total de imóveis" e nas subconsultas IN(...).
+function filtroImovelDireto(f: FiltrosResumo, aliasI = 'i', aliasC = 'c', aliasCp = 'cp') {
+  let from = `${S}.tb_dsod_imovel_urbano ${aliasI}`
+  let where = ''
+  if (f.bairro || f.rua) {
+    from += ` JOIN ${S}.tb_dsod_cep ${aliasC} ON ${aliasI}.cd_cep=${aliasC}.cd_cep`
+    if (f.bairro) where += ` AND ${aliasC}.nm_bairro='${f.bairro.replace(/'/g, "''")}'`
+    if (f.rua) where += ` AND ${aliasC}.ds_endereco='${f.rua.replace(/'/g, "''")}'`
+  }
+  if (f.semNumero) where += ` AND (${aliasI}.no_imovel IS NULL OR ${aliasI}.no_imovel = 0)`
+  if (f.espolio) {
+    from += ` JOIN ${S}.tb_dsod_contribuinte ${aliasCp} ON ${aliasCp}.cd_contr = ${aliasI}.cd_contr_proprietario`
+    where += ` AND ${aliasCp}.nm_rsocial LIKE '%ESP_LIO%'`
+  }
+  return { from, where }
+}
+
+// Mesmo filtro, mas partindo da guia (g.cd_origem → imóvel) — usado nas contagens por guia.
+function joinFiltroResumo(f: FiltrosResumo) {
+  if (!(f.bairro || f.rua || f.espolio || f.semNumero)) return { join: '', where: '' }
+  const { where } = filtroImovelDireto(f, 'iu', 'ce', 'cp')
+  let join = `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem=iu.cd_imovel_urbano`
+  if (f.bairro || f.rua) join += ` JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep=ce.cd_cep`
+  if (f.espolio) join += ` JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = iu.cd_contr_proprietario`
+  return { join, where }
+}
+
+export function resumoIptu(f: FiltrosResumo) {
+  const { ano, bairro, rua = null, espolio = false, semNumero = false } = f
+  return cached(`iptuResumo:${ano}:${bairro ?? ''}:${rua ?? ''}:${espolio ? 1 : 0}:${semNumero ? 1 : 0}`, CACHE_TTL, async () => {
+    const temFiltro = !!(bairro || rua || espolio || semNumero)
+    const { join: jb, where: jbw } = joinFiltroResumo(f)
+    const ti = filtroImovelDireto(f)
+    // Imóveis do filtro (para restringir as contagens que passam por baseIptu)
+    const tiSub = filtroImovelDireto(f, 'i2', 'c2', 'cp2')
+    const inFiltroSub = temFiltro ? ` AND g2.cd_origem IN (SELECT i2.cd_imovel_urbano FROM ${tiSub.from} WHERE 1=1${tiSub.where})` : ''
     // Base MANDATÓRIA da análise: imóveis com IPTU (cd_tributo=1) do exercício — os que
     // compõem o valor total lançado. Todas as demais contagens são INTERSEÇÃO com essa base.
-    // (com bairro, a base já fica restrita ao bairro → ITBI/empresa deixam de ficar congelados)
-    const baseIptu = `SELECT DISTINCT g2.cd_origem FROM ${S}.tb_dsod_guias g2 WHERE g2.cd_tributo=1 AND g2.no_exercicio_lancamento=${ano} AND g2.ds_situacao NOT IN ('Recalculo','Validacao')${inBairroSub}`
-    const [comIptuR, totalImR, sitR, tcaR, itbiR, empR, semTcaR, forma, formaBairroR] = await Promise.all([
+    // (com filtro, a base já fica restrita → ITBI/empresa deixam de ficar congelados)
+    const baseIptu = `SELECT DISTINCT g2.cd_origem FROM ${S}.tb_dsod_guias g2 WHERE g2.cd_tributo=1 AND g2.no_exercicio_lancamento=${ano} AND g2.ds_situacao NOT IN ('Recalculo','Validacao')${inFiltroSub}`
+    const tiItbi = filtroImovelDireto(f, 'i3', 'c3', 'cp3')
+    const [comIptuR, totalImR, sitR, tcaR, itbiR, empR, semTcaR, forma, formaFiltroR] = await Promise.all([
       // Com IPTU = qtd de imóveis que compõem o lançado do exercício
-      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')`, 1),
-      // Total de imóveis do cadastro (item 10) — respeita o bairro
-      agentQuery(bairro
-        ? `SELECT COUNT(*) FROM ${S}.tb_dsod_imovel_urbano i JOIN ${S}.tb_dsod_cep c ON i.cd_cep=c.cd_cep WHERE c.nm_bairro='${bq}'`
-        : `SELECT COUNT(*) FROM ${S}.tb_dsod_imovel_urbano`, 1),
-      agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} GROUP BY g.ds_situacao`, 20),
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}`, 1),
+      // Total de imóveis do cadastro (item 10) — respeita bairro/rua/espólio/sem número
+      agentQuery(`SELECT COUNT(*) FROM ${ti.from} WHERE 1=1${ti.where}`, 1),
+      agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano}${jbw} GROUP BY g.ds_situacao`, 20),
       // Dos imóveis COM IPTU, quantos também têm TCA (cd_tributo=67) no exercício
-      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem IN (${baseIptu})`, 1),
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=67 AND g.no_exercicio_lancamento=${ano} AND g.cd_origem IN (${baseIptu})${jbw}`, 1),
       // …quantos imóveis com ITBI lançado no exercício (item 19 — query oficial do Wallace:
-      // dt_lancamento no ano até ontem, vl_total>0; NÃO intersecta com a base IPTU)
+      // dt_lancamento no ano até ontem, vl_total>0; NÃO intersecta com a base IPTU) — restrita
+      // ao bairro/rua/espólio/sem número quando algum estiver selecionado.
       agentQuery(`SELECT COUNT(DISTINCT iiu.cd_imovel_urbano) FROM ${S}.tb_dsod_itbi itb
         JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = itb.cd_itbi
+        ${temFiltro ? `JOIN (SELECT i3.cd_imovel_urbano FROM ${tiItbi.from} WHERE 1=1${tiItbi.where}) fi ON fi.cd_imovel_urbano = iiu.cd_imovel_urbano` : ''}
         WHERE itb.dt_lancamento BETWEEN '${ano}-01-01' AND getdate()-1 AND itb.vl_total > 0`, 1),
       // …quantos têm empresa no mesmo endereço
       agentQuery(`SELECT COUNT(DISTINCT mf.cd_imovel_urbano) FROM ${S}.tb_dsod_contribuinte_mob_fisico mf WHERE mf.cd_imovel_urbano IN (${baseIptu})`, 1),
       // …quantos têm IPTU e NÃO tiveram lançamento de TCA no exercício
-      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo=67 AND t.no_exercicio_lancamento=${ano})`, 1),
+      agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw} AND g.cd_origem NOT IN (SELECT t.cd_origem FROM ${S}.tb_dsod_guias t WHERE t.cd_tributo=67 AND t.no_exercicio_lancamento=${ano})`, 1),
       formaPagamentoIptu(),
-      // Forma de pagamento RESTRITA ao bairro (item 13: quadro deixa de ficar congelado no total)
-      bairro ? agentQuery(`
+      // Forma de pagamento RESTRITA ao filtro (item 13: quadro deixa de ficar congelado no total)
+      temFiltro ? agentQuery(`
         SELECT categoria, COUNT(*) qt FROM (
           SELECT g.cd_guia,
             CASE
@@ -240,11 +273,10 @@ export function resumoIptu(ano: number, bairro: string | null) {
               ELSE 'PagoParcial'
             END AS categoria
           FROM ${S}.tb_dsod_guias g
-          JOIN ${S}.tb_dsod_imovel_urbano iub ON g.cd_origem = iub.cd_imovel_urbano
-          JOIN ${S}.tb_dsod_cep ceb ON iub.cd_cep = ceb.cd_cep AND ceb.nm_bairro = '${bq}'
+          ${jb}
           JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
           JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-          WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}
           GROUP BY g.cd_guia
         ) t GROUP BY categoria`, 50) : Promise.resolve(null),
     ])
@@ -252,9 +284,9 @@ export function resumoIptu(ano: number, bairro: string | null) {
     const totalImoveis = num(totalImR.rows[0]?.[0])
     const situacao = sitR.rows.map(r => ({ situacao: String(r[0] ?? '').trim() || '—', qt: num(r[1]) })).sort((a, b) => b.qt - a.qt)
     let fp = forma.get(ano) ?? { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
-    if (bairro && formaBairroR) { // usa a forma de pagamento do bairro
+    if (temFiltro && formaFiltroR) { // usa a forma de pagamento restrita ao filtro
       const b = { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
-      for (const r of formaBairroR.rows) {
+      for (const r of formaFiltroR.rows) {
         const cat = String(r[0] ?? '').trim(), qt = num(r[1])
         if (cat === 'CotaUnica') b.cotaUnica = qt
         else if (cat === 'Parcelado') b.parcelado = qt
