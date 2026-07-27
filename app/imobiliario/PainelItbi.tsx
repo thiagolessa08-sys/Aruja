@@ -520,7 +520,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
               <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de ITBI por imóvel{mes ? ` até ${MESES_LONGO[Number(mes) - 1]}` : ''} · clique para ver o histórico</div>
               {ranking ? (() => {
                 const fx = ranking.faixas
-                const totFx = Math.max(1, fx.um + fx.dois + fx.tresCinco + fx.seisMais)
+                const totalImoveis = fx.um + fx.dois + fx.tresCinco + fx.seisMais
+                const totFx = Math.max(1, totalImoveis)
                 const distr = [
                   { l: '1 transmissão', n: fx.um, c: '#aab8e3' },
                   { l: '2 transmissões', n: fx.dois, c: '#7d8fce' },
@@ -530,6 +531,11 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 const mx = Math.max(1, ...ranking.itens.map(i => i.qt))
                 return (
                   <>
+                    {/* KPI — total de imóveis com ITBI no período (soma das faixas abaixo) */}
+                    <div style={{ marginTop: 12, background: '#283e93', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total de imóveis transmitidos</span>
+                      <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtInt(totalImoveis)}</span>
+                    </div>
                     {/* Distribuição */}
                     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                       {distr.map(d => (
