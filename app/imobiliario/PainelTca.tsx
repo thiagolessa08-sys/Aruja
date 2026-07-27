@@ -49,6 +49,7 @@ function EixoTick({ x, y, payload }: any) {
 const MESES_R = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 interface Mes { mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
+interface Resumo { situacao: { situacao: string; qt: number }[]; pagamento: { status: string; qt: number; cor: string }[] }
 
 // Insights da TCA — frases derivadas dos cards.
 function insightsTca(v: Visao): string[] {
@@ -73,6 +74,15 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const [serieMes, setSerieMes] = useState<Mes[] | null>(null)
   const [carregMes, setCarregMes] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [res, setRes] = useState<Resumo | null>(null)
+
+  // Imóveis por situação da guia × status de pagamento
+  useEffect(() => {
+    if (!ano) return
+    let vivo = true; setRes(null)
+    fetchJson(`/api/tca/resumo?ano=${ano}`).then(d => { if (vivo && d && !d.error) setRes(d) })
+    return () => { vivo = false }
+  }, [ano])
 
   useEffect(() => {
     let vivo = true
@@ -266,6 +276,36 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
 
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
           <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel />
+
+          {/* Quadros situação × status de pagamento (igual ao IPTU) */}
+          {res ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 18 }}>
+              {[
+                { titulo: 'Imóveis por situação da guia', itens: res.situacao.map(s => ({ rot: s.situacao, qt: s.qt, cor: '#283e93' })) },
+                { titulo: 'Imóveis por status de pagamento', itens: res.pagamento.map(p => ({ rot: p.status, qt: p.qt, cor: p.cor })) },
+              ].map(bloco => {
+                const mx = Math.max(1, ...bloco.itens.map(i => i.qt))
+                return (
+                  <div key={bloco.titulo} style={card}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{bloco.titulo}</span>
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                      {bloco.itens.map((it, i) => (
+                        <div key={i}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                            <span style={{ color: '#3a4256', fontWeight: 600 }}>{it.rot}</span>
+                            <span style={{ color: it.cor, fontWeight: 700 }}>{it.qt.toLocaleString('pt-BR')}</span>
+                          </div>
+                          <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.max(3, 100 * it.qt / mx).toFixed(1)}%`, borderRadius: 8, background: it.cor }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : null}
 
           {/* Tabela de exercícios */}
           <div style={{ ...card, marginTop: 18, overflowX: 'auto' }}>

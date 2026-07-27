@@ -190,3 +190,52 @@ export async function dataAtualizacaoTca(): Promise<string | null> {
     return v ? String(v).slice(0, 10) : null
   })
 }
+
+// ===================== RESUMO (item: situação da guia × status de pagamento) =====================
+// Espelha os quadros equivalentes do IPTU (lib/iptu-agg.ts: resumoIptu), restrito ao exercício.
+export interface ResumoTca {
+  situacao: { situacao: string; qt: number }[]
+  pagamento: { status: string; qt: number; cor: string }[]
+}
+
+export async function resumoTca(ano: number): Promise<ResumoTca> {
+  return cached(`tcaResumo:${ano}`, TTL_15MIN, async () => {
+    const [sitR, pagR] = await Promise.all([
+      agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g
+        WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} GROUP BY g.ds_situacao`, 20),
+      // Forma de pagamento por guia — "Parcelado" = pagou todas as parcelas; "Pago parcial" = pagou parte.
+      agentQuery(`SELECT categoria, COUNT(*) qt FROM (
+          SELECT g.cd_guia,
+            CASE
+              WHEN SUM(CASE WHEN p.no_parcela = 0 THEN pp.vl_pagto ELSE 0 END) > 0 THEN 'CotaUnica'
+              WHEN SUM(pp.vl_pagto) = 0 THEN 'EmAberto'
+              WHEN SUM(CASE WHEN p.no_parcela <> 0 THEN pp.vl_saldo ELSE 0 END) <= 0 THEN 'Parcelado'
+              ELSE 'PagoParcial'
+            END AS categoria
+          FROM ${S}.tb_dsod_guias g
+          JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+          JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+          WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          GROUP BY g.cd_guia
+        ) t GROUP BY categoria`, 50),
+    ])
+    const situacao = sitR.rows
+      .map(r => ({ situacao: String(r[0] ?? '').trim() || '—', qt: num(r[1]) }))
+      .sort((a, b) => b.qt - a.qt)
+    const fp = { cotaUnica: 0, parcelado: 0, pagoParcial: 0, emAberto: 0 }
+    for (const r of pagR.rows) {
+      const cat = String(r[0] ?? '').trim(), qt = num(r[1])
+      if (cat === 'CotaUnica') fp.cotaUnica = qt
+      else if (cat === 'Parcelado') fp.parcelado = qt
+      else if (cat === 'PagoParcial') fp.pagoParcial = qt
+      else if (cat === 'EmAberto') fp.emAberto = qt
+    }
+    const pagamento = [
+      { status: 'Cota única', qt: fp.cotaUnica, cor: '#1fa463' },
+      { status: 'Pago todas as parcelas', qt: fp.parcelado, cor: '#283e93' },
+      { status: 'Pago parcelado', qt: fp.pagoParcial, cor: '#e8962e' },
+      { status: 'Em aberto', qt: fp.emAberto, cor: '#d64545' },
+    ]
+    return { situacao, pagamento }
+  })
+}
