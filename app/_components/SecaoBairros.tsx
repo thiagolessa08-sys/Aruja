@@ -8,7 +8,7 @@ import { fmtAbrev } from '@/lib/fmt-grafico'
 // recebe ?ano&metrica&bairro e devolve { bairros: [{ nome, imoveis, valor }] }.
 // Métrica alterna o tipo de lançamento; clicar num bairro detalha por rua (ds_endereco).
 
-interface Bairro { nome: string; imoveis: number; valor: number }
+interface Bairro { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }
 type Metrica = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso' | 'naoLancados'
 const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'lancado', label: 'Lançado', cor: '#283e93' },
@@ -28,18 +28,22 @@ async function fetchJson(url: string, tries = 3): Promise<any | null> {
   return null
 }
 
-export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bairro', mostrarNaoLancados = false }: { endpoint: string; ano: number | ''; titulo?: string; mostrarNaoLancados?: boolean }) {
+export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bairro', mostrarNaoLancados = false, permitirDrillImovel = false }: { endpoint: string; ano: number | ''; titulo?: string; mostrarNaoLancados?: boolean; permitirDrillImovel?: boolean }) {
   const metricasVisiveis = mostrarNaoLancados ? METRICAS : METRICAS.filter(m => m.id !== 'naoLancados')
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [bairroSel, setBairroSel] = useState<string | null>(null)
+  const [ruaSel, setRuaSel] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
   const [ordenar, setOrdenar] = useState<'valor' | 'imoveis'>('valor')
   const [bairros, setBairros] = useState<Bairro[]>([])
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState(false)
   const [recarregar, setRecarregar] = useState(0)
+  const nivel: 'bairro' | 'rua' | 'imovel' = ruaSel ? 'imovel' : bairroSel ? 'rua' : 'bairro'
 
-  useEffect(() => { setBairroSel(null) }, [ano])
+  useEffect(() => { setBairroSel(null); setRuaSel(null) }, [ano])
+  function selecionarBairro(nome: string) { setBairroSel(nome); setRuaSel(null) }
+  function limparBairro() { setBairroSel(null); setRuaSel(null) }
 
   useEffect(() => {
     if (!ano) return
@@ -47,11 +51,12 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
     setCarregando(true); setErro(false)
     const p = new URLSearchParams({ ano: String(ano), metrica })
     if (bairroSel) p.set('bairro', bairroSel)
+    if (permitirDrillImovel && bairroSel && ruaSel) p.set('rua', ruaSel)
     fetchJson(`${endpoint}?${p}`)
       .then(d => { if (!vivo) return; if (d) setBairros(d.bairros ?? []); else setErro(true) })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
-  }, [endpoint, ano, metrica, bairroSel, recarregar])
+  }, [endpoint, ano, metrica, bairroSel, ruaSel, permitirDrillImovel, recarregar])
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const corM = METRICAS.find(m => m.id === metrica)!.cor
@@ -65,7 +70,9 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
     <div style={{ ...card, marginTop: 18, position: 'relative' }}>
       {carregando ? <LoadingOverlay label="Agregando por bairro…" /> : null}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{bairroSel ? `Ruas de ${bairroSel}` : titulo}</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
+          {nivel === 'imovel' ? `Imóveis · ${ruaSel}` : nivel === 'rua' ? `Ruas de ${bairroSel}` : titulo}
+        </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3, flexWrap: 'wrap' }}>
             {metricasVisiveis.map(m => (
@@ -82,9 +89,10 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder={bairroSel ? 'Buscar rua…' : 'Buscar bairro…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 130, fontFamily: 'inherit' }} />
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder={nivel === 'imovel' ? 'Buscar imóvel…' : nivel === 'rua' ? 'Buscar rua…' : 'Buscar bairro…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 130, fontFamily: 'inherit' }} />
           </div>
-          {bairroSel ? <button onClick={() => setBairroSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
+          {permitirDrillImovel && ruaSel ? <button onClick={() => setRuaSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar às ruas</button> : null}
+          {bairroSel ? <button onClick={limparBairro} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>‹ Voltar aos bairros</button> : null}
         </div>
       </div>
       {!lista.length ? (
@@ -98,11 +106,14 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
         <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
           {lista.map((b, i) => {
             const w = Math.max(2, 100 * Math.abs(b.valor) / mx)
-            const podeDrill = !bairroSel
+            const podeDrill = nivel === 'bairro' || (permitirDrillImovel && nivel === 'rua')
+            const detalheImovel = [b.inscricao ? `Insc. ${b.inscricao}` : '', b.numero ? `Nº ${b.numero}` : ''].filter(Boolean).join(' · ')
             return (
-              <div key={i} onClick={() => { if (podeDrill) setBairroSel(b.nome) }} style={{ cursor: podeDrill ? 'pointer' : 'default' }}>
+              <div key={i} onClick={() => { if (nivel === 'bairro') selecionarBairro(b.nome); else if (nivel === 'rua' && permitirDrillImovel) setRuaSel(b.nome) }} style={{ cursor: podeDrill ? 'pointer' : 'default' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
-                  <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {b.imoveis.toLocaleString('pt-BR')} im. ({metLabel})</span></span>
+                  <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {nivel === 'imovel' ? (detalheImovel || `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`) : `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`}</span>
+                  </span>
                   <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.valor)}</span>
                 </div>
                 <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
@@ -113,7 +124,9 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
           })}
         </div>
       )}
-      {!bairroSel ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div> : null}
+      {nivel === 'bairro' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div>
+        : nivel === 'rua' ? (permitirDrillImovel ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique numa rua para identificar os imóveis</div> : null)
+        : null}
     </div>
   )
 }

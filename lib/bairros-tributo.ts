@@ -3,14 +3,15 @@
 // Ponte imóvel: guia.cd_origem = imovel.cd_imovel_urbano (validada p/ TCA e ISSCC).
 import { agentQuery } from '@/lib/agent'
 import { cached, TTL_15MIN } from '@/lib/cache'
+import { detalhesImoveis } from '@/lib/iptu-agg'
 
 const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 
 export type MetricaBairro = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso' | 'naoLancados'
-export interface FiltrosBairroTrib { ano: number; bairro: string | null; metrica: MetricaBairro }
+export interface FiltrosBairroTrib { ano: number; bairro: string | null; rua?: string | null; metrica: MetricaBairro }
 export interface OpcoesBairro { codigos: string; isentoWhere: string; cacheKey: string }
-export interface BairroLinha { nome: string; imoveis: number; valor: number }
+export interface BairroLinha { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }
 
 function baseFrom() {
   return `FROM ${S}.tb_dsod_guias g
@@ -23,6 +24,7 @@ function baseFrom() {
 function whereBase(o: OpcoesBairro, f: FiltrosBairroTrib) {
   let w = `g.cd_tributo IN (${o.codigos}) AND g.no_exercicio_lancamento = ${f.ano} AND p.no_parcela <> 0`
   if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
+  if (f.rua) w += ` AND c.ds_endereco = '${f.rua.replace(/'/g, "''")}'`
   return w
 }
 
@@ -75,6 +77,7 @@ function query(o: OpcoesBairro, f: FiltrosBairroTrib, grupo: string): string {
         FROM ${S}.tb_dsod_imovel_urbano i
         JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep
         WHERE ${f.bairro ? `c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'` : '1=1'}
+          ${f.rua ? `AND c.ds_endereco = '${f.rua.replace(/'/g, "''")}'` : ''}
           AND i.cd_imovel_urbano NOT IN (
             SELECT DISTINCT g.cd_origem FROM ${S}.tb_dsod_guias g
             WHERE g.cd_tributo IN (${o.codigos}) AND g.no_exercicio_lancamento = ${f.ano}
@@ -89,14 +92,26 @@ function query(o: OpcoesBairro, f: FiltrosBairroTrib, grupo: string): string {
 }
 
 export async function bairrosTributo(o: OpcoesBairro, f: FiltrosBairroTrib): Promise<BairroLinha[]> {
-  const grupo = f.bairro ? 'c.ds_endereco' : 'c.nm_bairro' // nível rua quando um bairro está selecionado
-  const key = `${o.cacheKey}:${f.ano}:${f.metrica}:${f.bairro ?? ''}`
+  // nível: bairro → rua (bairro selecionado) → imóveis (rua selecionada, identificados por
+  // inscrição/número/proprietário, igual ao drill do IPTU/ITBI).
+  const grupo = f.rua ? 'i.cd_imovel_urbano' : f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
+  const key = `${o.cacheKey}:${f.ano}:${f.metrica}:${f.bairro ?? ''}:${f.rua ?? ''}`
   return cached(key, TTL_15MIN, async () => {
     const r = await agentQuery(query(o, f, grupo), 4000)
-    return r.rows
-      .map(row => ({ nome: String(row[0] ?? '').trim() || '(sem)', imoveis: num(row[1]), valor: num(row[2]) }))
-      .filter(x => x.nome && x.valor !== 0)
+    const base = r.rows
+      .map(row => ({ chave: String(row[0] ?? '').trim(), imoveis: num(row[1]), valor: num(row[2]) }))
+      .filter(x => x.chave && x.valor !== 0)
       .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))
+    if (!f.rua) return base.map(b => ({ nome: b.chave || '(sem)', imoveis: b.imoveis, valor: b.valor }))
+    const det = await detalhesImoveis(base.map(b => b.chave))
+    return base.map(b => {
+      const d = det.get(b.chave)
+      return {
+        nome: d?.proprietario || `Imóvel ${b.chave}`,
+        imoveis: b.imoveis, valor: b.valor,
+        cd: Number(b.chave) || undefined, inscricao: d?.inscricao || '', numero: d?.numero || '',
+      }
+    })
   })
 }
 
