@@ -122,9 +122,10 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
     try {
       const c = v.cards
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const filtroLabel = bairroFiltro ? (ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro) : null
       const dados: DadosRelatorio = {
         titulo: `TCA — Exercício ${v.anoRef}`,
-        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}${filtroLabel ? ` · situação e forma de pagamento filtrados por ${filtroLabel}` : ''}`,
         cards: [
           { rotulo: 'Lançado', valor: money(c.lancado.atual) },
           { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
@@ -138,7 +139,13 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
           `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
         ]),
-        arquivo: `TCA-${v.anoRef}`,
+        // Situação da guia e forma de pagamento — respeitam o bairro/rua selecionados no
+        // gráfico "TCA por Bairro" (ou todos os dados, se nada estiver selecionado).
+        tabelasExtras: res ? [
+          { titulo: `Imóveis por situação da guia${filtroLabel ? ` · ${filtroLabel}` : ''}`, colunas: ['Situação', 'Qtd. imóveis'], linhas: res.situacao.map(s => [s.situacao, s.qt]) },
+          { titulo: `Imóveis por status de pagamento${filtroLabel ? ` · ${filtroLabel}` : ''}`, colunas: ['Status', 'Qtd. imóveis'], linhas: res.pagamento.map(p => [p.status, p.qt]) },
+        ] : undefined,
+        arquivo: `TCA-${v.anoRef}${bairroFiltro ? '-' + bairroFiltro.replace(/\s+/g, '-') : ''}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
       await fn(dados)
