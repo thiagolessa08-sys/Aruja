@@ -279,7 +279,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           </div>
 
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
-          <SecaoBairros endpoint="/api/isscc/bairros" ano={ano} titulo="ISSCC por Bairro" />
+          <SecaoBairros endpoint="/api/isscc/bairros" ano={ano} titulo="ISSCC por Bairro" mostrarNaoLancados />
 
           {/* Vínculos mobiliários e imobiliários (agregado) */}
           <div style={{ ...card, marginTop: 18 }}>

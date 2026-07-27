@@ -7,7 +7,7 @@ import { cached, TTL_15MIN } from '@/lib/cache'
 const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 
-export type MetricaBairro = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso'
+export type MetricaBairro = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso' | 'naoLancados'
 export interface FiltrosBairroTrib { ano: number; bairro: string | null; metrica: MetricaBairro }
 export interface OpcoesBairro { codigos: string; isentoWhere: string; cacheKey: string }
 export interface BairroLinha { nome: string; imoveis: number; valor: number }
@@ -66,6 +66,20 @@ function query(o: OpcoesBairro, f: FiltrosBairroTrib, grupo: string): string {
           AND pm.cd_tipo_movimento IN (0,1,2,3,12,11,14,20) AND pm.cd_tipo_lancamento IN (4,7,0,10,1)
         GROUP BY ${grupo}, g.cd_origem, p.dt_vencimento HAVING SUM(pm.vl_movimento * pm.no_sinal) > 1
       ) t GROUP BY k`
+    case 'naoLancados':
+      // Complemento de "Lançado": imóveis do bairro que NÃO têm nenhuma guia válida deste
+      // tributo no exercício. Não passa pela guia (é o oposto) — parte direto do cadastro
+      // de imóveis e exclui quem já tem lançamento (mesmo critério do caso "lancado" acima:
+      // fora de Recalculo/Validação), então os dois conjuntos são complementares.
+      return `SELECT ${grupo} k, COUNT(*) im, COUNT(*) vl
+        FROM ${S}.tb_dsod_imovel_urbano i
+        JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep
+        WHERE ${f.bairro ? `c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'` : '1=1'}
+          AND i.cd_imovel_urbano NOT IN (
+            SELECT DISTINCT g.cd_origem FROM ${S}.tb_dsod_guias g
+            WHERE g.cd_tributo IN (${o.codigos}) AND g.no_exercicio_lancamento = ${f.ano}
+              AND g.ds_situacao NOT IN ('Recalculo','Validacao'))
+        GROUP BY ${grupo}`
     default: // lancado
       return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_origem) im, SUM(pm.vl_movimento) vl
         ${from}

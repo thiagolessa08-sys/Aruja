@@ -9,7 +9,7 @@ import { fmtAbrev } from '@/lib/fmt-grafico'
 // Métrica alterna o tipo de lançamento; clicar num bairro detalha por rua (ds_endereco).
 
 interface Bairro { nome: string; imoveis: number; valor: number }
-type Metrica = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso'
+type Metrica = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso' | 'naoLancados'
 const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'lancado', label: 'Lançado', cor: '#283e93' },
   { id: 'arrecadado', label: 'Arrecadado', cor: '#1fa463' },
@@ -17,6 +17,7 @@ const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'inadimplencia', label: 'Inadimplência', cor: '#d64545' },
   { id: 'isento', label: 'Isento', cor: '#8094d6' },
   { id: 'suspenso', label: 'Suspenso', cor: '#5b6477' },
+  { id: 'naoLancados', label: 'Não Lançados', cor: '#9098a8' },
 ]
 
 async function fetchJson(url: string, tries = 3): Promise<any | null> {
@@ -27,7 +28,8 @@ async function fetchJson(url: string, tries = 3): Promise<any | null> {
   return null
 }
 
-export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bairro' }: { endpoint: string; ano: number | ''; titulo?: string }) {
+export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bairro', mostrarNaoLancados = false }: { endpoint: string; ano: number | ''; titulo?: string; mostrarNaoLancados?: boolean }) {
+  const metricasVisiveis = mostrarNaoLancados ? METRICAS : METRICAS.filter(m => m.id !== 'naoLancados')
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [bairroSel, setBairroSel] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
@@ -66,7 +68,7 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
         <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{bairroSel ? `Ruas de ${bairroSel}` : titulo}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 3, background: '#f4f7fc', borderRadius: 20, padding: 3, flexWrap: 'wrap' }}>
-            {METRICAS.map(m => (
+            {metricasVisiveis.map(m => (
               <button key={m.id} onClick={() => setMetrica(m.id)} style={{ border: 'none', cursor: 'pointer', borderRadius: 16, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: metrica === m.id ? '#283e93' : 'transparent', color: metrica === m.id ? '#fff' : '#5b6477' }}>{m.label}</button>
             ))}
           </div>
