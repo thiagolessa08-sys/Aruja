@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
-import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio, type SecaoExtra } from '../_components/relatorioTributo'
+import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 export interface FiltrosItbiUI { ano: number | ''; natureza: string; mes?: number | '' }
@@ -210,53 +210,64 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
     try {
       const c = v.cards
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const trac = '—'
 
-      const secoesExtras: SecaoExtra[] = []
+      // Uma única tabela para tudo: cabeçalho genérico (Seção | Item | Valor 1..7), cada
+      // bloco de dados preenche o que faz sentido e deixa o resto em "—". Substitui as
+      // 4 tabelas separadas (evolução + 3 seções) por uma tabela só, empilhada.
+      const linhas: (string | number)[][] = []
 
-      // ITBI por Bairro — respeita métrica, bairro/rua/imóvel (drill), espólio/sem número
+      // 1) Evolução (sempre global — Ano/Mês da tela)
+      for (const e of v.evolucao) {
+        linhas.push([
+          'Evolução', e.previsto ? `${e.ano} *` : e.ano,
+          money(e.lancado), money(e.arrecadado), `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
+          money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
+        ])
+      }
+
+      // 2) ITBI por Bairro — respeita métrica, bairro/rua/imóvel (drill), espólio/sem número
       // e a busca ativa na lista, igual ao que está sendo exibido na tela.
       const metLabelBairro = METRICAS_BAIRRO_ITBI.find(m => m.id === metricaBairro)?.label ?? metricaBairro
       const filtroExtraBairro = [espolio ? 'espólio' : '', semNumero ? 'sem número' : ''].filter(Boolean).join(' + ')
       const nivelLabelBairro = nivelBairro === 'imovel' ? `Imóveis de ${ruaSel}` : nivelBairro === 'rua' ? `Ruas de ${bairroSel}` : 'Bairros'
+      const secaoBairro = `ITBI por Bairro · ${nivelLabelBairro} · ${metLabelBairro}${filtroExtraBairro ? ` · ${filtroExtraBairro}` : ''}`
       const qBairroRel = buscaBairro.trim().toLowerCase()
       const bairrosFiltradosRel = qBairroRel ? bairros.filter(b => b.nome.toLowerCase().includes(qBairroRel)) : bairros
       const listaBairroRel = [...bairrosFiltradosRel].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
-      secoesExtras.push({
-        titulo: `ITBI por Bairro · ${nivelLabelBairro} · métrica: ${metLabelBairro}${filtroExtraBairro ? ` · ${filtroExtraBairro}` : ''}`,
-        colunas: nivelBairro === 'imovel' ? ['Imóvel', 'Inscrição', 'Número', metLabelBairro] : ['Nome', 'Qtd. imóveis', metLabelBairro],
-        linhas: listaBairroRel.map(b => nivelBairro === 'imovel'
-          ? [b.nome, b.inscricao || '—', b.numero || '—', money(b.valor)]
-          : [b.nome, b.imoveis, money(b.valor)]),
-      })
+      for (const b of listaBairroRel) {
+        linhas.push(nivelBairro === 'imovel'
+          ? [secaoBairro, b.nome, `Insc. ${b.inscricao || trac}`, `Nº ${b.numero || trac}`, money(b.valor), trac, trac, trac, trac]
+          : [secaoBairro, b.nome, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, money(b.valor), trac, trac, trac, trac, trac])
+      }
 
-      // Imóveis mais transmitidos — respeita a busca ativa na lista (senão, ranking completo).
+      // 3) Imóveis mais transmitidos — respeita a busca ativa (senão, ranking completo).
       if (ranking) {
         const qRankRel = buscaRanking.trim().toLowerCase()
         const itensRankRel = qRankRel ? ranking.itens.filter(it => it.inscricao.toLowerCase().includes(qRankRel) || it.endereco.toLowerCase().includes(qRankRel)) : ranking.itens
-        secoesExtras.push({
-          titulo: `Imóveis mais transmitidos${ano ? ` · ${ano}` : ''}`,
-          colunas: ['#', 'Inscrição', 'Endereço', 'Qtd. transmissões'],
-          linhas: itensRankRel.map((it, i) => [i + 1, it.inscricao || `Imóvel ${it.cd}`, it.endereco || '—', it.qt]),
+        itensRankRel.forEach((it, i) => {
+          linhas.push([`Imóveis mais transmitidos${ano ? ` · ${ano}` : ''}`, `${i + 1}. ${it.inscricao || `Imóvel ${it.cd}`}`, it.endereco || trac, `${it.qt}×`, trac, trac, trac, trac, trac])
         })
       }
 
-      // Consultar Imóvel — só se houver um imóvel aberto na tela.
+      // 4) Consultar Imóvel — só se houver um imóvel aberto na tela.
       if (imovel) {
         const ind = imovel.indicadores
-        secoesExtras.push({
-          titulo: `Consultar Imóvel · ${imovel.inscricao || `Imóvel ${imovel.cd}`} — ${imovel.endereco}${imovel.proprietario ? ` · ${imovel.proprietario}` : ''}`,
-          cards: [
-            { rotulo: 'Transmissões', valor: fmtInt(ind.qtTransmissoes) },
-            { rotulo: 'Valorização venal', valor: (ind.valorizacao >= 0 ? '+' : '') + ind.valorizacao.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + '%' },
-            { rotulo: 'Intervalo médio', valor: ind.intervaloMedioAnos ? ind.intervaloMedioAnos.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' a' : '—' },
-            { rotulo: 'Imposto total', valor: money(ind.impostoTotal) },
-          ],
-          colunas: ['Código ITBI', 'Data', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto'],
-          linhas: imovel.transmissoes.map(t => [
-            t.cdItbi || '—', t.data ? t.data.split('-').reverse().join('/') : '—', t.natureza || '—',
-            t.valorTransacao ? money(t.valorTransacao) : '—', t.valorVenal ? money(t.valorVenal) : '—', t.imposto ? money(t.imposto) : '—',
-          ]),
-        })
+        const secaoImovel = `Consultar Imóvel · ${imovel.inscricao || `Imóvel ${imovel.cd}`} — ${imovel.endereco}${imovel.proprietario ? ` · ${imovel.proprietario}` : ''}`
+        linhas.push([
+          secaoImovel, 'Indicadores',
+          `Transmissões: ${fmtInt(ind.qtTransmissoes)}`,
+          `Valorização venal: ${(ind.valorizacao >= 0 ? '+' : '') + ind.valorizacao.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`,
+          `Intervalo médio: ${ind.intervaloMedioAnos ? ind.intervaloMedioAnos.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' a' : trac}`,
+          `Imposto total: ${money(ind.impostoTotal)}`, trac, trac, trac,
+        ])
+        for (const t of imovel.transmissoes) {
+          linhas.push([
+            secaoImovel, `ITBI ${t.cdItbi || trac}`,
+            t.data ? t.data.split('-').reverse().join('/') : trac, t.natureza || trac,
+            t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, trac, trac,
+          ])
+        }
       }
 
       const dados: DadosRelatorio = {
@@ -270,12 +281,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           { rotulo: 'Isento', valor: money(c.isento.atual) },
           { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
         ],
-        colunas: ['Exercício', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso'],
-        linhas: v.evolucao.map(e => [
-          e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
-          `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
-        ]),
-        secoesExtras,
+        colunas: ['Seção', 'Item', 'Valor 1', 'Valor 2', 'Valor 3', 'Valor 4', 'Valor 5', 'Valor 6', 'Valor 7'],
+        linhas,
         arquivo: `ITBI-${v.anoRef}${bairroSel ? '-' + bairroSel.replace(/\s+/g, '-') : ''}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
