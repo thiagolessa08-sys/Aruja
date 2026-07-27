@@ -139,11 +139,18 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
           `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
         ]),
-        // Situação da guia e forma de pagamento — respeitam o bairro/rua selecionados no
-        // gráfico "TCA por Bairro" (ou todos os dados, se nada estiver selecionado).
+        // Situação da guia e forma de pagamento — extraídas juntas, numa única tabela (não
+        // duas separadas) — respeitam o bairro/rua selecionados no gráfico "TCA por Bairro"
+        // (ou todos os dados, se nada estiver selecionado).
         tabelasExtras: res ? [
-          { titulo: `Imóveis por situação da guia${filtroLabel ? ` · ${filtroLabel}` : ''}`, colunas: ['Situação', 'Qtd. imóveis'], linhas: res.situacao.map(s => [s.situacao, s.qt]) },
-          { titulo: `Imóveis por status de pagamento${filtroLabel ? ` · ${filtroLabel}` : ''}`, colunas: ['Status', 'Qtd. imóveis'], linhas: res.pagamento.map(p => [p.status, p.qt]) },
+          {
+            titulo: `Imóveis por situação da guia e status de pagamento${filtroLabel ? ` · ${filtroLabel}` : ''}`,
+            colunas: ['Tipo', 'Categoria', 'Qtd. imóveis'],
+            linhas: [
+              ...res.situacao.map(s => ['Situação da guia', s.situacao, s.qt]),
+              ...res.pagamento.map(p => ['Status de pagamento', p.status, p.qt]),
+            ],
+          },
         ] : undefined,
         arquivo: `TCA-${v.anoRef}${bairroFiltro ? '-' + bairroFiltro.replace(/\s+/g, '-') : ''}`,
       }
