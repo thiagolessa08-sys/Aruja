@@ -28,7 +28,7 @@ async function fetchJson(url: string, tries = 3): Promise<any | null> {
   return null
 }
 
-export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bairro', mostrarNaoLancados = false, permitirDrillImovel = false }: { endpoint: string; ano: number | ''; titulo?: string; mostrarNaoLancados?: boolean; permitirDrillImovel?: boolean }) {
+export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bairro', mostrarNaoLancados = false, permitirDrillImovel = false, onSelecao }: { endpoint: string; ano: number | ''; titulo?: string; mostrarNaoLancados?: boolean; permitirDrillImovel?: boolean; onSelecao?: (bairro: string | null, rua: string | null) => void }) {
   const metricasVisiveis = mostrarNaoLancados ? METRICAS : METRICAS.filter(m => m.id !== 'naoLancados')
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [bairroSel, setBairroSel] = useState<string | null>(null)
@@ -42,6 +42,11 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
   const nivel: 'bairro' | 'rua' | 'imovel' = ruaSel ? 'imovel' : bairroSel ? 'rua' : 'bairro'
 
   useEffect(() => { setBairroSel(null); setRuaSel(null) }, [ano])
+  // Notifica o pai (ex.: PainelTca) da seleção atual, para interação com outros quadros
+  // da tela. Não inclui `onSelecao` nas deps de propósito: só deve disparar quando a
+  // seleção muda, não quando o pai recria a função.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { onSelecao?.(bairroSel, ruaSel) }, [bairroSel, ruaSel])
   function selecionarBairro(nome: string) { setBairroSel(nome); setRuaSel(null) }
   function limparBairro() { setBairroSel(null); setRuaSel(null) }
 

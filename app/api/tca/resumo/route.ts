@@ -6,8 +6,11 @@ export async function GET(req: NextRequest) {
   const session = getSession()
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   try {
-    const ano = Number(req.nextUrl.searchParams.get('ano')) || new Date().getFullYear()
-    return NextResponse.json(await resumoTca(ano))
+    const sp = req.nextUrl.searchParams
+    const ano = Number(sp.get('ano')) || new Date().getFullYear()
+    const bairro = sp.get('bairro') || null
+    const rua = bairro ? (sp.get('rua') || null) : null
+    return NextResponse.json(await resumoTca({ ano, bairro, rua }))
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

@@ -198,11 +198,26 @@ export interface ResumoTca {
   pagamento: { status: string; qt: number; cor: string }[]
 }
 
-export async function resumoTca(ano: number): Promise<ResumoTca> {
-  return cached(`tcaResumo:${ano}`, TTL_15MIN, async () => {
+export interface FiltrosResumoTca { ano: number; bairro?: string | null; rua?: string | null }
+
+export async function resumoTca(f: FiltrosResumoTca): Promise<ResumoTca> {
+  const { ano, bairro = null, rua = null } = f
+  return cached(`tcaResumo:${ano}:${bairro ?? ''}:${rua ?? ''}`, TTL_15MIN, async () => {
+    // Interação com "TCA por Bairro": quando um bairro (e opcionalmente uma rua) está
+    // selecionado no drill, os dois quadros abaixo passam a refletir só aquele recorte.
+    // Mês NÃO é aplicado aqui: as guias de TCA são geradas em lote único (a grande maioria
+    // em dezembro, conforme dt_geracao), então filtrar por mês esvaziaria os quadros para
+    // qualquer mês antes disso — mesma decisão já tomada para os cards equivalentes do IPTU.
+    const temFiltro = !!(bairro || rua)
+    const jb = temFiltro
+      ? `JOIN ${S}.tb_dsod_imovel_urbano iu ON g.cd_origem = iu.cd_imovel_urbano JOIN ${S}.tb_dsod_cep ce ON iu.cd_cep = ce.cd_cep`
+      : ''
+    let jbw = ''
+    if (bairro) jbw += ` AND ce.nm_bairro = '${bairro.replace(/'/g, "''")}'`
+    if (rua) jbw += ` AND ce.ds_endereco = '${rua.replace(/'/g, "''")}'`
     const [sitR, pagR] = await Promise.all([
-      agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g
-        WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} GROUP BY g.ds_situacao`, 20),
+      agentQuery(`SELECT g.ds_situacao, COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb}
+        WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano}${jbw} GROUP BY g.ds_situacao`, 20),
       // Forma de pagamento por guia — "Parcelado" = pagou todas as parcelas; "Pago parcial" = pagou parte.
       agentQuery(`SELECT categoria, COUNT(*) qt FROM (
           SELECT g.cd_guia,
@@ -213,9 +228,10 @@ export async function resumoTca(ano: number): Promise<ResumoTca> {
               ELSE 'PagoParcial'
             END AS categoria
           FROM ${S}.tb_dsod_guias g
+          ${jb}
           JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
           JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-          WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}
           GROUP BY g.cd_guia
         ) t GROUP BY categoria`, 50),
     ])

@@ -75,14 +75,21 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const [carregMes, setCarregMes] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [res, setRes] = useState<Resumo | null>(null)
+  // Bairro/rua selecionados no drill de "TCA por Bairro" — os quadros de situação/pagamento
+  // abaixo passam a refletir esse recorte (interação entre os gráficos).
+  const [bairroFiltro, setBairroFiltro] = useState<string | null>(null)
+  const [ruaFiltro, setRuaFiltro] = useState<string | null>(null)
 
   // Imóveis por situação da guia × status de pagamento
   useEffect(() => {
     if (!ano) return
     let vivo = true; setRes(null)
-    fetchJson(`/api/tca/resumo?ano=${ano}`).then(d => { if (vivo && d && !d.error) setRes(d) })
+    const p = new URLSearchParams({ ano: String(ano) })
+    if (bairroFiltro) p.set('bairro', bairroFiltro)
+    if (bairroFiltro && ruaFiltro) p.set('rua', ruaFiltro)
+    fetchJson(`/api/tca/resumo?${p}`).then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
-  }, [ano])
+  }, [ano, bairroFiltro, ruaFiltro])
 
   useEffect(() => {
     let vivo = true
@@ -275,11 +282,18 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           </div>
 
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
-          <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel />
+          <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel
+            onSelecao={(b, r) => { setBairroFiltro(b); setRuaFiltro(r) }} />
 
-          {/* Quadros situação × status de pagamento (igual ao IPTU) */}
+          {/* Quadros situação × status de pagamento (igual ao IPTU) — respeitam o bairro/rua
+              selecionados no gráfico "TCA por Bairro" acima */}
+          {bairroFiltro ? (
+            <div style={{ fontSize: 11, color: '#5b6477', marginTop: 14 }}>
+              Situação e forma de pagamento filtrados por: <b style={{ color: '#283e93' }}>{ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro}</b>
+            </div>
+          ) : null}
           {res ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 18 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: bairroFiltro ? 8 : 18 }}>
               {[
                 { titulo: 'Imóveis por situação da guia', itens: res.situacao.map(s => ({ rot: s.situacao, qt: s.qt, cor: '#283e93' })) },
                 { titulo: 'Imóveis por status de pagamento', itens: res.pagamento.map(p => ({ rot: p.status, qt: p.qt, cor: p.cor })) },
