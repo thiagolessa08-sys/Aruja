@@ -265,7 +265,7 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           </div>
 
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
-          <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados />
+          <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel />
 
           {/* Tabela de exercícios */}
           <div style={{ ...card, marginTop: 18, overflowX: 'auto' }}>

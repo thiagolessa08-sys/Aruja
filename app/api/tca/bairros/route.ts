@@ -11,9 +11,10 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams
     const ano = Number(sp.get('ano')) || new Date().getFullYear()
     const bairro = sp.get('bairro') || null
+    const rua = bairro ? (sp.get('rua') || null) : null
     const m = sp.get('metrica') as MetricaBairro
     const metrica = OK.includes(m) ? m : 'lancado'
-    return NextResponse.json({ bairros: await bairrosTributo(OPC_TCA, { ano, bairro, metrica }) })
+    return NextResponse.json({ bairros: await bairrosTributo(OPC_TCA, { ano, bairro, rua, metrica }) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
