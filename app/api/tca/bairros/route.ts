@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { bairrosTributo, OPC_TCA, type MetricaBairro } from '@/lib/bairros-tributo'
 
-const OK: MetricaBairro[] = ['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso']
+const OK: MetricaBairro[] = ['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso', 'naoLancados']
 
 export async function GET(req: NextRequest) {
   const session = getSession()
