@@ -687,7 +687,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr>
-                              {['Data', 'Natureza', 'Valor Venal', 'Imposto'].map((h, i) => (
+                              {['Data', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto'].map((h, i) => (
                                 <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 0 || i === 1 ? 'left' : 'right' }}>{h}</th>
                               ))}
                             </tr>
@@ -706,6 +706,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                                     </div>
                                   ) : null}
                                 </td>
+                                <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#1fa463', fontWeight: 600, padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{t.valorTransacao ? fmtAbrev(t.valorTransacao) : '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#283e93', fontWeight: 600, padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{t.valorVenal ? fmtAbrev(t.valorVenal) : '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#c0612a', fontWeight: 600, padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{t.imposto ? fmtAbrev(t.imposto) : '—'}</td>
                               </tr>
