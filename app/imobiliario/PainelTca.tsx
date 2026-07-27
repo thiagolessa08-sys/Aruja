@@ -60,6 +60,7 @@ function insightsTca(v: Visao): string[] {
   arr.push(`Arrecadado ${fmtAbrev(c.arrecadado.atual)} — ${p1(pctLanc(c.arrecadado.atual))} do lançado (${fmtPct(c.arrecadado.pct)} vs ${v.anoRef - 1}).`)
   arr.push(`Inadimplência ${fmtAbrev(c.inadimplencia.atual)} (${p1(pctLanc(c.inadimplencia.atual))} do lançado); em aberto ${fmtAbrev(c.emAberto.atual)}.`)
   if (c.isento.atual || c.suspenso.atual) arr.push(`Isento ${fmtAbrev(c.isento.atual)} e suspenso ${fmtAbrev(c.suspenso.atual)} no exercício.`)
+  arr.push('As análises de TCA consideram os dados a partir de 2025.')
   return arr
 }
 
