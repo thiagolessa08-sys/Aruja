@@ -135,23 +135,20 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
         ],
         colunas: ['Exercício', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso'],
-        linhas: v.evolucao.map(e => [
-          e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
-          `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
-        ]),
-        // Situação da guia e forma de pagamento — extraídas juntas, numa única tabela (não
-        // duas separadas) — respeitam o bairro/rua selecionados no gráfico "TCA por Bairro"
-        // (ou todos os dados, se nada estiver selecionado).
-        tabelasExtras: res ? [
-          {
-            titulo: `Imóveis por situação da guia e status de pagamento${filtroLabel ? ` · ${filtroLabel}` : ''}`,
-            colunas: ['Tipo', 'Categoria', 'Qtd. imóveis'],
-            linhas: [
-              ...res.situacao.map(s => ['Situação da guia', s.situacao, s.qt]),
-              ...res.pagamento.map(p => ['Status de pagamento', p.status, p.qt]),
-            ],
-          },
-        ] : undefined,
+        // Uma única tabela: linhas de exercício (todas as 8 colunas) seguidas das linhas de
+        // situação da guia e status de pagamento (só as 2 primeiras colunas preenchidas —
+        // as demais ficam em "—", já que não fazem sentido para essas linhas). Respeitam o
+        // bairro/rua selecionados no gráfico "TCA por Bairro" (ou tudo, se nada selecionado).
+        linhas: [
+          ...v.evolucao.map(e => [
+            e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
+            `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
+          ]),
+          ...(res ? [
+            ...res.situacao.map(s => [`${s.situacao} (situação)`, s.qt.toLocaleString('pt-BR'), '—', '—', '—', '—', '—', '—']),
+            ...res.pagamento.map(p => [`${p.status} (pagamento)`, p.qt.toLocaleString('pt-BR'), '—', '—', '—', '—', '—', '—']),
+          ] : []),
+        ],
         arquivo: `TCA-${v.anoRef}${bairroFiltro ? '-' + bairroFiltro.replace(/\s+/g, '-') : ''}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel

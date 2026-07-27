@@ -7,16 +7,12 @@ const AZUL_ALT: [number, number, number] = [244, 247, 252]
 
 export interface CardRel { rotulo: string; valor: string }
 export interface LinhaEvol { ano: number | string; lancado: string; arrecadado: string; arrecPct: string; emAberto: string; inadimplencia: string; isento?: string; suspenso?: string }
-// Tabela adicional opcional (ex.: situação da guia, forma de pagamento) — renderizada
-// depois da tabela de evolução, cada uma com seu próprio título e cabeçalho.
-export interface TabelaExtra { titulo: string; colunas: string[]; linhas: (string | number)[][] }
 export interface DadosRelatorio {
   titulo: string          // ex.: "IPTU — Exercício 2026"
   subtitulo?: string      // ex.: "Dados atualizados em 19/07/2026"
   cards: CardRel[]
   colunas: string[]       // cabeçalho da tabela de evolução
   linhas: (string | number)[][] // linhas da tabela
-  tabelasExtras?: TabelaExtra[]
   arquivo: string         // base do nome do arquivo (sem extensão)
 }
 
@@ -101,22 +97,6 @@ export async function baixarRelatorioPdf(d: DadosRelatorio) {
     theme: 'grid',
   })
 
-  // Tabelas extras (ex.: situação da guia, forma de pagamento) — cada uma com seu título.
-  for (const extra of d.tabelasExtras ?? []) {
-    let yExtra = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 22
-    if (yExtra > pageH - 100) { doc.addPage(); yExtra = cabecalho() }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor(31, 42, 68)
-    doc.text(extra.titulo, mx, yExtra)
-    autoTable(doc, {
-      head: [extra.colunas], body: extra.linhas.map(r => r.map(String)), startY: yExtra + 8, margin: { left: mx, right: mx },
-      styles: { fontSize: 9, cellPadding: 6, textColor: [55, 65, 95], lineColor: [225, 231, 243], lineWidth: 0.5 },
-      headStyles: { fillColor: AZUL, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9.5, halign: 'left' },
-      alternateRowStyles: { fillColor: AZUL_ALT },
-      columnStyles: { 0: { fontStyle: 'bold', textColor: [31, 42, 68] } },
-      theme: 'grid',
-    })
-  }
-
   const total = doc.getNumberOfPages()
   for (let p = 1; p <= total; p++) {
     doc.setPage(p)
@@ -166,33 +146,6 @@ export async function baixarRelatorioExcel(d: DadosRelatorio) {
     })
     row++
   })
-  // Tabelas extras (ex.: situação da guia, forma de pagamento) — cada uma com seu título.
-  for (const extra of d.tabelasExtras ?? []) {
-    row += 2
-    const ncolExtra = Math.max(extra.colunas.length, 2)
-    ws.mergeCells(row, 1, row, ncolExtra)
-    const tt = ws.getCell(row, 1); tt.value = extra.titulo; tt.font = { bold: true, size: 12, color: { argb: ESCURO } }
-    row++
-    const headExtra = ws.getRow(row)
-    extra.colunas.forEach((c, i) => {
-      const cell = headExtra.getCell(i + 1); cell.value = c
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZ } }
-      cell.alignment = { horizontal: i === 0 ? 'left' : 'right' }
-    })
-    row++
-    extra.linhas.forEach((r, ri) => {
-      const rr = ws.getRow(row)
-      r.forEach((val, i) => {
-        const cell = rr.getCell(i + 1); cell.value = val
-        cell.alignment = { horizontal: i === 0 ? 'left' : 'right' }
-        if (ri % 2) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT } }
-        if (i === 0) cell.font = { bold: true, color: { argb: ESCURO } }
-      })
-      row++
-    })
-  }
-
   ws.columns.forEach(col => { col.width = 18 })
   ws.getColumn(1).width = 26
 
