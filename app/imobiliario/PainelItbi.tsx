@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
-import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
+import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio, type SecaoExtra } from '../_components/relatorioTributo'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 export interface FiltrosItbiUI { ano: number | ''; natureza: string; mes?: number | '' }
@@ -210,6 +210,55 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
     try {
       const c = v.cards
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+      const secoesExtras: SecaoExtra[] = []
+
+      // ITBI por Bairro — respeita métrica, bairro/rua/imóvel (drill), espólio/sem número
+      // e a busca ativa na lista, igual ao que está sendo exibido na tela.
+      const metLabelBairro = METRICAS_BAIRRO_ITBI.find(m => m.id === metricaBairro)?.label ?? metricaBairro
+      const filtroExtraBairro = [espolio ? 'espólio' : '', semNumero ? 'sem número' : ''].filter(Boolean).join(' + ')
+      const nivelLabelBairro = nivelBairro === 'imovel' ? `Imóveis de ${ruaSel}` : nivelBairro === 'rua' ? `Ruas de ${bairroSel}` : 'Bairros'
+      const qBairroRel = buscaBairro.trim().toLowerCase()
+      const bairrosFiltradosRel = qBairroRel ? bairros.filter(b => b.nome.toLowerCase().includes(qBairroRel)) : bairros
+      const listaBairroRel = [...bairrosFiltradosRel].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
+      secoesExtras.push({
+        titulo: `ITBI por Bairro · ${nivelLabelBairro} · métrica: ${metLabelBairro}${filtroExtraBairro ? ` · ${filtroExtraBairro}` : ''}`,
+        colunas: nivelBairro === 'imovel' ? ['Imóvel', 'Inscrição', 'Número', metLabelBairro] : ['Nome', 'Qtd. imóveis', metLabelBairro],
+        linhas: listaBairroRel.map(b => nivelBairro === 'imovel'
+          ? [b.nome, b.inscricao || '—', b.numero || '—', money(b.valor)]
+          : [b.nome, b.imoveis, money(b.valor)]),
+      })
+
+      // Imóveis mais transmitidos — respeita a busca ativa na lista (senão, ranking completo).
+      if (ranking) {
+        const qRankRel = buscaRanking.trim().toLowerCase()
+        const itensRankRel = qRankRel ? ranking.itens.filter(it => it.inscricao.toLowerCase().includes(qRankRel) || it.endereco.toLowerCase().includes(qRankRel)) : ranking.itens
+        secoesExtras.push({
+          titulo: `Imóveis mais transmitidos${ano ? ` · ${ano}` : ''}`,
+          colunas: ['#', 'Inscrição', 'Endereço', 'Qtd. transmissões'],
+          linhas: itensRankRel.map((it, i) => [i + 1, it.inscricao || `Imóvel ${it.cd}`, it.endereco || '—', it.qt]),
+        })
+      }
+
+      // Consultar Imóvel — só se houver um imóvel aberto na tela.
+      if (imovel) {
+        const ind = imovel.indicadores
+        secoesExtras.push({
+          titulo: `Consultar Imóvel · ${imovel.inscricao || `Imóvel ${imovel.cd}`} — ${imovel.endereco}${imovel.proprietario ? ` · ${imovel.proprietario}` : ''}`,
+          cards: [
+            { rotulo: 'Transmissões', valor: fmtInt(ind.qtTransmissoes) },
+            { rotulo: 'Valorização venal', valor: (ind.valorizacao >= 0 ? '+' : '') + ind.valorizacao.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + '%' },
+            { rotulo: 'Intervalo médio', valor: ind.intervaloMedioAnos ? ind.intervaloMedioAnos.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' a' : '—' },
+            { rotulo: 'Imposto total', valor: money(ind.impostoTotal) },
+          ],
+          colunas: ['Código ITBI', 'Data', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto'],
+          linhas: imovel.transmissoes.map(t => [
+            t.cdItbi || '—', t.data ? t.data.split('-').reverse().join('/') : '—', t.natureza || '—',
+            t.valorTransacao ? money(t.valorTransacao) : '—', t.valorVenal ? money(t.valorVenal) : '—', t.imposto ? money(t.imposto) : '—',
+          ]),
+        })
+      }
+
       const dados: DadosRelatorio = {
         titulo: `ITBI — Exercício ${v.anoRef}`,
         subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}`,
@@ -226,7 +275,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
           `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
         ]),
-        arquivo: `ITBI-${v.anoRef}`,
+        secoesExtras,
+        arquivo: `ITBI-${v.anoRef}${bairroSel ? '-' + bairroSel.replace(/\s+/g, '-') : ''}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
       await fn(dados)

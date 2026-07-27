@@ -7,12 +7,22 @@ const AZUL_ALT: [number, number, number] = [244, 247, 252]
 
 export interface CardRel { rotulo: string; valor: string }
 export interface LinhaEvol { ano: number | string; lancado: string; arrecadado: string; arrecPct: string; emAberto: string; inadimplencia: string; isento?: string; suspenso?: string }
+// Seção adicional opcional (ex.: "ITBI por Bairro", ranking, detalhe de imóvel) — renderizada
+// depois da tabela de evolução, cada uma com seu próprio título, cards (opcional) e/ou
+// tabela (opcional). Usada quando os dados extras têm formato diferente da tabela principal.
+export interface SecaoExtra {
+  titulo: string
+  cards?: CardRel[]
+  colunas?: string[]
+  linhas?: (string | number)[][]
+}
 export interface DadosRelatorio {
   titulo: string          // ex.: "IPTU — Exercício 2026"
   subtitulo?: string      // ex.: "Dados atualizados em 19/07/2026"
   cards: CardRel[]
   colunas: string[]       // cabeçalho da tabela de evolução
   linhas: (string | number)[][] // linhas da tabela
+  secoesExtras?: SecaoExtra[]
   arquivo: string         // base do nome do arquivo (sem extensão)
 }
 
@@ -97,6 +107,46 @@ export async function baixarRelatorioPdf(d: DadosRelatorio) {
     theme: 'grid',
   })
 
+  // Seções extras (ex.: ITBI por Bairro, ranking, detalhe de imóvel) — cada uma com título
+  // próprio, cards opcionais (indicadores) e/ou tabela opcional. `yCursor` é atualizado
+  // manualmente (não só via lastAutoTable) para funcionar mesmo em seções só com cards.
+  let yCursor = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
+  for (const sec of d.secoesExtras ?? []) {
+    yCursor += 24
+    if (yCursor > pageH - 100) { doc.addPage(); yCursor = cabecalho() }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(31, 42, 68)
+    doc.text(sec.titulo, mx, yCursor); yCursor += 10
+
+    if (sec.cards?.length) {
+      const gap = 8, h = 40, porLinhaSec = Math.min(4, sec.cards.length)
+      const wSec = (pageW - 2 * mx - gap * (porLinhaSec - 1)) / porLinhaSec
+      for (let start = 0; start < sec.cards.length; start += porLinhaSec) {
+        const grupo = sec.cards.slice(start, start + porLinhaSec)
+        for (let k = 0; k < grupo.length; k++) {
+          const x = mx + k * (wSec + gap)
+          doc.setDrawColor(205, 213, 235); doc.setLineWidth(1); doc.setFillColor(247, 249, 253); doc.roundedRect(x, yCursor + 6, wSec, h, 6, 6, 'FD')
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(120, 128, 148)
+          doc.text(grupo[k].rotulo.toUpperCase(), x + 10, yCursor + 21)
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(AZUL[0], AZUL[1], AZUL[2])
+          doc.text(grupo[k].valor, x + 10, yCursor + 38)
+        }
+        yCursor += h + 12
+      }
+    }
+
+    if (sec.colunas?.length) {
+      autoTable(doc, {
+        head: [sec.colunas], body: (sec.linhas ?? []).map(r => r.map(String)), startY: yCursor + 4, margin: { left: mx, right: mx },
+        styles: { fontSize: 8.5, cellPadding: 5, textColor: [55, 65, 95], lineColor: [225, 231, 243], lineWidth: 0.5 },
+        headStyles: { fillColor: AZUL, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9, halign: 'left' },
+        alternateRowStyles: { fillColor: AZUL_ALT },
+        columnStyles: { 0: { fontStyle: 'bold', textColor: [31, 42, 68] } },
+        theme: 'grid',
+      })
+      yCursor = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
+    }
+  }
+
   const total = doc.getNumberOfPages()
   for (let p = 1; p <= total; p++) {
     doc.setPage(p)
@@ -146,6 +196,44 @@ export async function baixarRelatorioExcel(d: DadosRelatorio) {
     })
     row++
   })
+  // Seções extras (ex.: ITBI por Bairro, ranking, detalhe de imóvel) — cada uma com título,
+  // cards opcionais (indicadores) e/ou tabela opcional.
+  for (const sec of d.secoesExtras ?? []) {
+    row += 2
+    const ncolSec = Math.max(sec.colunas?.length ?? 0, 3)
+    ws.mergeCells(row, 1, row, ncolSec)
+    const st = ws.getCell(row, 1); st.value = sec.titulo; st.font = { bold: true, size: 12, color: { argb: ESCURO } }
+    row++
+    if (sec.cards?.length) {
+      for (const c of sec.cards) {
+        ws.getCell(row, 1).value = c.rotulo; ws.getCell(row, 1).font = { color: { argb: CINZA } }
+        const cv = ws.getCell(row, 2); cv.value = c.valor; cv.font = { bold: true, color: { argb: AZ } }
+        row++
+      }
+      row += 1
+    }
+    if (sec.colunas?.length) {
+      const headSec = ws.getRow(row)
+      sec.colunas.forEach((c, i) => {
+        const cell = headSec.getCell(i + 1); cell.value = c
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZ } }
+        cell.alignment = { horizontal: i === 0 ? 'left' : 'right' }
+      })
+      row++
+      ;(sec.linhas ?? []).forEach((r, ri) => {
+        const rr = ws.getRow(row)
+        r.forEach((val, i) => {
+          const cell = rr.getCell(i + 1); cell.value = val
+          cell.alignment = { horizontal: i === 0 ? 'left' : 'right' }
+          if (ri % 2) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT } }
+          if (i === 0) cell.font = { bold: true, color: { argb: ESCURO } }
+        })
+        row++
+      })
+    }
+  }
+
   ws.columns.forEach(col => { col.width = 18 })
   ws.getColumn(1).width = 26
 
