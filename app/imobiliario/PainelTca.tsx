@@ -75,21 +75,24 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const [carregMes, setCarregMes] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [res, setRes] = useState<Resumo | null>(null)
-  // Bairro/rua selecionados no drill de "TCA por Bairro" — os quadros de situação/pagamento
-  // abaixo passam a refletir esse recorte (interação entre os gráficos).
+  // Bairro/rua/imóvel selecionados no drill de "TCA por Bairro" — passam a filtrar tanto
+  // os quadros de situação/pagamento quanto o gráfico "Evolução da TCA" (cards + tabela +
+  // previsão), interação entre os gráficos.
   const [bairroFiltro, setBairroFiltro] = useState<string | null>(null)
   const [ruaFiltro, setRuaFiltro] = useState<string | null>(null)
+  const [imovelFiltro, setImovelFiltro] = useState<number | null>(null)
+  const filtroBairroQ = bairroFiltro ? `&bairro=${encodeURIComponent(bairroFiltro)}` : ''
+  const filtroRuaQ = bairroFiltro && ruaFiltro ? `&rua=${encodeURIComponent(ruaFiltro)}` : ''
+  const filtroImovelQ = imovelFiltro ? `&imovel=${imovelFiltro}` : ''
+  const filtroLabel = imovelFiltro ? `Imóvel ${imovelFiltro}${ruaFiltro ? ` — ${ruaFiltro}` : ''}` : bairroFiltro ? (ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro) : null
 
   // Imóveis por situação da guia × status de pagamento
   useEffect(() => {
     if (!ano) return
     let vivo = true; setRes(null)
-    const p = new URLSearchParams({ ano: String(ano) })
-    if (bairroFiltro) p.set('bairro', bairroFiltro)
-    if (bairroFiltro && ruaFiltro) p.set('rua', ruaFiltro)
-    fetchJson(`/api/tca/resumo?${p}`).then(d => { if (vivo && d && !d.error) setRes(d) })
+    fetchJson(`/api/tca/resumo?ano=${ano}${filtroBairroQ}${filtroRuaQ}${filtroImovelQ}`).then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
-  }, [ano, bairroFiltro, ruaFiltro])
+  }, [ano, filtroBairroQ, filtroRuaQ, filtroImovelQ])
 
   useEffect(() => {
     let vivo = true
@@ -97,11 +100,11 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
     const p = new URLSearchParams()
     if (ano) p.set('ano', String(ano))
     if (mes) p.set('mes', String(mes))
-    fetchJson(`/api/tca/visao?${p}`)
+    fetchJson(`/api/tca/visao?${p}${filtroBairroQ}${filtroRuaQ}${filtroImovelQ}`)
       .then(d => { if (!vivo) return; if (d) setV(d); else setErro(true) })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
-  }, [ano, mes, recarregar])
+  }, [ano, mes, filtroBairroQ, filtroRuaQ, filtroImovelQ, recarregar])
 
   // Drill por mês ao clicar num ano do gráfico
   useEffect(() => {
@@ -122,10 +125,9 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
     try {
       const c = v.cards
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      const filtroLabel = bairroFiltro ? (ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro) : null
       const dados: DadosRelatorio = {
-        titulo: `TCA — Exercício ${v.anoRef}`,
-        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}${filtroLabel ? ` · situação e forma de pagamento filtrados por ${filtroLabel}` : ''}`,
+        titulo: `TCA — Exercício ${v.anoRef}${filtroLabel ? ' · ' + filtroLabel : ''}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}${filtroLabel ? ` · filtrado por ${filtroLabel}` : ''}`,
         cards: [
           { rotulo: 'Lançado', valor: money(c.lancado.atual) },
           { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
@@ -231,7 +233,7 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
             <div style={{ ...card, minWidth: 0, position: 'relative' }}>
               {carregMes ? <LoadingOverlay label="Carregando meses…" /> : null}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução da TCA (5 anos)'}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução da TCA (5 anos)'}{filtroLabel ? ` · ${filtroLabel}` : ''}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
                     {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }, { label: 'Isento', cor: '#8094d6' }, { label: 'Suspenso', cor: '#5b6477' }].map(m => (
@@ -292,19 +294,20 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
             </div>
           </div>
 
-          {/* Análise por bairro/rua (todos os tipos de lançamento) */}
+          {/* Análise por bairro/rua/imóvel — a seleção interage com a Evolução da TCA (cards +
+              tabela + previsão, acima) e com os quadros de situação/pagamento (abaixo) */}
           <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel
-            onSelecao={(b, r) => { setBairroFiltro(b); setRuaFiltro(r) }} />
+            onSelecao={(b, r, im) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im) }} />
 
-          {/* Quadros situação × status de pagamento (igual ao IPTU) — respeitam o bairro/rua
-              selecionados no gráfico "TCA por Bairro" acima */}
-          {bairroFiltro ? (
+          {/* Quadros situação × status de pagamento (igual ao IPTU) — respeitam o bairro/rua/
+              imóvel selecionados no gráfico "TCA por Bairro" acima */}
+          {filtroLabel ? (
             <div style={{ fontSize: 11, color: '#5b6477', marginTop: 14 }}>
-              Situação e forma de pagamento filtrados por: <b style={{ color: '#283e93' }}>{ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro}</b>
+              Evolução, situação e forma de pagamento filtrados por: <b style={{ color: '#283e93' }}>{filtroLabel}</b>
             </div>
           ) : null}
           {res ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: bairroFiltro ? 8 : 18 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: filtroLabel ? 8 : 18 }}>
               {[
                 { titulo: 'Imóveis por situação da guia', itens: res.situacao.map(s => ({ rot: s.situacao, qt: s.qt, cor: '#283e93' })) },
                 { titulo: 'Imóveis por status de pagamento', itens: res.pagamento.map(p => ({ rot: p.status, qt: p.qt, cor: p.cor })) },

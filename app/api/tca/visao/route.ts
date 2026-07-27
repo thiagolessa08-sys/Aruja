@@ -28,10 +28,16 @@ export async function GET(req: NextRequest) {
     // aberto/inadimplência passam a ser YTD até o mês; isento/suspenso continuam anuais.
     const mesSel = Number(req.nextUrl.searchParams.get('mes')) || null
     const usaAteMes = !!mesSel
+    // Interação com "TCA por Bairro": bairro/rua/imóvel selecionados no drill também
+    // filtram a Evolução da TCA (cards + tabela + previsão).
+    const bairro = req.nextUrl.searchParams.get('bairro') || null
+    const rua = bairro ? (req.nextUrl.searchParams.get('rua') || null) : null
+    const imovel = Number(req.nextUrl.searchParams.get('imovel')) || null
+    const filtro = { bairro, rua, imovel }
     const [buckets, ateMes, qtdImoveis, dataAtualizacao] = await Promise.all([
-      bucketsTca(),
-      usaAteMes ? bucketsTcaAteMes(mesSel!) : Promise.resolve(null),
-      qtdImoveisTca(),
+      bucketsTca(filtro),
+      usaAteMes ? bucketsTcaAteMes(mesSel!, filtro) : Promise.resolve(null),
+      qtdImoveisTca(filtro),
       dataAtualizacaoTca(),
     ])
 
