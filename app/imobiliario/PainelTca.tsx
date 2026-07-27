@@ -299,39 +299,39 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel
             onSelecao={(b, r) => { setBairroFiltro(b); setRuaFiltro(r) }} />
 
-          {/* Quadros situação × status de pagamento (igual ao IPTU) — respeitam o bairro/rua
-              selecionados no gráfico "TCA por Bairro" acima */}
-          {bairroFiltro ? (
-            <div style={{ fontSize: 11, color: '#5b6477', marginTop: 14 }}>
-              Situação e forma de pagamento filtrados por: <b style={{ color: '#283e93' }}>{ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro}</b>
-            </div>
-          ) : null}
+          {/* Situação da guia + status de pagamento — juntas numa única tabela (não dois
+              quadros separados), respeitando o bairro/rua selecionados em "TCA por Bairro" */}
           {res ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: bairroFiltro ? 8 : 18 }}>
-              {[
-                { titulo: 'Imóveis por situação da guia', itens: res.situacao.map(s => ({ rot: s.situacao, qt: s.qt, cor: '#283e93' })) },
-                { titulo: 'Imóveis por status de pagamento', itens: res.pagamento.map(p => ({ rot: p.status, qt: p.qt, cor: p.cor })) },
-              ].map(bloco => {
-                const mx = Math.max(1, ...bloco.itens.map(i => i.qt))
-                return (
-                  <div key={bloco.titulo} style={card}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{bloco.titulo}</span>
-                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
-                      {bloco.itens.map((it, i) => (
-                        <div key={i}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                            <span style={{ color: '#3a4256', fontWeight: 600 }}>{it.rot}</span>
-                            <span style={{ color: it.cor, fontWeight: 700 }}>{it.qt.toLocaleString('pt-BR')}</span>
-                          </div>
-                          <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${Math.max(3, 100 * it.qt / mx).toFixed(1)}%`, borderRadius: 8, background: it.cor }} />
-                          </div>
-                        </div>
+            <div style={{ ...card, marginTop: 18, overflowX: 'auto' }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
+                Imóveis por situação da guia e status de pagamento{bairroFiltro ? ` · ${ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro}` : ''}
+              </span>
+              <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                  <thead>
+                    <tr>
+                      {['Tipo', 'Categoria', 'Qtd. imóveis'].map((h, i) => (
+                        <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '10px 14px', textAlign: i === 2 ? 'right' : 'left', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
                       ))}
-                    </div>
-                  </div>
-                )
-              })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ...res.situacao.map(s => ({ tipo: 'Situação da guia', cat: s.situacao, qt: s.qt })),
+                      ...res.pagamento.map(p => ({ tipo: 'Status de pagamento', cat: p.status, qt: p.qt })),
+                    ].map((r, ri) => {
+                      const bg = ri % 2 === 0 ? '#fff' : '#f7f9fd'
+                      return (
+                        <tr key={ri}>
+                          <td style={{ background: bg, color: '#9098a8', fontSize: 12, padding: '9px 14px', borderBottom: '1px solid #eef1f7' }}>{r.tipo}</td>
+                          <td style={{ background: bg, color: '#1f2a44', fontWeight: 600, fontSize: 12, padding: '9px 14px', borderBottom: '1px solid #eef1f7' }}>{r.cat}</td>
+                          <td style={{ background: bg, color: '#283e93', fontWeight: 700, fontSize: 12, padding: '9px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{r.qt.toLocaleString('pt-BR')}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 
