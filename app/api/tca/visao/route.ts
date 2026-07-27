@@ -3,6 +3,9 @@ import { getSession } from '@/lib/auth'
 import { bucketsTca, bucketsTcaAteMes, qtdImoveisTca, dataAtualizacaoTca, type BucketsTcaAno } from '@/lib/tca-engine'
 
 const ANO_MIN = 2018
+// Anos removidos da evolução/tabela/relatório de TCA (a pedido — ficam fora do gráfico,
+// da tabela "Exercícios de TCA" e do relatório PDF/Excel, e também da base da projeção).
+const ANOS_OCULTOS = [2022, 2023, 2024]
 
 function tendencia(pts: { x: number; y: number }[]) {
   const n = pts.length
@@ -64,7 +67,7 @@ export async function GET(req: NextRequest) {
       inadPct: lanc ? (inad / lanc) * 100 : 0,
     })
     const histAnos: number[] = []
-    for (let a = anoMax - 4; a <= anoMax; a++) histAnos.push(a)
+    for (let a = anoMax - 4; a <= anoMax; a++) if (!ANOS_OCULTOS.includes(a)) histAnos.push(a)
     const hist = histAnos.map(a => {
       const b = buckets.get(a) ?? zero
       return { ano: a, lancado: lancMes(a), arrecadado: arrecMes(a), emAberto: abertoMes(a), inadimplencia: inadMes(a), isento: b.isento, suspenso: b.suspenso }
