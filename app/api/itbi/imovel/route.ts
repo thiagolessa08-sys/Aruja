@@ -54,7 +54,8 @@ async function detalhe(id: number) {
     agentQuery(`SELECT it.cd_itbi, DATEFORMAT(it.dt_transacao,'yyyy-mm-dd') dt, it.ds_natureza_transacao nat,
         it.vl_venal, it.pc_aliquota, it.ds_situacao,
         COALESCE(NULLIF(it.nm_transmitente,''), tr.nm_rsocial) transmitente, adq.nm_rsocial adquirente,
-        it.cd_contr_transmitente, it.cd_contr_adquirente, tr.ic_pessoa transm_pes, adq.ic_pessoa adq_pes
+        it.cd_contr_transmitente, it.cd_contr_adquirente, tr.ic_pessoa transm_pes, adq.ic_pessoa adq_pes,
+        it.vl_aquisicao_original valor_transacao
       FROM ${S}.tb_dsod_itbi it
       JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = it.cd_itbi
       LEFT JOIN ${S}.tb_dsod_contribuinte tr ON tr.cd_contr = it.cd_contr_transmitente
@@ -94,6 +95,7 @@ async function detalhe(id: number) {
       data: String(r[1] ?? '').slice(0, 10),
       natureza: String(r[2] ?? '').trim(),
       valorVenal: num(r[3]),
+      valorTransacao: num(r[12]),
       aliquota: num(r[4]),
       situacao: String(r[5] ?? '').trim(),
       transmitente: String(r[6] ?? '').trim(),

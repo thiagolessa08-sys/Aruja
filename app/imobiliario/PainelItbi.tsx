@@ -66,7 +66,7 @@ interface RankingImovel {
 }
 interface MatchImovel { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string; noPeriodo?: boolean }
 interface Transmissao {
-  cdItbi: number; data: string; natureza: string; valorVenal: number; aliquota: number; situacao: string
+  cdItbi: number; data: string; natureza: string; valorVenal: number; valorTransacao: number; aliquota: number; situacao: string
   transmitente: string; adquirente: string; imposto: number
   transmitenteEhProprietario: boolean; adquirenteEhProprietario: boolean
   transmitentePJ: boolean; adquirentePJ: boolean; transmitenteMobiliario: boolean; adquirenteMobiliario: boolean
@@ -647,17 +647,18 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         )
                       })()}
                     </div>
-                    {/* Comparativo de lançamentos no mesmo imóvel (valor venal × imposto por transmissão) */}
+                    {/* Comparativo de lançamentos no mesmo imóvel (valor da transação × valor venal × imposto por transmissão) */}
                     {imovel.transmissoes.length > 1 ? (() => {
                       const dados = [...imovel.transmissoes].reverse().map((t, i) => ({
                         rot: t.data ? t.data.slice(2).split('-').reverse().join('/') : String(i + 1),
-                        venal: t.valorVenal, imposto: t.imposto,
+                        transacao: t.valorTransacao, venal: t.valorVenal, imposto: t.imposto,
                       }))
                       return (
                         <div style={{ marginTop: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
                             <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Comparativo de lançamentos no imóvel</span>
                             <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#5b6477' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: '#1fa463' }} />Valor da transação</span>
                               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: '#283e93' }} />Valor venal</span>
                               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: '#c0612a' }} />Imposto</span>
                             </div>
@@ -670,8 +671,9 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                                 <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
                                   formatter={(val, name) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
                                   contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
-                                <Bar dataKey="venal" name="Valor venal" fill="#283e93" radius={[3, 3, 0, 0]} maxBarSize={26} />
-                                <Bar dataKey="imposto" name="Imposto" fill="#c0612a" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                                <Bar dataKey="transacao" name="Valor da transação" fill="#1fa463" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                                <Bar dataKey="venal" name="Valor venal" fill="#283e93" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                                <Bar dataKey="imposto" name="Imposto" fill="#c0612a" radius={[3, 3, 0, 0]} maxBarSize={20} />
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
