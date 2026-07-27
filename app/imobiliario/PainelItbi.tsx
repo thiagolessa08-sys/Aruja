@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
@@ -21,16 +21,19 @@ async function fetchJson(url: string, tries = 3): Promise<any | null> {
 }
 
 // Dispara true quando o elemento entra na viewport (lazy-load do gráfico ITBI por Bairro).
+// Usa callback ref (em vez de useRef) porque a div só é montada depois que `v` carrega
+// (a seção fica dentro de `{v ? ... : null}`) — um useRef perderia esse momento, já que o
+// efeito que liga o IntersectionObserver só reexecuta quando a dependência `visible` muda.
 function useOnScreen<T extends Element>() {
-  const ref = useRef<T | null>(null)
+  const [el, setEl] = useState<T | null>(null)
   const [visible, setVisible] = useState(false)
+  const ref = useCallback((node: T | null) => setEl(node), [])
   useEffect(() => {
-    const el = ref.current
     if (!el || visible) return
     const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect() } }, { rootMargin: '250px' })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [visible])
+  }, [el, visible])
   return { ref, visible }
 }
 
