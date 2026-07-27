@@ -73,6 +73,7 @@ interface Transmissao {
 }
 interface DetalheImovel {
   cd: number; inscricao: string; numero: string; endereco: string; cep: string; proprietario: string; cpfCnpj: string; proprietarioPJ: boolean
+  espolio: boolean; possuidor: string
   indicadores: { qtTransmissoes: number; valorizacao: number; intervaloMedioAnos: number; impostoTotal: number; venalUltimo: number; venalPrimeiro: number }
   comparativo: { coberturaTransmitente: number; coberturaAdquirente: number; ultimaAdquirenteEhProprietario: boolean; ultimaTransmitenteEhProprietario: boolean }
   mobiliario: { temVinculo: boolean; qtdEmpresas: number; empresaEhProprietario: boolean; transmissoesComPJ: number }
@@ -602,6 +603,12 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1f2a44' }}>{imovel.inscricao || `Imóvel ${imovel.cd}`}</div>
                         <div style={{ fontSize: 11, color: '#5b6477' }}>{imovel.endereco}</div>
                         {imovel.proprietario ? <div style={{ fontSize: 11, color: '#9098a8' }}>Proprietário: {imovel.proprietario}</div> : null}
+                        {imovel.espolio ? (
+                          <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 9.5, fontWeight: 700, color: '#e8962e', background: '#fdf1e2', borderRadius: 6, padding: '1px 7px' }}>ESPÓLIO</span>
+                            <span style={{ fontSize: 11, color: '#9098a8' }}>Possuidor responsável: {imovel.possuidor || 'não informado'}</span>
+                          </div>
+                        ) : null}
                       </div>
                       <button onClick={() => { setImovel(null); setBusca('') }} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, flex: 'none' }}>Fechar</button>
                     </div>

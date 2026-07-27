@@ -45,10 +45,14 @@ async function buscar(q: string, tipo: string, ano: number | null, mes: number |
 // Itens 2 (histórico de lançamentos) e 3 (histórico de valor venal).
 async function detalhe(id: number) {
   const [infoR, itbisR, impR, mobR] = await Promise.all([
-    agentQuery(`SELECT i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, c.ds_endereco, c.nm_bairro, c.no_cep, cp.nm_rsocial, cp.no_cpf_cnpj, i.cd_contr_proprietario, cp.ic_pessoa
+    // cd_contr_posseiro = possuidor de fato do imóvel — quando o proprietário é um espólio,
+    // costuma ser o herdeiro/responsável que efetivamente ocupa/administra o imóvel.
+    agentQuery(`SELECT i.cd_imovel_urbano, i.no_inscricao_imovel, i.no_imovel, c.ds_endereco, c.nm_bairro, c.no_cep, cp.nm_rsocial, cp.no_cpf_cnpj, i.cd_contr_proprietario, cp.ic_pessoa,
+        i.cd_contr_posseiro, poss.nm_rsocial posseiro_nome
       FROM ${S}.tb_dsod_imovel_urbano i
       LEFT JOIN ${S}.tb_dsod_cep c ON i.cd_cep = c.cd_cep
       LEFT JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario
+      LEFT JOIN ${S}.tb_dsod_contribuinte poss ON poss.cd_contr = i.cd_contr_posseiro
       WHERE i.cd_imovel_urbano = ${id}`, 1),
     // Cada ITBI do imóvel: data, natureza, valor venal, partes (transmitente/adquirente) + PJ. Itens 4 e 5.
     agentQuery(`SELECT it.cd_itbi, DATEFORMAT(it.dt_transacao,'yyyy-mm-dd') dt, it.ds_natureza_transacao nat,
@@ -80,6 +84,10 @@ async function detalhe(id: number) {
   const numero = String(info[2] ?? '').trim()
   const propCd = num(info[8])
   const propPJ = String(info[9] ?? '').trim().toUpperCase() === 'J'
+  const propNome = String(info[6] ?? '').trim()
+  const espolio = /ESP.LIO/i.test(propNome)
+  const posseiroCd = num(info[10])
+  const possuidor = posseiroCd > 0 ? String(info[11] ?? '').trim() : ''
   const impMap = new Map<number, number>()
   for (const r of impR.rows) impMap.set(num(r[0]), num(r[1]))
   const mobSet = new Set<number>()
@@ -136,6 +144,10 @@ async function detalhe(id: number) {
     endereco: `${String(info[3] ?? '').trim()}${numero ? ', ' + numero : ''}${String(info[4] ?? '').trim() ? ' — ' + String(info[4]).trim() : ''}`,
     cep: String(info[5] ?? '').trim(), proprietario: String(info[6] ?? '').trim(), cpfCnpj: String(info[7] ?? '').trim(),
     proprietarioPJ: propPJ,
+    // proprietário é espólio → possuidor (cd_contr_posseiro) costuma ser o herdeiro/
+    // responsável que efetivamente ocupa/administra o imóvel enquanto a partilha não sai.
+    espolio,
+    possuidor,
     indicadores: {
       qtTransmissoes: transmissoes.length,
       valorizacao,
