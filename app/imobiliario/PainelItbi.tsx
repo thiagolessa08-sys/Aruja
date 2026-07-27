@@ -127,6 +127,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
 
   // Item 6 — ranking de imóveis por nº de transmissões
   const [ranking, setRanking] = useState<RankingImovel | null>(null)
+  const [buscaRanking, setBuscaRanking] = useState('') // filtra a lista de "Imóveis mais transmitidos"
   // Itens 2/3 — busca e detalhe de imóvel (histórico de transmissões / valor venal)
   const [busca, setBusca] = useState('')
   const [matches, setMatches] = useState<MatchImovel[]>([])
@@ -517,7 +518,18 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
 
             {/* Item 6 — Ranking de imóveis por nº de transmissões */}
             <div style={card}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis mais transmitidos{ano ? ` · ${ano}` : ''}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis mais transmitidos{ano ? ` · ${ano}` : ''}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                  <input value={buscaRanking} onChange={e => setBuscaRanking(e.target.value)} placeholder="Buscar inscrição ou endereço…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 160, fontFamily: 'inherit' }} />
+                  {buscaRanking ? (
+                    <button onClick={() => setBuscaRanking('')} title="Limpar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', display: 'flex', alignItems: 'center', padding: 0, flex: 'none' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
               <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de ITBI por imóvel{mes ? ` até ${MESES_LONGO[Number(mes) - 1]}` : ''} · clique para ver o histórico</div>
               {ranking ? (() => {
                 const fx = ranking.faixas
@@ -529,6 +541,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                   { l: '3 a 5', n: fx.tresCinco, c: '#3f5bb5' },
                   { l: '6 ou mais', n: fx.seisMais, c: '#283e93' },
                 ]
+                const q = buscaRanking.trim().toLowerCase()
+                const itensFiltrados = q ? ranking.itens.filter(it => it.inscricao.toLowerCase().includes(q) || it.endereco.toLowerCase().includes(q)) : ranking.itens
                 const mx = Math.max(1, ...ranking.itens.map(i => i.qt))
                 return (
                   <>
@@ -547,9 +561,11 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         </div>
                       ))}
                     </div>
-                    {/* Top imóveis */}
+                    {/* Top imóveis (respeita a busca por inscrição/endereço) */}
                     <div style={{ marginTop: 14, maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
-                      {ranking.itens.map((it, i) => (
+                      {!itensFiltrados.length ? (
+                        <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Nenhum imóvel encontrado para a busca.</div>
+                      ) : itensFiltrados.map((it, i) => (
                         <div key={it.cd} onClick={() => abrirImovel(it.cd)} style={{ cursor: 'pointer' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
                             <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
