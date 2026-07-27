@@ -700,14 +700,15 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr>
-                              {['Data', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto'].map((h, i) => (
-                                <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 0 || i === 1 ? 'left' : 'right' }}>{h}</th>
+                              {['Código ITBI', 'Data', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto'].map((h, i) => (
+                                <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 0 || i === 1 || i === 2 ? 'left' : 'right' }}>{h}</th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
                             {imovel.transmissoes.map((t, ti) => (
                               <tr key={t.cdItbi}>
+                                <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#9098a8', padding: '7px 10px', borderBottom: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{t.cdItbi || '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#1f2a44', padding: '7px 10px', borderBottom: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{t.data ? t.data.split('-').reverse().join('/') : '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 10.5, color: '#5b6477', padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>
                                   <div>{t.natureza || '—'}</div>
