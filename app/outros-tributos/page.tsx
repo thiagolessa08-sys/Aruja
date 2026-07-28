@@ -17,9 +17,10 @@ export default function OutrosTributosPage() {
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
   }, [])
 
-  function handleAnos(lista: number[]) {
+  function handleAnos(recebidos: number[]) {
+    const lista = [...recebidos].sort((a, b) => b - a) // mais recente primeiro
     setAnos(prev => (prev.length === lista.length && prev.every((v, i) => v === lista[i]) ? prev : lista))
-    setAno(prev => (prev && lista.includes(prev)) ? prev : (lista[lista.length - 1] ?? ''))
+    setAno(prev => (prev && lista.includes(prev)) ? prev : (lista[0] ?? ''))
   }
 
   const chevron = (cor: string) => `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${cor}' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`
