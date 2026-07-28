@@ -29,6 +29,7 @@ interface EmpresaDet {
   dataInicioAtividade: string; dataEncAtividade: string; endereco: string; bairro: string; cep: string
   tipoEmpresa: string; mei: boolean; simplesNacional: boolean | null
   dtOpcaoSimples: string; dtExclusaoSimples: string; dtOpcaoMei: string; dtExclusaoMei: string
+  emiteNota: boolean; dtAutorizacaoNf: string
 }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
@@ -573,15 +574,24 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
                     }}>
                       {d.simplesNacional === true ? '✓ Simples Nacional' : d.simplesNacional === false ? 'Não é Simples Nacional' : 'Simples Nacional: indisponível'}
                     </span>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, borderRadius: 12, padding: '3px 10px',
+                      color: d.emiteNota ? '#1fa463' : '#9098a8',
+                      background: d.emiteNota ? '#e6f6ee' : '#f4f7fc',
+                      border: `1px solid ${d.emiteNota ? '#bfe6cd' : '#e3e9f5'}`,
+                    }}>
+                      {d.emiteNota ? '✓ Emite Nota Fiscal' : 'Não emite Nota Fiscal'}
+                    </span>
                   </div>
                   {d.atividadeLivre ? <div style={{ fontSize: 11.5, color: '#9098a8', marginTop: 6 }}>Atividade declarada: {d.atividadeLivre}</div> : null}
                   {(() => {
                     const hMei = historicoOpcao('MEI', d.dtOpcaoMei, d.dtExclusaoMei)
                     const hSimples = historicoOpcao('Simples Nacional', d.dtOpcaoSimples, d.dtExclusaoSimples)
-                    if (!hMei && !hSimples) return null
+                    const hNota = d.emiteNota && d.dtAutorizacaoNf ? `Nota Fiscal: autorizada desde ${fmtData(d.dtAutorizacaoNf)}` : null
+                    if (!hMei && !hSimples && !hNota) return null
                     return (
                       <div style={{ fontSize: 11, color: '#9098a8', marginTop: 4 }}>
-                        {[hMei, hSimples].filter(Boolean).join(' · ')}
+                        {[hMei, hSimples, hNota].filter(Boolean).join(' · ')}
                       </div>
                     )
                   })()}

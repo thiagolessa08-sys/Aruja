@@ -78,7 +78,8 @@ async function detalhe(id: number) {
       m.ds_situacao, m.ds_grupo, m.ds_atividade_livre, m.ds_porte_empresa, m.ds_nat_juridica, m.ic_micro_empresa,
       m.ds_inscricao_municipal, m.vl_capital_social, m.qt_funcionarios,
       DATEFORMAT(m.dt_inicio_atividade,'yyyy-mm-dd') dt_ini, DATEFORMAT(m.dt_enc_atividade,'yyyy-mm-dd') dt_enc,
-      c.ds_endereco, c.nm_bairro, c.no_cep, m.no_logr, m.ds_complemento, m.ds_tipo_empresa, cp.no_cnpj_raiz
+      c.ds_endereco, c.nm_bairro, c.no_cep, m.no_logr, m.ds_complemento, m.ds_tipo_empresa, cp.no_cnpj_raiz,
+      m.ic_autorizacao_nfe, DATEFORMAT(m.dt_autorizacao_nf,'yyyy-mm-dd') dt_nf
     FROM ${S}.tb_dsod_contribuinte_mobiliario m
     JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = m.cd_contr
     LEFT JOIN ${S}.tb_dsod_cep c ON c.cd_cep = m.cd_cep
@@ -88,6 +89,8 @@ async function detalhe(id: number) {
   const complemento = String(x[20] ?? '').trim()
   const tipoEmpresa = String(x[21] ?? '').trim()
   const cnpjRaiz = String(x[22] ?? '').trim()
+  const emiteNota = String(x[23] ?? '').trim().toUpperCase() === 'A'
+  const dtAutorizacaoNf = String(x[24] ?? '').slice(0, 10)
   const rf = await simplesMei(cnpjRaiz)
   return {
     cd: num(x[0]), nome: String(x[1] ?? '').trim(), fantasia: String(x[2] ?? '').trim(),
@@ -109,6 +112,8 @@ async function detalhe(id: number) {
     // Histórico de opção/exclusão — só disponível junto com a base oficial da Receita.
     dtOpcaoSimples: rf?.dtOpcaoSimples ?? '', dtExclusaoSimples: rf?.dtExclusaoSimples ?? '',
     dtOpcaoMei: rf?.dtOpcaoMei ?? '', dtExclusaoMei: rf?.dtExclusaoMei ?? '',
+    // Emissão de nota fiscal: ic_autorizacao_nfe = 'A' (Autorizado) ⇔ tem dt_autorizacao_nf.
+    emiteNota, dtAutorizacaoNf,
   }
 }
 
