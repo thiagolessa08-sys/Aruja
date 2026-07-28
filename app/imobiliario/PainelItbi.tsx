@@ -66,7 +66,7 @@ interface RankingImovel {
 }
 interface MatchImovel { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string; noPeriodo?: boolean }
 interface Transmissao {
-  cdItbi: number; data: string; natureza: string; valorVenal: number; valorTransacao: number; aliquota: number; situacao: string
+  cdItbi: number; data: string; dtVencimento: string; natureza: string; valorVenal: number; valorTransacao: number; aliquota: number; situacao: string
   transmitente: string; adquirente: string; imposto: number
   transmitenteEhProprietario: boolean; adquirenteEhProprietario: boolean
   transmitentePJ: boolean; adquirentePJ: boolean; transmitenteMobiliario: boolean; adquirenteMobiliario: boolean
@@ -264,8 +264,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         for (const t of imovel.transmissoes) {
           linhas.push([
             secaoImovel, `ITBI ${t.cdItbi || trac}`,
-            t.data ? t.data.split('-').reverse().join('/') : trac, t.natureza || trac,
-            t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, trac, trac,
+            t.data ? t.data.split('-').reverse().join('/') : trac, t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : trac, t.natureza || trac,
+            t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, trac,
           ])
         }
       }
@@ -773,8 +773,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr>
-                              {['Código ITBI', 'Data', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto'].map((h, i) => (
-                                <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 0 || i === 1 || i === 2 ? 'left' : 'right' }}>{h}</th>
+                              {['Código ITBI', 'Data de Início', 'Data de Fim', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto'].map((h, i) => (
+                                <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 0 || i === 1 || i === 2 || i === 3 ? 'left' : 'right' }}>{h}</th>
                               ))}
                             </tr>
                           </thead>
@@ -783,6 +783,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                               <tr key={t.cdItbi}>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#9098a8', padding: '7px 10px', borderBottom: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{t.cdItbi || '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#1f2a44', padding: '7px 10px', borderBottom: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{t.data ? t.data.split('-').reverse().join('/') : '—'}</td>
+                                <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#1f2a44', padding: '7px 10px', borderBottom: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 10.5, color: '#5b6477', padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>
                                   <div>{t.natureza || '—'}</div>
                                   {(t.transmitente || t.adquirente) ? (

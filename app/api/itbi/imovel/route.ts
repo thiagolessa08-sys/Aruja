@@ -59,7 +59,7 @@ async function detalhe(id: number) {
         it.vl_venal, it.pc_aliquota, it.ds_situacao,
         COALESCE(NULLIF(it.nm_transmitente,''), tr.nm_rsocial) transmitente, adq.nm_rsocial adquirente,
         it.cd_contr_transmitente, it.cd_contr_adquirente, tr.ic_pessoa transm_pes, adq.ic_pessoa adq_pes,
-        it.vl_aquisicao_original valor_transacao
+        it.vl_aquisicao_original valor_transacao, DATEFORMAT(it.dt_vencimento,'yyyy-mm-dd') dt_venc
       FROM ${S}.tb_dsod_itbi it
       JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = it.cd_itbi
       LEFT JOIN ${S}.tb_dsod_contribuinte tr ON tr.cd_contr = it.cd_contr_transmitente
@@ -101,6 +101,7 @@ async function detalhe(id: number) {
     return {
       cdItbi: num(r[0]),
       data: String(r[1] ?? '').slice(0, 10),
+      dtVencimento: String(r[13] ?? '').slice(0, 10),
       natureza: String(r[2] ?? '').trim(),
       valorVenal: num(r[3]),
       valorTransacao: num(r[12]),
