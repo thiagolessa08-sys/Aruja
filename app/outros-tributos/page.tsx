@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSaudacaoNome } from '../_components/useSaudacao'
 import TopNav from '../_components/TopNav'
 import PainelTributo from '../tributo/PainelTributo'
+import DividaAtivaPorTributo from '../_components/DividaAtivaPorTributo'
 
 export default function OutrosTributosPage() {
   const [saudacao, setSaudacao] = useState('Bom dia')
@@ -24,6 +25,7 @@ export default function OutrosTributosPage() {
           <span style={{ fontSize: 13, color: '#5b6477' }}>Tributos diversos (taxas, contribuições, multas) · todos os exercícios</span>
         </div>
         <PainelTributo grupo="outros" titulo="Outros Tributos" />
+        <DividaAtivaPorTributo />
       </div>
     </div>
   )
