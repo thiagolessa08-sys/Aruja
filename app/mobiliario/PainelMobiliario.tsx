@@ -21,6 +21,14 @@ interface Graficos {
 }
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
+interface EmpresaMatch { cd: number; nome: string; fantasia: string; cnpjCpf: string; situacao: string; atividade: string }
+interface EmpresaDet {
+  cd: number; nome: string; fantasia: string; cnpjCpf: string; pessoaFisica: boolean; situacao: string
+  atividadePrincipal: string; atividadeLivre: string; porte: string; naturezaJuridica: string; microEmpresa: boolean
+  inscricaoMunicipal: string; capitalSocial: number; qtdFuncionarios: number
+  dataInicioAtividade: string; dataEncAtividade: string; endereco: string; bairro: string; cep: string
+}
+
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
@@ -168,6 +176,13 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
 
+  // Consultar Empresa — busca por nome/fantasia ou CNPJ/CPF, exibe atividade principal
+  const [buscaTipoEmp, setBuscaTipoEmp] = useState<'nome' | 'cnpj'>('nome')
+  const [buscaEmpresa, setBuscaEmpresa] = useState('')
+  const [matchesEmpresa, setMatchesEmpresa] = useState<EmpresaMatch[]>([])
+  const [empresaDet, setEmpresaDet] = useState<EmpresaDet | null>(null)
+  const [carregandoEmpresa, setCarregandoEmpresa] = useState(false)
+
   const qs = buildQS(filtros, foco)
 
   useEffect(() => {
@@ -182,6 +197,24 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
     fetch(`/api/mobiliario/insights${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => setInsights(d?.insights?.length ? d.insights : INSIGHTS_CAD)).catch(() => setInsights(INSIGHTS_CAD))
   }, [qs])
+
+  useEffect(() => {
+    const q = buscaEmpresa.trim()
+    if (q.length < 2) { setMatchesEmpresa([]); return }
+    let vivo = true
+    const t = setTimeout(() => {
+      fetch(`/api/mobiliario/empresa?q=${encodeURIComponent(q)}&tipo=${buscaTipoEmp}`).then(r => r.ok ? r.json() : null)
+        .then(d => { if (vivo && d?.matches) setMatchesEmpresa(d.matches) })
+    }, 350)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [buscaEmpresa, buscaTipoEmp])
+
+  function abrirEmpresa(cd: number) {
+    setCarregandoEmpresa(true); setMatchesEmpresa([])
+    fetch(`/api/mobiliario/empresa?id=${cd}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.detalhe) setEmpresaDet(d.detalhe) })
+      .finally(() => setCarregandoEmpresa(false))
+  }
 
   const g = graf ?? FALLBACK_GRAF
   const gb = geomBarISS(g.porAno)
@@ -417,6 +450,78 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
             })}
           </div>
         </div>
+      </div>
+
+      {/* ===== Consultar Empresa (busca por nome/fantasia ou CNPJ/CPF) ===== */}
+      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+        {carregandoEmpresa ? <LoadingOverlay label="Carregando empresa…" /> : null}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Consultar Empresa</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <select value={buscaTipoEmp} onChange={e => { setBuscaTipoEmp(e.target.value as 'nome' | 'cnpj'); setMatchesEmpresa([]) }}
+              style={{ border: '1.5px solid #e3e9f5', borderRadius: 12, padding: '7px 10px', fontSize: 12, color: '#283e93', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}>
+              <option value="nome">Nome</option>
+              <option value="cnpj">CNPJ/CPF</option>
+            </select>
+            <div style={{ position: 'relative', width: 320, maxWidth: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                <input value={buscaEmpresa} onChange={e => setBuscaEmpresa(e.target.value)} placeholder={buscaTipoEmp === 'cnpj' ? 'CNPJ ou CPF…' : 'Razão social ou nome fantasia…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+                {buscaEmpresa || empresaDet ? (
+                  <button onClick={() => { setBuscaEmpresa(''); setMatchesEmpresa([]); setEmpresaDet(null) }} title="Limpar pesquisa"
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', display: 'flex', alignItems: 'center', padding: 0, flex: 'none' }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                ) : null}
+              </div>
+              {matchesEmpresa.length ? (
+                <div style={{ position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', left: 0, right: 0, maxHeight: 280, overflowY: 'auto', background: '#fff', borderRadius: 12, border: '1px solid #e3e9f5', boxShadow: '0 12px 30px rgba(20,40,90,0.18)', padding: 5 }}>
+                  {matchesEmpresa.map(m => (
+                    <div key={m.cd} onClick={() => abrirEmpresa(m.cd)} style={{ padding: '7px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
+                      <div style={{ color: '#1f2a44', fontWeight: 600 }}>{m.fantasia || m.nome}</div>
+                      <div style={{ color: '#9098a8', fontSize: 11 }}>{m.cnpjCpf || '—'} · {m.atividade} · {m.situacao}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {empresaDet ? (() => {
+          const d = empresaDet
+          return (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{d.fantasia || d.nome}</div>
+                  {d.fantasia ? <div style={{ fontSize: 12, color: '#9098a8', marginTop: 2 }}>{d.nome}</div> : null}
+                  <div style={{ marginTop: 7, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#283e93', background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '3px 10px' }}>Atividade Principal: {d.atividadePrincipal}</span>
+                    {d.situacao ? <span style={{ fontSize: 11, fontWeight: 600, color: '#5b6477', background: '#f4f7fc', border: '1px solid #e3e9f5', borderRadius: 12, padding: '3px 10px' }}>Situação: {d.situacao}</span> : null}
+                  </div>
+                  {d.atividadeLivre ? <div style={{ fontSize: 11.5, color: '#9098a8', marginTop: 6 }}>Atividade declarada: {d.atividadeLivre}</div> : null}
+                  <div style={{ fontSize: 12, color: '#5b6477', marginTop: 7 }}>{d.pessoaFisica ? 'CPF' : 'CNPJ'} {d.cnpjCpf || '—'}{d.inscricaoMunicipal ? ` · Insc. Municipal ${d.inscricaoMunicipal}` : ''}</div>
+                  <div style={{ fontSize: 12, color: '#5b6477' }}>{d.endereco}{d.bairro ? ` — ${d.bairro}` : ''}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginTop: 16 }}>
+                {[
+                  { label: 'Porte', value: d.porte || '—' },
+                  { label: 'Natureza Jurídica', value: d.naturezaJuridica || '—' },
+                  { label: 'Início da Atividade', value: d.dataInicioAtividade ? d.dataInicioAtividade.split('-').reverse().join('/') : '—' },
+                  { label: 'Encerramento', value: d.dataEncAtividade ? d.dataEncAtividade.split('-').reverse().join('/') : '—' },
+                  { label: 'Funcionários', value: d.qtdFuncionarios ? fmtInt(d.qtdFuncionarios) : '—' },
+                ].map(f => (
+                  <div key={f.label} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>{f.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44', marginTop: 4 }}>{f.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })() : null}
       </div>
     </div>
   )
