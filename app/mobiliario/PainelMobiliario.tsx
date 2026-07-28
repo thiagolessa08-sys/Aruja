@@ -27,6 +27,7 @@ interface EmpresaDet {
   atividadePrincipal: string; atividadeLivre: string; porte: string; naturezaJuridica: string; microEmpresa: boolean
   inscricaoMunicipal: string; capitalSocial: number; qtdFuncionarios: number
   dataInicioAtividade: string; dataEncAtividade: string; endereco: string; bairro: string; cep: string
+  tipoEmpresa: string; mei: boolean; simplesNacional: boolean | null
 }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
@@ -552,14 +553,24 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
                   <div style={{ marginTop: 7, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#283e93', background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '3px 10px' }}>Atividade Principal: {d.atividadePrincipal}</span>
                     {d.situacao ? <span style={{ fontSize: 11, fontWeight: 600, color: '#5b6477', background: '#f4f7fc', border: '1px solid #e3e9f5', borderRadius: 12, padding: '3px 10px' }}>Situação: {d.situacao}</span> : null}
+                    {d.mei ? <span style={{ fontSize: 11, fontWeight: 700, color: '#1fa463', background: '#e6f6ee', border: '1px solid #bfe6cd', borderRadius: 12, padding: '3px 10px' }}>✓ MEI</span> : null}
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, borderRadius: 12, padding: '3px 10px',
+                      color: d.simplesNacional === true ? '#1fa463' : d.simplesNacional === false ? '#9098a8' : '#aeb6c6',
+                      background: d.simplesNacional === true ? '#e6f6ee' : '#f4f7fc',
+                      border: `1px solid ${d.simplesNacional === true ? '#bfe6cd' : '#e3e9f5'}`,
+                    }}>
+                      {d.simplesNacional === true ? '✓ Simples Nacional' : d.simplesNacional === false ? 'Não é Simples Nacional' : 'Simples Nacional: indisponível'}
+                    </span>
                   </div>
                   {d.atividadeLivre ? <div style={{ fontSize: 11.5, color: '#9098a8', marginTop: 6 }}>Atividade declarada: {d.atividadeLivre}</div> : null}
                   <div style={{ fontSize: 12, color: '#5b6477', marginTop: 7 }}>{d.pessoaFisica ? 'CPF' : 'CNPJ'} {d.cnpjCpf || '—'}{d.inscricaoMunicipal ? ` · Insc. Municipal ${d.inscricaoMunicipal}` : ''}</div>
                   <div style={{ fontSize: 12, color: '#5b6477' }}>{d.endereco}{d.bairro ? ` — ${d.bairro}` : ''}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginTop: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12, marginTop: 16 }}>
                 {[
+                  { label: 'Tipo de Empresa', value: d.tipoEmpresa || '—' },
                   { label: 'Porte', value: d.porte || '—' },
                   { label: 'Natureza Jurídica', value: d.naturezaJuridica || '—' },
                   { label: 'Início da Atividade', value: d.dataInicioAtividade ? d.dataInicioAtividade.split('-').reverse().join('/') : '—' },

@@ -46,6 +46,24 @@ async function porSegmento(segmento: string, situacao: string, q: string) {
   }))
 }
 
+// Simples Nacional / MEI oficiais (Receita Federal) — best-effort: tb_aux_rf_simples é
+// keyed por CNPJ raiz (8 dígitos) e pode negar SELECT por permissão; nesse caso retorna
+// null e o chamador cai no MEI cadastral (ds_tipo_empresa) como aproximação.
+async function simplesMei(cnpjRaiz: string): Promise<{ simples: boolean; mei: boolean } | null> {
+  if (!cnpjRaiz) return null
+  try {
+    const r = await agentQuery(`SELECT TOP 1 IC_SIMPLES, IC_MEI FROM ${S}.TB_AUX_RF_SIMPLES WHERE NO_CNPJ_RAIZ = '${esc(cnpjRaiz)}'`, 1)
+    const row = r.rows[0]
+    if (!row) return null
+    return {
+      simples: String(row[0] ?? '').trim().toUpperCase() === 'S',
+      mei: String(row[1] ?? '').trim().toUpperCase() === 'S',
+    }
+  } catch {
+    return null
+  }
+}
+
 // Detalhe da empresa: identidade + atividade principal (ds_grupo — melhor cobertura do
 // que ds_atividade_livre, que é texto livre e fica nulo/vazio na maior parte da base).
 async function detalhe(id: number) {
@@ -53,7 +71,7 @@ async function detalhe(id: number) {
       m.ds_situacao, m.ds_grupo, m.ds_atividade_livre, m.ds_porte_empresa, m.ds_nat_juridica, m.ic_micro_empresa,
       m.ds_inscricao_municipal, m.vl_capital_social, m.qt_funcionarios,
       DATEFORMAT(m.dt_inicio_atividade,'yyyy-mm-dd') dt_ini, DATEFORMAT(m.dt_enc_atividade,'yyyy-mm-dd') dt_enc,
-      c.ds_endereco, c.nm_bairro, c.no_cep, m.no_logr, m.ds_complemento
+      c.ds_endereco, c.nm_bairro, c.no_cep, m.no_logr, m.ds_complemento, m.ds_tipo_empresa, cp.no_cnpj_raiz
     FROM ${S}.tb_dsod_contribuinte_mobiliario m
     JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = m.cd_contr
     LEFT JOIN ${S}.tb_dsod_cep c ON c.cd_cep = m.cd_cep
@@ -61,6 +79,9 @@ async function detalhe(id: number) {
   const x = r.rows[0] ?? []
   const numero = String(x[19] ?? '').trim()
   const complemento = String(x[20] ?? '').trim()
+  const tipoEmpresa = String(x[21] ?? '').trim()
+  const cnpjRaiz = String(x[22] ?? '').trim()
+  const rf = await simplesMei(cnpjRaiz)
   return {
     cd: num(x[0]), nome: String(x[1] ?? '').trim(), fantasia: String(x[2] ?? '').trim(),
     cnpjCpf: String(x[3] ?? '').trim(), pessoaFisica: String(x[4] ?? '').trim().toUpperCase() === 'F',
@@ -73,6 +94,11 @@ async function detalhe(id: number) {
     dataInicioAtividade: String(x[14] ?? '').slice(0, 10), dataEncAtividade: String(x[15] ?? '').slice(0, 10),
     endereco: `${String(x[16] ?? '').trim()}${numero ? ', ' + numero : ''}${complemento ? ' — ' + complemento : ''}`,
     bairro: String(x[17] ?? '').trim(), cep: String(x[18] ?? '').trim(),
+    tipoEmpresa,
+    // MEI: usa a base oficial da Receita quando disponível; senão cai no cadastro municipal.
+    mei: rf ? rf.mei : tipoEmpresa.toUpperCase() === 'MEI',
+    // Simples Nacional: só a base oficial da Receita responde isso — null = indisponível.
+    simplesNacional: rf ? rf.simples : null,
   }
 }
 
