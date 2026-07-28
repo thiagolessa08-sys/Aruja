@@ -92,13 +92,14 @@ function geomGauge(pct: number) {
   return { bgPath, fillPath, p, cx, cy, nx, ny }
 }
 
-export default function PainelTributo({ grupo, titulo, ano: anoSel, onAnos }: { grupo: string; titulo: string; ano?: number; onAnos?: (anos: number[]) => void }) {
+export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos }: { grupo: string; titulo: string; ano?: number; mes?: number; onAnos?: (anos: number[]) => void }) {
   const [tip, setTip] = useState<Tip | null>(null)
   const [serie, setSerie] = useState<SerieItem[] | null>(null)
 
   useEffect(() => {
     setSerie(null)
-    fetch(`/api/tributo/serie?grupo=${grupo}`).then(r => r.ok ? r.json() : null)
+    const qs = mes ? `&mes=${mes}` : ''
+    fetch(`/api/tributo/serie?grupo=${grupo}${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d && !d.error && Array.isArray(d.serie)) {
           setSerie(d.serie)
@@ -106,7 +107,7 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, onAnos }: { 
         }
       }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [grupo])
+  }, [grupo, mes])
 
   const carregando = serie === null
   if (carregando) {

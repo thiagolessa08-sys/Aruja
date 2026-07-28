@@ -9,9 +9,10 @@ export async function GET(req: NextRequest) {
 
   const grupo = parseGrupo(req.nextUrl.searchParams.get('grupo'))
   if (!grupo) return NextResponse.json({ error: 'grupo inválido' }, { status: 400 })
+  const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
 
   try {
-    const serie = await serieTributo(grupo)
+    const serie = await serieTributo(grupo, undefined, undefined, mes)
     return NextResponse.json({ grupo, label: LABEL_GRUPO[grupo], serie })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
