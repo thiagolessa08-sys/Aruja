@@ -65,10 +65,10 @@ export default function MobiliarioPage() {
   const filtros: FiltrosMobiliario = { ano: rAno, situacao: rSituacao }
 
   const SUBABAS: { id: SubAba; label: string }[] = [
+    { id: 'mob', label: 'MOBILIÁRIO' },
     { id: 'iss', label: 'ISS' },
     { id: 'tfe', label: 'TFE' },
     { id: 'tfhs', label: 'TFHS' },
-    { id: 'mob', label: 'MOBILIÁRIO' },
   ]
 
   return (
