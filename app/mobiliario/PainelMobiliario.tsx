@@ -183,6 +183,12 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
   const [empresaDet, setEmpresaDet] = useState<EmpresaDet | null>(null)
   const [carregandoEmpresa, setCarregandoEmpresa] = useState(false)
 
+  // Drill do gráfico "Empresas por Segmento": clique num segmento → lista de empresas
+  const [segmentoSel, setSegmentoSel] = useState<string | null>(null)
+  const [buscaSegmento, setBuscaSegmento] = useState('')
+  const [empresasSegmento, setEmpresasSegmento] = useState<EmpresaMatch[]>([])
+  const [carregandoSegmento, setCarregandoSegmento] = useState(false)
+
   const qs = buildQS(filtros, foco)
 
   useEffect(() => {
@@ -208,6 +214,21 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
     }, 350)
     return () => { vivo = false; clearTimeout(t) }
   }, [buscaEmpresa, buscaTipoEmp])
+
+  useEffect(() => {
+    if (!segmentoSel) { setEmpresasSegmento([]); return }
+    let vivo = true
+    setCarregandoSegmento(true)
+    const t = setTimeout(() => {
+      const p = new URLSearchParams({ segmento: segmentoSel })
+      if (filtros.situacao) p.set('situacao', filtros.situacao)
+      if (buscaSegmento.trim()) p.set('q', buscaSegmento.trim())
+      fetch(`/api/mobiliario/empresa?${p.toString()}`).then(r => r.ok ? r.json() : null)
+        .then(d => { if (vivo && d?.matches) setEmpresasSegmento(d.matches) })
+        .finally(() => { if (vivo) setCarregandoSegmento(false) })
+    }, 300)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [segmentoSel, buscaSegmento, filtros.situacao])
 
   function abrirEmpresa(cd: number) {
     setCarregandoEmpresa(true); setMatchesEmpresa([])
@@ -425,30 +446,62 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
           </div>
         </div>
 
-        {/* Barras horizontais ranqueadas: Empresas por Segmento */}
+        {/* Barras horizontais ranqueadas: Empresas por Segmento — clique num segmento
+            faz drill para a lista de empresas daquele segmento. */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Empresas por Segmento</span>
+            {segmentoSel ? (
+              <button onClick={() => { setSegmentoSel(null); setBuscaSegmento('') }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 15, fontWeight: 600 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+                {segmentoSel}
+              </button>
+            ) : (
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Empresas por Segmento</span>
+            )}
             <span style={dots}>···</span>
           </div>
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {g.segmentos.map((seg, i) => {
-              const w = (seg.qt / maxSeg) * 100
-              return (
-                <div key={seg.nome}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, color: '#3a4256', lineHeight: 1.2, flex: 1, paddingRight: 6 }}>{seg.nome}</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>
-                      {fmtInt(seg.qt)} <span style={{ color: '#9098a8', fontWeight: 400 }}>({fmtPct(seg.pct)})</span>
-                    </span>
+
+          {segmentoSel ? (
+            <div style={{ marginTop: 12, position: 'relative' }}>
+              {carregandoSegmento ? <LoadingOverlay label="Carregando empresas…" /> : null}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                <input value={buscaSegmento} onChange={e => setBuscaSegmento(e.target.value)} placeholder="Buscar empresa neste segmento…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+              </div>
+              <div style={{ marginTop: 10, maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {empresasSegmento.length ? empresasSegmento.map(emp => (
+                  <div key={emp.cd} onClick={() => abrirEmpresa(emp.cd)} style={{ padding: '8px 6px', borderRadius: 8, cursor: 'pointer', borderBottom: '1px solid #f0f2f8' }}>
+                    <div style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{emp.fantasia || emp.nome}</div>
+                    <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 1 }}>{emp.cnpjCpf || '—'} · {emp.situacao}</div>
                   </div>
-                  <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: SEG_CORES[i % SEG_CORES.length], borderRadius: 5 }} />
+                )) : !carregandoSegmento ? (
+                  <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhuma empresa encontrada.</div>
+                ) : null}
+                {empresasSegmento.length >= 200 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 200 primeiros — refine a busca para ver mais.</div> : null}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {g.segmentos.map((seg, i) => {
+                const w = (seg.qt / maxSeg) * 100
+                return (
+                  <div key={seg.nome} onClick={() => setSegmentoSel(seg.nome)} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 10, color: '#3a4256', lineHeight: 1.2, flex: 1, paddingRight: 6 }}>{seg.nome}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>
+                        {fmtInt(seg.qt)} <span style={{ color: '#9098a8', fontWeight: 400 }}>({fmtPct(seg.pct)})</span>
+                      </span>
+                    </div>
+                    <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: SEG_CORES[i % SEG_CORES.length], borderRadius: 5 }} />
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+              <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 2 }}>Clique num segmento para ver as empresas</div>
+            </div>
+          )}
         </div>
       </div>
 
