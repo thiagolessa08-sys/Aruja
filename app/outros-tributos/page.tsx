@@ -40,12 +40,12 @@ export default function OutrosTributosPage() {
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.5px', color: '#283e93' }}>
             {saudacao}, <span style={{ color: '#7d8fce' }}>{nome}!</span>
           </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 13, color: '#5b6477' }}>Tributos diversos (taxas, contribuições, multas)</span>
-            <select aria-label="Exercício" value={ano} onChange={e => setAno(Number(e.target.value))} style={selectPill}>
-              {anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-            </select>
-          </div>
+          <span style={{ fontSize: 13, color: '#5b6477' }}>Tributos diversos (taxas, contribuições, multas)</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '18px 4px 0' }}>
+          <select aria-label="Exercício" value={ano} onChange={e => setAno(Number(e.target.value))} style={selectPill}>
+            {anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+          </select>
         </div>
         <PainelTributo grupo="outros" titulo="Outros Tributos" ano={ano || undefined} onAnos={handleAnos} />
         <DividaAtivaPorTributo />
