@@ -130,6 +130,25 @@ export default function MobiliarioPage() {
 
         {/* ===== PAINEL ===== */}
         {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" />}
+        {aba === 'iss' && (
+          <div style={{ background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Limite Anual de Faturamento</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Referência regulatória (Lei Complementar nº 123/2006 e alterações) — não vem do cadastro, é contexto para comparar com o faturamento das empresas</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 16 }}>
+              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>MEI — Microempreendedor Individual</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>R$ 81.000,00 / ano</div>
+                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>Acima do limite, a empresa é desenquadrada do MEI (proporcional se aberta durante o ano).</div>
+              </div>
+              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>Simples Nacional</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>R$ 4.800.000,00 / ano</div>
+                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>Acima do limite, a empresa deixa de poder optar/permanecer no Simples Nacional.</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>Valores de referência federais — confirme se houve atualização legislativa antes de usar para decisões fiscais.</div>
+          </div>
+        )}
         {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="TFE" />}
         {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" />}
         {aba === 'mob' && <PainelMobiliario filtros={filtros} />}
