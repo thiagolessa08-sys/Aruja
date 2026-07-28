@@ -262,10 +262,11 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           `Imposto total: ${money(ind.impostoTotal)}`, trac, trac, trac,
         ])
         for (const t of imovel.transmissoes) {
+          const alerta = t.valorTransacao > 0 && t.valorVenal > 0 && t.valorTransacao < t.valorVenal ? 'Abaixo do venal' : trac
           linhas.push([
             secaoImovel, `ITBI ${t.cdItbi || trac}`,
             t.data ? t.data.split('-').reverse().join('/') : trac, t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : trac, t.natureza || trac,
-            t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, trac,
+            t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, alerta,
           ])
         }
       }
@@ -773,8 +774,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr>
-                              {['Código ITBI', 'Data de Início', 'Data de Fim', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto'].map((h, i) => (
-                                <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 0 || i === 1 || i === 2 || i === 3 ? 'left' : 'right' }}>{h}</th>
+                              {['Código ITBI', 'Data de Início', 'Data de Fim', 'Natureza', 'Valor da Transação', 'Valor Venal', 'Imposto', 'Alerta'].map((h, i) => (
+                                <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 0 || i === 1 || i === 2 || i === 3 ? 'left' : i === 7 ? 'center' : 'right' }}>{h}</th>
                               ))}
                             </tr>
                           </thead>
@@ -797,6 +798,11 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#1fa463', fontWeight: 600, padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{t.valorTransacao ? fmtAbrev(t.valorTransacao) : '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#283e93', fontWeight: 600, padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{t.valorVenal ? fmtAbrev(t.valorVenal) : '—'}</td>
                                 <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', fontSize: 11, color: '#c0612a', fontWeight: 600, padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{t.imposto ? fmtAbrev(t.imposto) : '—'}</td>
+                                <td style={{ background: ti % 2 ? '#f7f9fd' : '#fff', padding: '7px 10px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>
+                                  {t.valorTransacao > 0 && t.valorVenal > 0 && t.valorTransacao < t.valorVenal ? (
+                                    <span title="Valor da transação abaixo do valor venal" style={{ fontSize: 8.5, fontWeight: 700, color: '#c0392b', background: '#fbe4e1', borderRadius: 5, padding: '2px 7px', whiteSpace: 'nowrap' }}>⚠ abaixo do venal</span>
+                                  ) : null}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
