@@ -92,14 +92,20 @@ function geomGauge(pct: number) {
   return { bgPath, fillPath, p, cx, cy, nx, ny }
 }
 
-export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo: string }) {
+export default function PainelTributo({ grupo, titulo, ano: anoSel, onAnos }: { grupo: string; titulo: string; ano?: number; onAnos?: (anos: number[]) => void }) {
   const [tip, setTip] = useState<Tip | null>(null)
   const [serie, setSerie] = useState<SerieItem[] | null>(null)
 
   useEffect(() => {
     setSerie(null)
     fetch(`/api/tributo/serie?grupo=${grupo}`).then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error && Array.isArray(d.serie)) setSerie(d.serie) }).catch(() => {})
+      .then(d => {
+        if (d && !d.error && Array.isArray(d.serie)) {
+          setSerie(d.serie)
+          onAnos?.(d.serie.map((x: SerieItem) => x.ano))
+        }
+      }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grupo])
 
   const carregando = serie === null
@@ -123,8 +129,8 @@ export default function PainelTributo({ grupo, titulo }: { grupo: string; titulo
   }
 
   const s = serie ?? []
-  const ult = s[s.length - 1]
-  const ant = s[s.length - 2]
+  const ult = (anoSel ? s.find(x => x.ano === anoSel) : undefined) ?? s[s.length - 1]
+  const ant = s.find(x => x.ano === (ult?.ano ?? 0) - 1)
   const ano = ult?.ano ?? new Date().getFullYear()
 
   const lancado = ult?.lancado ?? 0
