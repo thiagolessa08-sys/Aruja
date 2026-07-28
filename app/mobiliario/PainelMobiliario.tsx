@@ -30,6 +30,7 @@ interface EmpresaDet {
   tipoEmpresa: string; mei: boolean; simplesNacional: boolean | null
   dtOpcaoSimples: string; dtExclusaoSimples: string; dtOpcaoMei: string; dtExclusaoMei: string
   emiteNota: boolean; dtAutorizacaoNf: string
+  subTipoAutonomo: string | null
 }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
@@ -601,7 +602,7 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12, marginTop: 16 }}>
                 {[
-                  { label: 'Tipo de Empresa', value: d.tipoEmpresa || '—' },
+                  { label: 'Tipo de Empresa', value: d.tipoEmpresa ? `${d.tipoEmpresa}${d.subTipoAutonomo ? ` — ${d.subTipoAutonomo} (aprox.)` : ''}` : '—' },
                   { label: 'Porte', value: d.porte || '—' },
                   { label: 'Natureza Jurídica', value: d.naturezaJuridica || '—' },
                   { label: 'Início da Atividade', value: d.dataInicioAtividade ? d.dataInicioAtividade.split('-').reverse().join('/') : '—' },

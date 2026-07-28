@@ -71,6 +71,18 @@ async function simplesMei(cnpjRaiz: string): Promise<RfSimples | null> {
   }
 }
 
+// Sub-tipo do autônomo (Profissional Liberal × Autônomo geral) — aproximado: não existe
+// campo estruturado para essa distinção no cadastro, então classifica por palavras-chave
+// de profissões regulamentadas no texto livre da atividade (ds_atividade_livre). Só se
+// aplica quando ds_tipo_empresa = 'AUTONOMO'; retorna null quando a atividade está vazia
+// ou não bate com nenhuma palavra-chave (não dá pra afirmar nada nesse caso).
+const RE_PROFISSAO_LIBERAL = /ADVOCACIA|ADVOGAD|M[ÉE]DIC|DENTISTA|ODONTOL[ÓO]G|PSIC[ÓO]LOG|FISIOTERAP|FONOAUDI[ÓO]LOG|VETERIN[ÁA]RI|ENGENHEIR|ARQUITET|CONTAD|CONTABIL|ECONOMISTA|ADMINISTRADOR|NUTRICIONISTA|CORRETOR|DESPACHANTE|JORNALISTA|PUBLICIT[ÁA]RI|TRADUTOR|BI[ÓO]LOG|GE[ÓO]LOG|PROFESSOR/i
+function classificarAutonomo(tipoEmpresa: string, atividadeLivre: string): string | null {
+  if (tipoEmpresa.toUpperCase() !== 'AUTONOMO') return null
+  if (!atividadeLivre) return null
+  return RE_PROFISSAO_LIBERAL.test(atividadeLivre) ? 'Profissional Liberal' : 'Autônomo'
+}
+
 // Detalhe da empresa: identidade + atividade principal (ds_grupo — melhor cobertura do
 // que ds_atividade_livre, que é texto livre e fica nulo/vazio na maior parte da base).
 async function detalhe(id: number) {
@@ -92,12 +104,13 @@ async function detalhe(id: number) {
   const emiteNota = String(x[23] ?? '').trim().toUpperCase() === 'A'
   const dtAutorizacaoNf = String(x[24] ?? '').slice(0, 10)
   const rf = await simplesMei(cnpjRaiz)
+  const atividadeLivre = String(x[7] ?? '').trim()
   return {
     cd: num(x[0]), nome: String(x[1] ?? '').trim(), fantasia: String(x[2] ?? '').trim(),
     cnpjCpf: String(x[3] ?? '').trim(), pessoaFisica: String(x[4] ?? '').trim().toUpperCase() === 'F',
     situacao: String(x[5] ?? '').trim(),
     atividadePrincipal: String(x[6] ?? '').trim() || 'Não informada',
-    atividadeLivre: String(x[7] ?? '').trim(),
+    atividadeLivre,
     porte: String(x[8] ?? '').trim(), naturezaJuridica: String(x[9] ?? '').trim(),
     microEmpresa: String(x[10] ?? '').trim().toUpperCase() === 'S',
     inscricaoMunicipal: String(x[11] ?? '').trim(), capitalSocial: num(x[12]), qtdFuncionarios: num(x[13]),
@@ -114,6 +127,8 @@ async function detalhe(id: number) {
     dtOpcaoMei: rf?.dtOpcaoMei ?? '', dtExclusaoMei: rf?.dtExclusaoMei ?? '',
     // Emissão de nota fiscal: ic_autorizacao_nfe = 'A' (Autorizado) ⇔ tem dt_autorizacao_nf.
     emiteNota, dtAutorizacaoNf,
+    // Sub-tipo do autônomo — aproximado por palavras-chave, ver classificarAutonomo().
+    subTipoAutonomo: classificarAutonomo(tipoEmpresa, atividadeLivre),
   }
 }
 
