@@ -28,6 +28,7 @@ interface EmpresaDet {
   inscricaoMunicipal: string; capitalSocial: number; qtdFuncionarios: number
   dataInicioAtividade: string; dataEncAtividade: string; endereco: string; bairro: string; cep: string
   tipoEmpresa: string; mei: boolean; simplesNacional: boolean | null
+  dtOpcaoSimples: string; dtExclusaoSimples: string; dtOpcaoMei: string; dtExclusaoMei: string
 }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
@@ -35,6 +36,16 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+const fmtData = (d: string) => d ? d.split('-').reverse().join('/') : ''
+
+// Histórico de opção/exclusão do MEI ou Simples Nacional, a partir das datas da Receita
+// Federal (tb_aux_rf_simples) — null quando não há nenhuma data disponível.
+function historicoOpcao(rotulo: string, dtOpcao: string, dtExclusao: string): string | null {
+  if (!dtOpcao && !dtExclusao) return null
+  if (dtOpcao && dtExclusao) return `${rotulo}: de ${fmtData(dtOpcao)} até ${fmtData(dtExclusao)} (excluído)`
+  if (dtOpcao) return `${rotulo}: optante desde ${fmtData(dtOpcao)}`
+  return `${rotulo}: excluído em ${fmtData(dtExclusao)}`
+}
 
 const KPIS_CAD: KpiCard[] = [
   { label: 'Empresas Cadastradas', value: '37.066', subLabel: 'Ativas', subValue: '18.384', pct: '49,6%', dir: 'up' },
@@ -564,6 +575,16 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
                     </span>
                   </div>
                   {d.atividadeLivre ? <div style={{ fontSize: 11.5, color: '#9098a8', marginTop: 6 }}>Atividade declarada: {d.atividadeLivre}</div> : null}
+                  {(() => {
+                    const hMei = historicoOpcao('MEI', d.dtOpcaoMei, d.dtExclusaoMei)
+                    const hSimples = historicoOpcao('Simples Nacional', d.dtOpcaoSimples, d.dtExclusaoSimples)
+                    if (!hMei && !hSimples) return null
+                    return (
+                      <div style={{ fontSize: 11, color: '#9098a8', marginTop: 4 }}>
+                        {[hMei, hSimples].filter(Boolean).join(' · ')}
+                      </div>
+                    )
+                  })()}
                   <div style={{ fontSize: 12, color: '#5b6477', marginTop: 7 }}>{d.pessoaFisica ? 'CPF' : 'CNPJ'} {d.cnpjCpf || '—'}{d.inscricaoMunicipal ? ` · Insc. Municipal ${d.inscricaoMunicipal}` : ''}</div>
                   <div style={{ fontSize: 12, color: '#5b6477' }}>{d.endereco}{d.bairro ? ` — ${d.bairro}` : ''}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
                 </div>

@@ -48,16 +48,23 @@ async function porSegmento(segmento: string, situacao: string, q: string) {
 
 // Simples Nacional / MEI oficiais (Receita Federal) — best-effort: tb_aux_rf_simples é
 // keyed por CNPJ raiz (8 dígitos) e pode negar SELECT por permissão; nesse caso retorna
-// null e o chamador cai no MEI cadastral (ds_tipo_empresa) como aproximação.
-async function simplesMei(cnpjRaiz: string): Promise<{ simples: boolean; mei: boolean } | null> {
+// null e o chamador cai no MEI cadastral (ds_tipo_empresa) como aproximação. Inclui as
+// datas de opção/exclusão — histórico de quando entrou/saiu do MEI e do Simples Nacional.
+interface RfSimples { simples: boolean; mei: boolean; dtOpcaoSimples: string; dtExclusaoSimples: string; dtOpcaoMei: string; dtExclusaoMei: string }
+async function simplesMei(cnpjRaiz: string): Promise<RfSimples | null> {
   if (!cnpjRaiz) return null
   try {
-    const r = await agentQuery(`SELECT TOP 1 IC_SIMPLES, IC_MEI FROM ${S}.TB_AUX_RF_SIMPLES WHERE NO_CNPJ_RAIZ = '${esc(cnpjRaiz)}'`, 1)
+    const r = await agentQuery(`SELECT TOP 1 IC_SIMPLES, IC_MEI,
+        DATEFORMAT(DT_OPCAO_SIMPLES,'yyyy-mm-dd') dt_op_s, DATEFORMAT(DT_EXCLUSAO_SIMPLES,'yyyy-mm-dd') dt_ex_s,
+        DATEFORMAT(DT_OPCAO_MEI,'yyyy-mm-dd') dt_op_m, DATEFORMAT(DT_EXCLUSAO_MEI,'yyyy-mm-dd') dt_ex_m
+      FROM ${S}.TB_AUX_RF_SIMPLES WHERE NO_CNPJ_RAIZ = '${esc(cnpjRaiz)}'`, 1)
     const row = r.rows[0]
     if (!row) return null
     return {
       simples: String(row[0] ?? '').trim().toUpperCase() === 'S',
       mei: String(row[1] ?? '').trim().toUpperCase() === 'S',
+      dtOpcaoSimples: String(row[2] ?? '').slice(0, 10), dtExclusaoSimples: String(row[3] ?? '').slice(0, 10),
+      dtOpcaoMei: String(row[4] ?? '').slice(0, 10), dtExclusaoMei: String(row[5] ?? '').slice(0, 10),
     }
   } catch {
     return null
@@ -99,6 +106,9 @@ async function detalhe(id: number) {
     mei: rf ? rf.mei : tipoEmpresa.toUpperCase() === 'MEI',
     // Simples Nacional: só a base oficial da Receita responde isso — null = indisponível.
     simplesNacional: rf ? rf.simples : null,
+    // Histórico de opção/exclusão — só disponível junto com a base oficial da Receita.
+    dtOpcaoSimples: rf?.dtOpcaoSimples ?? '', dtExclusaoSimples: rf?.dtExclusaoSimples ?? '',
+    dtOpcaoMei: rf?.dtOpcaoMei ?? '', dtExclusaoMei: rf?.dtExclusaoMei ?? '',
   }
 }
 
