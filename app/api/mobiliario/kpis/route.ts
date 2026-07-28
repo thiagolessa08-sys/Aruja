@@ -41,6 +41,11 @@ export async function GET(req: NextRequest) {
     const foco = req.nextUrl.searchParams.get('foco') === 'arrecadacao' ? 'arrecadacao' : 'cadastro'
     const semSit = !f.situacao
     const matchSit = (sit: string) => semSit || sit === f.situacao
+    // Mês (acumulado): restringe aberturas/encerramentos às datas com mês <= selecionado,
+    // em todos os anos (mesma convenção do Outros Tributos). ISS Arrecadado vem do BIORC
+    // (posição anual/snapshot) e não é acumulável por mês.
+    const filtroMesIni = f.mes ? ` AND MONTH(dt_inicio_atividade) <= ${f.mes}` : ''
+    const filtroMesEnc = f.mes ? ` AND MONTH(dt_enc_atividade) <= ${f.mes}` : ''
 
     const [sitRows, abRows, encRows, receita] = await Promise.all([
       agentQuery(`
@@ -50,10 +55,12 @@ export async function GET(req: NextRequest) {
       agentQuery(`
         SELECT YEAR(dt_inicio_atividade) AS ano, ds_situacao AS sit, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario
+        WHERE dt_inicio_atividade IS NOT NULL${filtroMesIni}
         GROUP BY YEAR(dt_inicio_atividade), ds_situacao`, 800),
       agentQuery(`
         SELECT YEAR(dt_enc_atividade) AS ano, ds_situacao AS sit, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario
+        WHERE dt_enc_atividade IS NOT NULL${filtroMesEnc}
         GROUP BY YEAR(dt_enc_atividade), ds_situacao`, 800),
       agentQuery(`
         SELECT d.NO_ANO AS ano, nr.DS_ALINEA_RECEITA AS alinea, SUM(r.VL_ARRECADACAO_RECEITA) AS arrec

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
-export interface FiltrosMobiliario { ano: number | ''; situacao: string }
+export interface FiltrosMobiliario { ano: number | ''; situacao: string; mes?: number | '' }
 
 interface Tip { chart: 'bar' | 'lollipop'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
 
@@ -155,6 +155,7 @@ function buildQS(f: FiltrosMobiliario, foco: string): string {
   const p = new URLSearchParams()
   if (f.ano) p.set('ano', String(f.ano))
   if (f.situacao) p.set('situacao', f.situacao)
+  if (f.mes) p.set('mes', String(f.mes))
   if (foco === 'arrecadacao') p.set('foco', 'arrecadacao')
   const s = p.toString()
   return s ? `?${s}` : ''

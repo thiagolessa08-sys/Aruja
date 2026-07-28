@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
+    const filtroMesIni = f.mes ? ` AND MONTH(dt_inicio_atividade) <= ${f.mes}` : ''
 
     const [sitRows, abRows, receita] = await Promise.all([
       agentQuery(`
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
       agentQuery(`
         SELECT YEAR(dt_inicio_atividade) AS ano, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario
+        WHERE dt_inicio_atividade IS NOT NULL${filtroMesIni}
         GROUP BY YEAR(dt_inicio_atividade)`, 200),
       agentQuery(`
         SELECT d.NO_ANO AS ano, nr.DS_ALINEA_RECEITA AS alinea, SUM(r.VL_ARRECADACAO_RECEITA) AS arrec

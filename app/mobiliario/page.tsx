@@ -10,6 +10,7 @@ import PainelTributo from '../tributo/PainelTributo'
 import { SITUACOES, type SituacaoOpt } from '@/lib/mobiliario-filtros'
 
 type SubAba = 'iss' | 'tfe' | 'tfhs' | 'mob'
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 export default function MobiliarioPage() {
   const router = useRouter()
@@ -20,6 +21,7 @@ export default function MobiliarioPage() {
   const [opts, setOpts] = useState<{ anos: number[]; situacoes: SituacaoOpt[] }>({ anos: [], situacoes: SITUACOES })
   const [rAno, setRAno] = useState<number | ''>('')
   const [rSituacao, setRSituacao] = useState<string>('')
+  const [rMes, setRMes] = useState<number | ''>('') // mês selecionado (acumulado); '' = ano todo
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -62,7 +64,7 @@ export default function MobiliarioPage() {
     backgroundRepeat: 'no-repeat', backgroundPosition: 'right 11px center', backgroundImage: chevron('%23283e93'),
   }
 
-  const filtros: FiltrosMobiliario = { ano: rAno, situacao: rSituacao }
+  const filtros: FiltrosMobiliario = { ano: rAno, situacao: rSituacao, mes: rMes }
 
   const SUBABAS: { id: SubAba; label: string }[] = [
     { id: 'mob', label: 'MOBILIÁRIO' },
@@ -112,6 +114,10 @@ export default function MobiliarioPage() {
                 <select aria-label="Situação cadastral" value={rSituacao} onChange={e => setRSituacao(e.target.value)} style={selectPill}>
                   <option value="">Situação: Todas</option>
                   {opts.situacoes.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                <select aria-label="Mês" value={rMes} onChange={e => setRMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
+                  <option value="">Mês: Ano todo</option>
+                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
               </>
             ) : (

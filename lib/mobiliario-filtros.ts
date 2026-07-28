@@ -6,6 +6,7 @@
 export interface FiltrosMob {
   ano: number | ''
   situacao: string
+  mes: number | ''
 }
 
 export interface SituacaoOpt {
@@ -30,5 +31,7 @@ export function lerFiltros(sp: URLSearchParams): FiltrosMob {
   const ano = anoRaw && /^\d{4}$/.test(anoRaw) ? Number(anoRaw) : ''
   const situacaoRaw = (sp.get('situacao') || '').trim()
   const situacao = SITUACOES.some(s => s.value === situacaoRaw) ? situacaoRaw : ''
-  return { ano: ano as number | '', situacao }
+  const mesRaw = Number(sp.get('mes'))
+  const mes = mesRaw >= 1 && mesRaw <= 12 ? mesRaw : ''
+  return { ano: ano as number | '', situacao, mes: mes as number | '' }
 }
