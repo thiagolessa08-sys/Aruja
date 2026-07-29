@@ -101,22 +101,17 @@ async function bucketsTcaRaw(f: FiltrosTca): Promise<Map<number, BucketsTcaAno>>
         AND g.ds_situacao NOT IN ('Recalculo','Validacao')
         AND g.cd_devedor IN (SELECT e.cd_origem FROM ${S}.tb_extr_isencoes e WHERE e.ds_tipo_isencao IN ('IsentoTaxas'))${where}
       GROUP BY g.no_exercicio_lancamento`, 200).catch(() => null),
-    // Suspenso: mov 20 · valor = |net| por devedor, só devedores com net<0 (soma global
-    // com sinal é só uma aproximação — some positivos e negativos, subestimando/alterando
-    // o total quando há devedores com net>0 misturados). Validado: 2026 bate em ambos os
-    // métodos (80.025,00) mas 2025 diverge (144.067,36 pela soma simples vs 94.747,36 pelo
-    // valor correto por devedor) — por devedor é o que bate com a referência.
+    // Suspenso: mov 20 · valor = |net| (SUM com sinal; devedores com net<0) — mesma
+    // convenção do IPTU (lib/tributo-engine.ts). SUM(vl_movimento) sem sinal fica errado
+    // aqui: pra 2026, dava 96.726 em vez dos 80.025 corretos (validado contra a referência).
     agentQuery(`
-      SELECT ex, SUM(-valor) vl FROM (
-        SELECT g.no_exercicio_lancamento ex, g.cd_devedor dev, SUM(pm.vl_movimento * pm.no_sinal) valor
-        FROM ${S}.tb_dsod_guias g
-        ${join}
-        JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-        JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-        WHERE g.cd_tributo = ${TCA} AND pm.cd_tipo_movimento IN (20) AND p.no_parcela <> 0${where}
-        GROUP BY g.no_exercicio_lancamento, g.cd_devedor
-        HAVING SUM(pm.vl_movimento * pm.no_sinal) < 0
-      ) t GROUP BY ex`, 200),
+      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento * pm.no_sinal) vl
+      FROM ${S}.tb_dsod_guias g
+      ${join}
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo = ${TCA} AND pm.cd_tipo_movimento IN (20) AND p.no_parcela <> 0${where}
+      GROUP BY g.no_exercicio_lancamento`, 200),
   ])
 
   const map = new Map<number, BucketsTcaAno>()
@@ -132,7 +127,7 @@ async function bucketsTcaRaw(f: FiltrosTca): Promise<Map<number, BucketsTcaAno>>
   for (const r of abertoR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
   for (const r of inadR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
   if (isenR) for (const r of isenR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.isento = num(r[1]); map.set(ex, b) }
-  for (const r of suspR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, num(r[1])); map.set(ex, b) }
+  for (const r of suspR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, -num(r[1])); map.set(ex, b) }
   return map
 }
 
