@@ -9,6 +9,7 @@ interface Resumo {
   porTributo: { nome: string; valor: number }[]
   porExercicio: { ano: number; valor: number }[]
 }
+interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
@@ -65,10 +66,16 @@ function geomBars(d: { ano: number; valor: number }[]) {
 export default function PainelDivida() {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; valor: number } | null>(null)
+  const [devedores, setDevedores] = useState<Devedor[] | null>(null)
+  const [buscaDevedor, setBuscaDevedor] = useState('')
 
   useEffect(() => {
     fetch('/api/divida/resumo').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.total === 'number') setD(x) }).catch(() => {})
+  }, [])
+  useEffect(() => {
+    fetch('/api/divida/devedores?limite=200').then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && Array.isArray(x.devedores)) setDevedores(x.devedores) }).catch(() => {})
   }, [])
 
   const g = d ?? FALLBACK
@@ -270,6 +277,54 @@ export default function PainelDivida() {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* 200 maiores devedores */}
+      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+        {!devedores ? <LoadingOverlay label="Carregando devedores…" /> : null}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>200 Maiores Devedores</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo em dívida ativa (administrativa + judicial + em ajuizamento) por contribuinte</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            <input value={buscaDevedor} onChange={e => setBuscaDevedor(e.target.value)} placeholder="Buscar nome ou CPF/CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: 220, fontFamily: 'inherit' }} />
+          </div>
+        </div>
+        <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ maxHeight: 480, overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['#', 'Contribuinte', 'CPF/CNPJ', 'Dívida Ativa'].map((h, i) => (
+                    <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '10px 14px', textAlign: i === 0 ? 'center' : i === 3 ? 'right' : 'left', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const q = buscaDevedor.trim().toLowerCase()
+                  const lista = (devedores ?? []).filter(x => !q || x.nome.toLowerCase().includes(q) || x.cpfCnpj.toLowerCase().includes(q))
+                  if (!lista.length) return (
+                    <tr><td colSpan={4} style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: '#9098a8' }}>{devedores ? 'Nenhum devedor encontrado.' : ''}</td></tr>
+                  )
+                  return lista.map((dv, i) => {
+                    const cellBg = i % 2 === 0 ? '#ffffff' : '#f7f9fd'
+                    return (
+                      <tr key={dv.cd}>
+                        <td style={{ background: '#e9eef8', color: '#5b6477', fontSize: 11.5, fontWeight: 600, padding: '8px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{i + 1}</td>
+                        <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '8px 14px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{dv.nome || `Contribuinte ${dv.cd}`}</td>
+                        <td style={{ background: cellBg, color: '#5b6477', fontSize: 11.5, padding: '8px 14px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{dv.cpfCnpj || '—'}</td>
+                        <td style={{ background: cellBg, color: '#c0612a', fontSize: 12, fontWeight: 700, padding: '8px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtReais(dv.saldo)}</td>
+                      </tr>
+                    )
+                  })
+                })()}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

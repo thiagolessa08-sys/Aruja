@@ -69,3 +69,27 @@ async function resumoDividaRaw(): Promise<ResumoDivida> {
 
   return { total: administrativa + judicial + ajuizamento, administrativa, judicial, ajuizamento, porTributo, porExercicio }
 }
+
+export interface MaiorDevedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
+
+// Maiores devedores (dívida ativa) — agrupado por g.cd_contr (contribuinte devedor da
+// guia, tributo-agnóstico, ao contrário de cd_origem/cd_devedor que apontam pra tabelas
+// diferentes conforme o tributo). Soma vl_saldo de todas as guias em situação de dívida.
+export async function maioresDevedores(limite = 200): Promise<MaiorDevedor[]> {
+  return cached(`divida:devedores:${limite}`, TTL_15MIN, () => maioresDevedoresRaw(limite))
+}
+
+async function maioresDevedoresRaw(limite: number): Promise<MaiorDevedor[]> {
+  const r = await agentQuery(`
+    SELECT TOP ${limite} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pp.vl_saldo) saldo
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
+    WHERE p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento')
+    GROUP BY g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj
+    ORDER BY saldo DESC`, limite)
+  return r.rows
+    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim(), cpfCnpj: String(row[2] ?? '').trim(), saldo: num(row[3]) }))
+    .filter(x => x.saldo > 0)
+}
