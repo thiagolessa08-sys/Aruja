@@ -7,6 +7,7 @@ import Link from 'next/link'
 import PainelMobiliario, { type FiltrosMobiliario } from './PainelMobiliario'
 import TopNav from '../_components/TopNav'
 import PainelTributo from '../tributo/PainelTributo'
+import TfePorSegmento from '../_components/TfePorSegmento'
 import { SITUACOES, type SituacaoOpt } from '@/lib/mobiliario-filtros'
 
 type SubAba = 'iss' | 'tfe' | 'tfhs' | 'mob'
@@ -150,6 +151,7 @@ export default function MobiliarioPage() {
           </div>
         )}
         {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" />}
+        {aba === 'tfe' && <TfePorSegmento />}
         {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" />}
         {aba === 'mob' && <PainelMobiliario filtros={filtros} />}
 
