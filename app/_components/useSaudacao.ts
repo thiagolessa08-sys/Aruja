@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from 'react'
 
-// Nome exibido na saudação ("Olá, <nome>!"), conforme o perfil do usuário logado.
-// Lê o cookie não-sensível `perfil` (definido no login). Orçamentário → "Prefeito";
-// demais perfis → "Roberta". Default 'Roberta' para o render inicial/SSR.
+// Nome exibido na saudação ("Olá, <nome>!") — o do usuário efetivamente logado
+// (JWT via /api/auth/me), não um valor fixo. Default vazio para o render inicial/SSR.
 export function useSaudacaoNome(): string {
-  const [nome, setNome] = useState('Roberta')
+  const [nome, setNome] = useState('')
   useEffect(() => {
-    const perfil = document.cookie.split('; ').find(c => c.startsWith('perfil='))?.split('=')[1]
-    setNome(perfil === 'orcamentario' ? 'Prefeito' : 'Roberta')
+    fetch('/api/auth/me').then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.nome) setNome(d.nome) }).catch(() => {})
   }, [])
   return nome
 }
