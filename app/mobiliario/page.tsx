@@ -69,9 +69,9 @@ export default function MobiliarioPage() {
 
   const SUBABAS: { id: SubAba; label: string }[] = [
     { id: 'mob', label: 'MOBILIÁRIO' },
-    { id: 'iss', label: 'ISS' },
     { id: 'tfe', label: 'TFE' },
     { id: 'tfhs', label: 'TFHS' },
+    { id: 'iss', label: 'ISS' },
   ]
 
   return (
