@@ -101,9 +101,11 @@ async function bucketsTcaRaw(f: FiltrosTca): Promise<Map<number, BucketsTcaAno>>
         AND g.ds_situacao NOT IN ('Recalculo','Validacao')
         AND g.cd_devedor IN (SELECT e.cd_origem FROM ${S}.tb_extr_isencoes e WHERE e.ds_tipo_isencao IN ('IsentoTaxas'))${where}
       GROUP BY g.no_exercicio_lancamento`, 200).catch(() => null),
-    // Suspenso: mov 20 (padrão do motor tributário; a query de referência veio duplicada da inadimplência)
+    // Suspenso: mov 20 · valor = |net| (SUM com sinal; devedores com net<0) — mesma
+    // convenção do IPTU (lib/tributo-engine.ts). SUM(vl_movimento) sem sinal fica errado
+    // aqui: pra 2026, dava 96.726 em vez dos 80.025 corretos (validado contra a referência).
     agentQuery(`
-      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
+      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento * pm.no_sinal) vl
       FROM ${S}.tb_dsod_guias g
       ${join}
       JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
@@ -125,7 +127,7 @@ async function bucketsTcaRaw(f: FiltrosTca): Promise<Map<number, BucketsTcaAno>>
   for (const r of abertoR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
   for (const r of inadR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
   if (isenR) for (const r of isenR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.isento = num(r[1]); map.set(ex, b) }
-  for (const r of suspR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, num(r[1])); map.set(ex, b) }
+  for (const r of suspR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, -num(r[1])); map.set(ex, b) }
   return map
 }
 
