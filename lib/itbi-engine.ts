@@ -8,7 +8,7 @@
 //   • arrecadado   = baixas 11,14 · lanc 0,4,7,10 · exclui Estorno de Baixa e Cancelada
 //   • emAberto     = net (vl_movimento*no_sinal) por (devedor,vencimento) HAVING net>0
 //   • inadimplente = idem, só vencidos (dt_vencimento < hoje-1) HAVING net>1
-//   • suspenso     = SUM(vl_movimento) mov 20
+//   • suspenso     = |net| (vl_movimento*no_sinal) mov 20, devedores com net<0
 //   • isento       = "Não Incidência de ITBI" (via tb_extr_isencoes; requer permissão)
 import { agentQuery } from '@/lib/agent'
 import { cached, TTL_15MIN } from '@/lib/cache'
@@ -80,9 +80,11 @@ async function bucketsItbiRaw(): Promise<Map<number, BucketsItbiAno>> {
       GROUP BY g.no_exercicio_lancamento`, 200),
     agentQuery(qNet(false), 200),
     agentQuery(qNet(true), 200),
-    // Suspenso — mov 20
+    // Suspenso — mov 20 · valor = |net| (SUM com sinal; devedores com net<0) — mesma
+    // convenção do IPTU/TCA/ISSCC. SUM(vl_movimento) sem sinal ficava errado nos anos com
+    // sinais mistos (ex.: 2022 dava 25.443,02 em vez de 0 — validado contra dados reais).
     agentQuery(`
-      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
+      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento * pm.no_sinal) vl
       FROM ${S}.tb_dsod_guias g ${JITBI}
       JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
@@ -98,7 +100,7 @@ async function bucketsItbiRaw(): Promise<Map<number, BucketsItbiAno>> {
   for (const r of arrecR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.arrecadado = num(r[1]); map.set(ex, b) }
   for (const r of abertoR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
   for (const r of inadR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
-  for (const r of suspR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, num(r[1])); map.set(ex, b) }
+  for (const r of suspR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, -num(r[1])); map.set(ex, b) }
 
   // Isento (não incidência) — best-effort: pode falhar por permissão em tb_extr_isencoes.
   const isento = await isentoItbiPorExercicio()
