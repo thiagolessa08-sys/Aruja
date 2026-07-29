@@ -93,3 +93,28 @@ async function maioresDevedoresRaw(limite: number): Promise<MaiorDevedor[]> {
     .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim(), cpfCnpj: String(row[2] ?? '').trim(), saldo: num(row[3]) }))
     .filter(x => x.saldo > 0)
 }
+
+export interface IptuDivida { imoveisComIptu: number; imoveisEmDivida: number; valorDivida: number }
+
+// IPTU × Dívida Ativa: de todos os imóveis com IPTU lançado (cd_devedor, g.cd_tributo=1),
+// quantos têm alguma guia em situação de dívida (administrativa/judicial/ajuizamento).
+export async function iptuDividaResumo(): Promise<IptuDivida> {
+  return cached('divida:iptu', TTL_15MIN, iptuDividaResumoRaw)
+}
+
+async function iptuDividaResumoRaw(): Promise<IptuDivida> {
+  const [totR, divR] = await Promise.all([
+    agentQuery(`SELECT COUNT(DISTINCT g.cd_devedor) FROM ${SCHEMA}.tb_dsod_guias g WHERE g.cd_tributo = 1`, 1),
+    agentQuery(`
+      SELECT COUNT(DISTINCT g.cd_devedor) qt, SUM(pp.vl_saldo) saldo
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo = 1 AND p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento') AND pp.vl_saldo > 0`, 1),
+  ])
+  return {
+    imoveisComIptu: num(totR.rows[0]?.[0]),
+    imoveisEmDivida: num(divR.rows[0]?.[0]),
+    valorDivida: num(divR.rows[0]?.[1]),
+  }
+}

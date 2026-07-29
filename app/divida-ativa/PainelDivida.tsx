@@ -8,6 +8,7 @@ interface Resumo {
   total: number; administrativa: number; judicial: number; ajuizamento: number
   porTributo: { nome: string; valor: number }[]
   porExercicio: { ano: number; valor: number }[]
+  iptuDivida?: { imoveisComIptu: number; imoveisEmDivida: number; valorDivida: number }
 }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
 
@@ -251,6 +252,36 @@ export default function PainelDivida() {
           ) : null}
         </div>
       </div>
+
+      {/* IPTU × Dívida Ativa */}
+      {g.iptuDivida ? (() => {
+        const iv = g.iptuDivida!
+        const pct = iv.imoveisComIptu ? (iv.imoveisEmDivida / iv.imoveisComIptu) * 100 : 0
+        return (
+          <div style={{ ...card, marginTop: 18 }}>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>IPTU e Dívida Ativa</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Dos imóveis com IPTU lançado, quantos têm guia inscrita em dívida ativa</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginTop: 16 }}>
+              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Imóveis com IPTU lançado</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>{iv.imoveisComIptu.toLocaleString('pt-BR')}</div>
+              </div>
+              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Imóveis inscritos em Dívida Ativa</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#c0612a', marginTop: 6 }}>{iv.imoveisEmDivida.toLocaleString('pt-BR')}</div>
+              </div>
+              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>% dos imóveis com IPTU</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#283e93', marginTop: 6 }}>{fmtPct(pct)}</div>
+              </div>
+              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Valor em Dívida Ativa (IPTU)</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>{fmtAbrev(iv.valorDivida)}</div>
+              </div>
+            </div>
+          </div>
+        )
+      })() : null}
 
       {/* Tabela por tributo */}
       <div style={{ ...card, marginTop: 18 }}>
