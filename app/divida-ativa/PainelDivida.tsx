@@ -95,13 +95,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
 
+  // Os filtros de Exercício/Mês (ano/mes) ainda não restringem os dados desta tela —
+  // ela sempre mostra o histórico completo acumulado, como antes de os filtros existirem.
   useEffect(() => {
-    setD(null)
-    const p = new URLSearchParams()
-    if (ano) p.set('ano', String(ano))
-    if (mes) p.set('mes', String(mes))
-    const qs = p.toString()
-    fetch(`/api/divida/resumo${qs ? `?${qs}` : ''}`).then(r => r.ok ? r.json() : null)
+    fetch('/api/divida/resumo').then(r => r.ok ? r.json() : null)
       .then(x => {
         if (x && !x.error && typeof x.total === 'number') {
           setD(x)
@@ -109,15 +106,11 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         }
       }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ano, mes])
+  }, [])
   useEffect(() => {
-    setDevedores(null)
-    const p = new URLSearchParams({ limite: '200' })
-    if (ano) p.set('ano', String(ano))
-    if (mes) p.set('mes', String(mes))
-    fetch(`/api/divida/devedores?${p.toString()}`).then(r => r.ok ? r.json() : null)
+    fetch('/api/divida/devedores?limite=200').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.devedores)) setDevedores(x.devedores) }).catch(() => {})
-  }, [ano, mes])
+  }, [])
 
   const g = d ?? FALLBACK
   const pctJud = g.total ? (g.judicial / g.total) * 100 : 0
