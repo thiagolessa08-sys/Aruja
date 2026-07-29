@@ -88,7 +88,7 @@ function geomBars(d: { ano: number; valor: number }[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
-export default function PainelDivida() {
+export default function PainelDivida({ ano, onAnos }: { ano?: number; onAnos?: (anos: number[]) => void } = {}) {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; valor: number } | null>(null)
   const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
@@ -96,13 +96,23 @@ export default function PainelDivida() {
   const [buscaDevedor, setBuscaDevedor] = useState('')
 
   useEffect(() => {
-    fetch('/api/divida/resumo').then(r => r.ok ? r.json() : null)
-      .then(x => { if (x && !x.error && typeof x.total === 'number') setD(x) }).catch(() => {})
-  }, [])
+    setD(null)
+    const qs = ano ? `?ano=${ano}` : ''
+    fetch(`/api/divida/resumo${qs}`).then(r => r.ok ? r.json() : null)
+      .then(x => {
+        if (x && !x.error && typeof x.total === 'number') {
+          setD(x)
+          if (Array.isArray(x.anos)) onAnos?.(x.anos)
+        }
+      }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ano])
   useEffect(() => {
-    fetch('/api/divida/devedores?limite=200').then(r => r.ok ? r.json() : null)
+    setDevedores(null)
+    const qs = ano ? `&ano=${ano}` : ''
+    fetch(`/api/divida/devedores?limite=200${qs}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.devedores)) setDevedores(x.devedores) }).catch(() => {})
-  }, [])
+  }, [ano])
 
   const g = d ?? FALLBACK
   const pctJud = g.total ? (g.judicial / g.total) * 100 : 0

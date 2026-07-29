@@ -27,14 +27,17 @@ export interface ResumoDivida {
 
 const num = (v: unknown) => Number(v) || 0
 
-export async function resumoDivida(): Promise<ResumoDivida> {
-  return cached('divida:resumo', TTL_15MIN, resumoDividaRaw)
+// `ano` (opcional): restringe TUDO ao exercício de origem da guia (no_exercicio_lancamento).
+// Sem ano, mostra o estoque acumulado de sempre (todos os exercícios).
+export async function resumoDivida(ano?: number): Promise<ResumoDivida> {
+  return cached(`divida:resumo:${ano ?? 'all'}`, TTL_15MIN, () => resumoDividaRaw(ano))
 }
 
-async function resumoDividaRaw(): Promise<ResumoDivida> {
+async function resumoDividaRaw(ano?: number): Promise<ResumoDivida> {
   // Uma passada: situação × tributo × exercício. Agregações feitas em JS. vl_lancto/vl_pagto
   // (além de vl_saldo, já usado) dão a Taxa de Recuperação: de tudo que foi inscrito em
   // dívida ativa (lançado), quanto já foi efetivamente pago.
+  const filtroAno = ano ? ` WHERE g.no_exercicio_lancamento = ${ano}` : ''
   const r = await agentQuery(`
     SELECT p.ds_situacao AS sit, t.ds_tributo AS nome, g.no_exercicio_lancamento AS ex,
            SUM(pp.vl_lancto) AS lancto, SUM(pp.vl_pagto) AS pagto, SUM(pp.vl_saldo) AS saldo
@@ -42,6 +45,7 @@ async function resumoDividaRaw(): Promise<ResumoDivida> {
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+    ${filtroAno}
     GROUP BY p.ds_situacao, t.ds_tributo, g.no_exercicio_lancamento`, 8000)
 
   let administrativa = 0, judicial = 0, ajuizamento = 0
@@ -55,15 +59,15 @@ async function resumoDividaRaw(): Promise<ResumoDivida> {
     const tipo = SIT_DIVIDA[sit]
     if (!tipo) continue // só dívida (ignora Normal)
     const nome = String(row[1] ?? '').trim() || 'Não classificado'
-    const ano = num(row[2])
+    const exAno = num(row[2])
     const lancto = num(row[3]), pagto = num(row[4]), saldo = num(row[5])
 
     lancadoTotal += lancto
     pagoTotal += pagto
-    if (ano >= 2005 && ano <= 2030) {
-      const e = exercRec.get(ano) ?? { lancado: 0, pago: 0 }
+    if (exAno >= 2005 && exAno <= 2030) {
+      const e = exercRec.get(exAno) ?? { lancado: 0, pago: 0 }
       e.lancado += lancto; e.pago += pagto
-      exercRec.set(ano, e)
+      exercRec.set(exAno, e)
     }
 
     if (saldo <= 0) continue // porTributo/porExercicio (saldo em aberto) ignoram saldo zerado
@@ -72,7 +76,7 @@ async function resumoDividaRaw(): Promise<ResumoDivida> {
     else ajuizamento += saldo
 
     trib.set(nome, (trib.get(nome) ?? 0) + saldo)
-    if (ano >= 2005 && ano <= 2030) exerc.set(ano, (exerc.get(ano) ?? 0) + saldo)
+    if (exAno >= 2005 && exAno <= 2030) exerc.set(exAno, (exerc.get(exAno) ?? 0) + saldo)
   }
 
   const porTributo = Array.from(trib.entries())
@@ -81,11 +85,11 @@ async function resumoDividaRaw(): Promise<ResumoDivida> {
     .slice(0, 9)
 
   const porExercicio = Array.from(exerc.entries())
-    .map(([ano, valor]) => ({ ano, valor }))
+    .map(([ex, valor]) => ({ ano: ex, valor }))
     .sort((a, b) => a.ano - b.ano)
 
   const recPorExercicio = Array.from(exercRec.entries())
-    .map(([ano, x]) => ({ ano, lancado: x.lancado, pago: x.pago, taxa: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
+    .map(([ex, x]) => ({ ano: ex, lancado: x.lancado, pago: x.pago, taxa: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
     .filter(x => x.lancado > 0)
     .sort((a, b) => a.ano - b.ano)
 
@@ -103,18 +107,19 @@ export interface MaiorDevedor { cd: number; nome: string; cpfCnpj: string; saldo
 // Maiores devedores (dívida ativa) — agrupado por g.cd_contr (contribuinte devedor da
 // guia, tributo-agnóstico, ao contrário de cd_origem/cd_devedor que apontam pra tabelas
 // diferentes conforme o tributo). Soma vl_saldo de todas as guias em situação de dívida.
-export async function maioresDevedores(limite = 200): Promise<MaiorDevedor[]> {
-  return cached(`divida:devedores:${limite}`, TTL_15MIN, () => maioresDevedoresRaw(limite))
+export async function maioresDevedores(limite = 200, ano?: number): Promise<MaiorDevedor[]> {
+  return cached(`divida:devedores:${limite}:${ano ?? 'all'}`, TTL_15MIN, () => maioresDevedoresRaw(limite, ano))
 }
 
-async function maioresDevedoresRaw(limite: number): Promise<MaiorDevedor[]> {
+async function maioresDevedoresRaw(limite: number, ano?: number): Promise<MaiorDevedor[]> {
+  const filtroAno = ano ? ` AND g.no_exercicio_lancamento = ${ano}` : ''
   const r = await agentQuery(`
     SELECT TOP ${limite} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pp.vl_saldo) saldo
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
-    WHERE p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento')
+    WHERE p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento')${filtroAno}
     GROUP BY g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj
     ORDER BY saldo DESC`, limite)
   return r.rows
@@ -126,19 +131,20 @@ export interface IptuDivida { imoveisComIptu: number; imoveisEmDivida: number; v
 
 // IPTU × Dívida Ativa: de todos os imóveis com IPTU lançado (cd_devedor, g.cd_tributo=1),
 // quantos têm alguma guia em situação de dívida (administrativa/judicial/ajuizamento).
-export async function iptuDividaResumo(): Promise<IptuDivida> {
-  return cached('divida:iptu', TTL_15MIN, iptuDividaResumoRaw)
+export async function iptuDividaResumo(ano?: number): Promise<IptuDivida> {
+  return cached(`divida:iptu:${ano ?? 'all'}`, TTL_15MIN, () => iptuDividaResumoRaw(ano))
 }
 
-async function iptuDividaResumoRaw(): Promise<IptuDivida> {
+async function iptuDividaResumoRaw(ano?: number): Promise<IptuDivida> {
+  const filtroAno = ano ? ` AND g.no_exercicio_lancamento = ${ano}` : ''
   const [totR, divR] = await Promise.all([
-    agentQuery(`SELECT COUNT(DISTINCT g.cd_devedor) FROM ${SCHEMA}.tb_dsod_guias g WHERE g.cd_tributo = 1`, 1),
+    agentQuery(`SELECT COUNT(DISTINCT g.cd_devedor) FROM ${SCHEMA}.tb_dsod_guias g WHERE g.cd_tributo = 1${filtroAno}`, 1),
     agentQuery(`
       SELECT COUNT(DISTINCT g.cd_devedor) qt, SUM(pp.vl_saldo) saldo
       FROM ${SCHEMA}.tb_dsod_guias g
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-      WHERE g.cd_tributo = 1 AND p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento') AND pp.vl_saldo > 0`, 1),
+      WHERE g.cd_tributo = 1 AND p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento') AND pp.vl_saldo > 0${filtroAno}`, 1),
   ])
   return {
     imoveisComIptu: num(totR.rows[0]?.[0]),
@@ -158,12 +164,13 @@ export interface DebitosPassiveis { total: number; quantidade: number; porTribut
 // sozinho infla o total em ~R$8 bi se não for excluído — validado contra dados reais).
 const EX_FLOOR_DEBITOS = 2019
 
-export async function debitosPassiveisDivida(): Promise<DebitosPassiveis> {
-  return cached('divida:passiveis', TTL_15MIN, debitosPassiveisDividaRaw)
+export async function debitosPassiveisDivida(ano?: number): Promise<DebitosPassiveis> {
+  return cached(`divida:passiveis:${ano ?? 'all'}`, TTL_15MIN, () => debitosPassiveisDividaRaw(ano))
 }
 
-async function debitosPassiveisDividaRaw(): Promise<DebitosPassiveis> {
+async function debitosPassiveisDividaRaw(ano?: number): Promise<DebitosPassiveis> {
   const excl = CODIGOS_EXCLUIDOS.join(',')
+  const filtroEx = ano ? `g.no_exercicio_lancamento = ${ano}` : `g.no_exercicio_lancamento >= ${EX_FLOOR_DEBITOS}`
   const r = await agentQuery(`
     SELECT trib, t.ds_tributo nome, SUM(valor) saldo, COUNT(*) qt FROM (
       SELECT g.cd_tributo trib, g.cd_devedor dev, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
@@ -171,7 +178,7 @@ async function debitosPassiveisDividaRaw(): Promise<DebitosPassiveis> {
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
       WHERE p.ds_situacao = 'Normal' AND p.no_parcela <> 0
-        AND g.no_exercicio_lancamento >= ${EX_FLOOR_DEBITOS} AND g.cd_tributo NOT IN (${excl})
+        AND ${filtroEx} AND g.cd_tributo NOT IN (${excl})
         AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
         AND p.dt_vencimento < getdate()-1
       GROUP BY g.cd_tributo, g.cd_devedor, p.dt_vencimento
@@ -213,12 +220,17 @@ const LABEL_SITUACAO: Record<string, string> = {
 // movimento + CODIGOS_EXCLUIDOS). O valor confiável de 'Normal' vencido já está no card
 // "Débitos Passíveis de Inscrição"; os valores das 3 situações de dívida já estão nos
 // demais cards desta tela (resumoDivida).
-export async function situacaoParcelas(): Promise<SituacaoParcela[]> {
-  return cached('divida:situacaoParcelas', TTL_15MIN, situacaoParcelasRaw)
+export async function situacaoParcelas(ano?: number): Promise<SituacaoParcela[]> {
+  return cached(`divida:situacaoParcelas:${ano ?? 'all'}`, TTL_15MIN, () => situacaoParcelasRaw(ano))
 }
 
-async function situacaoParcelasRaw(): Promise<SituacaoParcela[]> {
-  const r = await agentQuery(`SELECT ds_situacao sit, COUNT(*) qt FROM ${SCHEMA}.tb_dsod_parcelas GROUP BY ds_situacao`, 20)
+async function situacaoParcelasRaw(ano?: number): Promise<SituacaoParcela[]> {
+  const sql = ano
+    ? `SELECT p.ds_situacao sit, COUNT(*) qt FROM ${SCHEMA}.tb_dsod_parcelas p
+       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+       WHERE g.no_exercicio_lancamento = ${ano} GROUP BY p.ds_situacao`
+    : `SELECT ds_situacao sit, COUNT(*) qt FROM ${SCHEMA}.tb_dsod_parcelas GROUP BY ds_situacao`
+  const r = await agentQuery(sql, 20)
   const itens = r.rows
     .map(row => ({ situacao: String(row[0] ?? '').trim(), quantidade: num(row[1]) }))
     .filter(x => x.situacao)
