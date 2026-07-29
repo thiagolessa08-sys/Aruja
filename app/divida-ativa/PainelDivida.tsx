@@ -9,6 +9,7 @@ interface Resumo {
   porTributo: { nome: string; valor: number }[]
   porExercicio: { ano: number; valor: number }[]
   iptuDivida?: { imoveisComIptu: number; imoveisEmDivida: number; valorDivida: number }
+  debitosPassiveis?: { total: number; quantidade: number; porTributo: { nome: string; valor: number }[] }
 }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
 
@@ -279,6 +280,45 @@ export default function PainelDivida() {
                 <div style={{ fontSize: 20, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>{fmtAbrev(iv.valorDivida)}</div>
               </div>
             </div>
+          </div>
+        )
+      })() : null}
+
+      {/* Débitos passíveis de serem inscritos em Dívida Ativa */}
+      {g.debitosPassiveis ? (() => {
+        const dp = g.debitosPassiveis!
+        const maxTrib = Math.max(1, ...dp.porTributo.map(t => t.valor))
+        return (
+          <div style={{ ...card, marginTop: 18 }}>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Débitos Passíveis de Inscrição em Dívida Ativa</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Parcelas já vencidas, ainda em situação Normal (não inscritas) — candidatas a virar dívida ativa</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 16 }}>
+              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Valor total passível de inscrição</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#c0612a', marginTop: 6 }}>{fmtReais(dp.total)}</div>
+              </div>
+              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Débitos vencidos ainda não inscritos</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>{dp.quantidade.toLocaleString('pt-BR')}</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {dp.porTributo.map((t, i) => {
+                const w = (t.valor / maxTrib) * 100
+                return (
+                  <div key={t.nome}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11.5, color: '#3a4256', lineHeight: 1.2, paddingRight: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(t.valor)}</span>
+                    </div>
+                    <div style={{ height: 12, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: TRIB_CORES[i % TRIB_CORES.length], borderRadius: 5 }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>Considera parcelas com vencimento a partir de 2019, saldo líquido em aberto por tributo/devedor/vencimento (mesma convenção de inadimplência usada nas telas de tributo).</div>
           </div>
         )
       })() : null}

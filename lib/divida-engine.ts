@@ -1,5 +1,6 @@
 import { agentQuery } from '@/lib/agent'
 import { cached, TTL_15MIN } from '@/lib/cache'
+import { CODIGOS_EXCLUIDOS } from '@/lib/tributos'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -117,4 +118,54 @@ async function iptuDividaResumoRaw(): Promise<IptuDivida> {
     imoveisEmDivida: num(divR.rows[0]?.[0]),
     valorDivida: num(divR.rows[0]?.[1]),
   }
+}
+
+export interface DebitosPassiveis { total: number; quantidade: number; porTributo: { nome: string; valor: number }[] }
+
+// Débitos passíveis de serem inscritos em Dívida Ativa: parcelas ainda em situação
+// 'Normal' (nunca formalizadas em dívida ativa), já vencidas, com saldo líquido em aberto
+// (net > 0 por tributo+devedor+vencimento — mesma convenção de "emAberto/inadimplência"
+// usada em bucketsIptu/bucketsItbi; SUM(vl_saldo) bruto não serve aqui, pois parcelas
+// substituídas/recalculadas deixam saldo "fantasma" que só o net por movimento resolve).
+// Exclui os códigos de tributo de CODIGOS_EXCLUIDOS (ruído/não-tributário, ex.: cd 20
+// sozinho infla o total em ~R$8 bi se não for excluído — validado contra dados reais).
+const EX_FLOOR_DEBITOS = 2019
+
+export async function debitosPassiveisDivida(): Promise<DebitosPassiveis> {
+  return cached('divida:passiveis', TTL_15MIN, debitosPassiveisDividaRaw)
+}
+
+async function debitosPassiveisDividaRaw(): Promise<DebitosPassiveis> {
+  const excl = CODIGOS_EXCLUIDOS.join(',')
+  const r = await agentQuery(`
+    SELECT trib, t.ds_tributo nome, SUM(valor) saldo, COUNT(*) qt FROM (
+      SELECT g.cd_tributo trib, g.cd_devedor dev, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE p.ds_situacao = 'Normal' AND p.no_parcela <> 0
+        AND g.no_exercicio_lancamento >= ${EX_FLOOR_DEBITOS} AND g.cd_tributo NOT IN (${excl})
+        AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+        AND p.dt_vencimento < getdate()-1
+      GROUP BY g.cd_tributo, g.cd_devedor, p.dt_vencimento
+      HAVING SUM(pm.vl_movimento * pm.no_sinal) > 1
+    ) x
+    LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = x.trib
+    GROUP BY trib, t.ds_tributo`, 500)
+
+  let total = 0, quantidade = 0
+  const trib = new Map<string, number>()
+  for (const row of r.rows) {
+    const nome = String(row[1] ?? '').trim() || 'Não classificado'
+    const saldo = num(row[2]), qt = num(row[3])
+    total += saldo
+    quantidade += qt
+    trib.set(nome, (trib.get(nome) ?? 0) + saldo)
+  }
+  const porTributo = Array.from(trib.entries())
+    .map(([nome, valor]) => ({ nome, valor }))
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, 9)
+
+  return { total, quantidade, porTributo }
 }
