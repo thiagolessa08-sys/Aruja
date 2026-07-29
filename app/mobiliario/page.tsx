@@ -133,14 +133,9 @@ export default function MobiliarioPage() {
                 </select>
               </>
             ) : (
-              <>
-                <div style={{ ...selectPill, cursor: 'default', color: '#5b6477', maxWidth: 'none' }}>
-                  {aba === 'iss' ? 'ISS / ISSQN' : aba === 'tfe' ? 'Taxa de Fiscalização de Estabelecimento' : 'Taxa de Fiscalização de Higiene e Saúde'}
-                </div>
-                <select aria-label="Exercício" value={anoTrib} onChange={e => setAnoTrib(Number(e.target.value))} style={selectPill}>
-                  {anosTrib.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
-                </select>
-              </>
+              <select aria-label="Exercício" value={anoTrib} onChange={e => setAnoTrib(Number(e.target.value))} style={selectPill}>
+                {anosTrib.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+              </select>
             )}
           </div>
         </div>
