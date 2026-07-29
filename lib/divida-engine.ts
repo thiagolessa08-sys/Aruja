@@ -19,6 +19,10 @@ export interface ResumoDivida {
   ajuizamento: number
   porTributo: { nome: string; valor: number }[]
   porExercicio: { ano: number; valor: number }[]
+  recuperacao: {
+    lancado: number; pago: number; taxa: number
+    porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[]
+  }
 }
 
 const num = (v: unknown) => Number(v) || 0
@@ -28,10 +32,12 @@ export async function resumoDivida(): Promise<ResumoDivida> {
 }
 
 async function resumoDividaRaw(): Promise<ResumoDivida> {
-  // Uma passada: situação × tributo × exercício. Agregações feitas em JS.
+  // Uma passada: situação × tributo × exercício. Agregações feitas em JS. vl_lancto/vl_pagto
+  // (além de vl_saldo, já usado) dão a Taxa de Recuperação: de tudo que foi inscrito em
+  // dívida ativa (lançado), quanto já foi efetivamente pago.
   const r = await agentQuery(`
     SELECT p.ds_situacao AS sit, t.ds_tributo AS nome, g.no_exercicio_lancamento AS ex,
-           SUM(pp.vl_saldo) AS saldo
+           SUM(pp.vl_lancto) AS lancto, SUM(pp.vl_pagto) AS pagto, SUM(pp.vl_saldo) AS saldo
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
@@ -39,8 +45,10 @@ async function resumoDividaRaw(): Promise<ResumoDivida> {
     GROUP BY p.ds_situacao, t.ds_tributo, g.no_exercicio_lancamento`, 8000)
 
   let administrativa = 0, judicial = 0, ajuizamento = 0
+  let lancadoTotal = 0, pagoTotal = 0
   const trib = new Map<string, number>()
   const exerc = new Map<number, number>()
+  const exercRec = new Map<number, { lancado: number; pago: number }>()
 
   for (const row of r.rows) {
     const sit = String(row[0] ?? '').trim()
@@ -48,9 +56,17 @@ async function resumoDividaRaw(): Promise<ResumoDivida> {
     if (!tipo) continue // só dívida (ignora Normal)
     const nome = String(row[1] ?? '').trim() || 'Não classificado'
     const ano = num(row[2])
-    const saldo = num(row[3])
-    if (saldo <= 0) continue
+    const lancto = num(row[3]), pagto = num(row[4]), saldo = num(row[5])
 
+    lancadoTotal += lancto
+    pagoTotal += pagto
+    if (ano >= 2005 && ano <= 2030) {
+      const e = exercRec.get(ano) ?? { lancado: 0, pago: 0 }
+      e.lancado += lancto; e.pago += pagto
+      exercRec.set(ano, e)
+    }
+
+    if (saldo <= 0) continue // porTributo/porExercicio (saldo em aberto) ignoram saldo zerado
     if (tipo === 'administrativa') administrativa += saldo
     else if (tipo === 'judicial') judicial += saldo
     else ajuizamento += saldo
@@ -68,7 +84,18 @@ async function resumoDividaRaw(): Promise<ResumoDivida> {
     .map(([ano, valor]) => ({ ano, valor }))
     .sort((a, b) => a.ano - b.ano)
 
-  return { total: administrativa + judicial + ajuizamento, administrativa, judicial, ajuizamento, porTributo, porExercicio }
+  const recPorExercicio = Array.from(exercRec.entries())
+    .map(([ano, x]) => ({ ano, lancado: x.lancado, pago: x.pago, taxa: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
+    .filter(x => x.lancado > 0)
+    .sort((a, b) => a.ano - b.ano)
+
+  return {
+    total: administrativa + judicial + ajuizamento, administrativa, judicial, ajuizamento, porTributo, porExercicio,
+    recuperacao: {
+      lancado: lancadoTotal, pago: pagoTotal, taxa: lancadoTotal ? (pagoTotal / lancadoTotal) * 100 : 0,
+      porExercicio: recPorExercicio,
+    },
+  }
 }
 
 export interface MaiorDevedor { cd: number; nome: string; cpfCnpj: string; saldo: number }

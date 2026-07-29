@@ -10,6 +10,7 @@ interface Resumo {
   porExercicio: { ano: number; valor: number }[]
   iptuDivida?: { imoveisComIptu: number; imoveisEmDivida: number; valorDivida: number }
   debitosPassiveis?: { total: number; quantidade: number; porTributo: { nome: string; valor: number }[] }
+  recuperacao?: { lancado: number; pago: number; taxa: number; porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[] }
 }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
 
@@ -48,6 +49,27 @@ function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   return azul ? 'rgba(255,255,255,0.6)' : '#9098a8'
 }
 
+// Barras pareadas (Lançado × Pago) — Taxa de Recuperação por exercício
+function geomBarsPar(d: { ano: number; lancado: number; pago: number }[]) {
+  const W = 960, H = 300, top = 26, bottom = 250
+  const span = bottom - top - 8
+  const max = Math.max(1, ...d.flatMap(x => [x.lancado, x.pago]))
+  const n = Math.max(1, d.length)
+  const gw = W / n
+  const bw = Math.min(30, gw * 0.24)
+  const bars = d.map((x, i) => {
+    const cx = i * gw + gw / 2
+    const hL = (x.lancado / max) * span, hP = (x.pago / max) * span
+    return {
+      cx, ano: x.ano, lancado: x.lancado, pago: x.pago, taxa: x.lancado ? (x.pago / x.lancado) * 100 : 0,
+      lanc: { x: cx - bw - 3, y: bottom - hL, h: hL },
+      pag: { x: cx + 3, y: bottom - hP, h: hP },
+    }
+  })
+  const ticks = [max, max / 2, 0].map(v => ({ v: Math.round(v / 1e6), y: bottom - (v / max) * span }))
+  return { bars, ticks, W, H, bottom, bw }
+}
+
 // Barras verticais aging
 function geomBars(d: { ano: number; valor: number }[]) {
   const W = 960, H = 300, top = 26, bottom = 250
@@ -68,6 +90,7 @@ function geomBars(d: { ano: number; valor: number }[]) {
 export default function PainelDivida() {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; valor: number } | null>(null)
+  const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
 
@@ -85,6 +108,7 @@ export default function PainelDivida() {
   const pctAdm = g.total ? (g.administrativa / g.total) * 100 : 0
   const maxTrib = Math.max(1, ...g.porTributo.map(t => t.valor))
   const gb = geomBars(g.porExercicio)
+  const gr = geomBarsPar(g.recuperacao?.porExercicio ?? [])
 
   // Donut composição
   const comp = [
@@ -222,6 +246,63 @@ export default function PainelDivida() {
           </div>
         </div>
       </div>
+
+      {/* Taxa de Recuperação */}
+      {g.recuperacao ? (
+        <div style={{ ...card, marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Taxa de Recuperação da Dívida Ativa</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Do que foi inscrito em dívida ativa (lançado), quanto já foi pago, por exercício de origem</div>
+            </div>
+            <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Lançado</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#1fa463' }}></span>Pago (recuperado)</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginTop: 16 }}>
+            <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Taxa de Recuperação</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: g.recuperacao.taxa >= 40 ? '#1fa463' : g.recuperacao.taxa >= 20 ? '#e8962e' : '#d64545', marginTop: 6 }}>{fmtPct(g.recuperacao.taxa)}</div>
+            </div>
+            <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Total Inscrito (Lançado)</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#283e93', marginTop: 6 }}>{fmtAbrev(g.recuperacao.lancado)}</div>
+            </div>
+            <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Total Recuperado (Pago)</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#1fa463', marginTop: 6 }}>{fmtAbrev(g.recuperacao.pago)}</div>
+            </div>
+          </div>
+
+          <div onMouseLeave={() => setTipRec(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
+            <svg viewBox={`0 0 ${gr.W} ${gr.H}`} width="100%" style={{ display: 'block' }}>
+              <defs>
+                <linearGradient id="recLanc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#aab8e3" /></linearGradient>
+                <linearGradient id="recPago" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1fa463" /><stop offset="100%" stopColor="#9adfbb" /></linearGradient>
+              </defs>
+              {gr.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gr.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v} mi</text></g>))}
+              <line x1="0" y1={gr.bottom} x2={String(gr.W)} y2={gr.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+              {gr.bars.map((b, i) => (
+                <g key={i}>
+                  <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width={gr.bw.toFixed(1)} height={b.lanc.h.toFixed(1)} rx="4" fill="url(#recLanc)" />
+                  <rect x={b.pag.x.toFixed(1)} y={b.pag.y.toFixed(1)} width={gr.bw.toFixed(1)} height={b.pag.h.toFixed(1)} rx="4" fill="url(#recPago)" />
+                  <text x={b.cx.toFixed(1)} y={String(gr.H - 6)} fontSize="9" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
+                </g>
+              ))}
+              {gr.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTipRec({ left: `${(b.cx / gr.W * 100).toFixed(1)}%`, top: `${(Math.min(b.lanc.y, b.pag.y) / gr.H * 100).toFixed(1)}%`, ano: b.ano, lancado: b.lancado, pago: b.pago, taxa: b.taxa })} x={(b.cx - gr.bw - 6).toFixed(1)} y="0" width={(gr.bw * 2 + 12).toFixed(1)} height={String(gr.H - 20)} fill="transparent" pointerEvents="all" />))}
+            </svg>
+            {tipRec ? (
+              <div style={{ position: 'absolute', left: tipRec.left, top: tipRec.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '9px 12px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tipRec.ano}</div>
+                <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>Lançado: {fmtAbrev(tipRec.lancado)}</div>
+                <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 2 }}>Pago: {fmtAbrev(tipRec.pago)} ({fmtPct(tipRec.taxa)})</div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* ROW 2 — aging */}
       <div style={{ ...card, marginTop: 18 }}>
