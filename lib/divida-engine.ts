@@ -196,3 +196,34 @@ async function debitosPassiveisDividaRaw(): Promise<DebitosPassiveis> {
 
   return { total, quantidade, porTributo }
 }
+
+export interface SituacaoParcela { situacao: string; quantidade: number; pct: number }
+
+const LABEL_SITUACAO: Record<string, string> = {
+  Normal: 'Normal',
+  DividaAtiva: 'Dívida Ativa (administrativa)',
+  Ajuizada: 'Ajuizada',
+  'Em Ajuizamento': 'Em Ajuizamento',
+}
+
+// Situação das Parcelas: contagem de todas as parcelas por ds_situacao. Só contagem —
+// o valor (R$) em aberto agregado por situação NÃO é confiável aqui, pois a soma bruta de
+// vl_saldo para 'Normal' infla pra ~R$11 bi (parcelas recalculadas/substituídas e códigos
+// de tributo ruidosos — mesmo problema já resolvido em debitosPassiveisDivida via net por
+// movimento + CODIGOS_EXCLUIDOS). O valor confiável de 'Normal' vencido já está no card
+// "Débitos Passíveis de Inscrição"; os valores das 3 situações de dívida já estão nos
+// demais cards desta tela (resumoDivida).
+export async function situacaoParcelas(): Promise<SituacaoParcela[]> {
+  return cached('divida:situacaoParcelas', TTL_15MIN, situacaoParcelasRaw)
+}
+
+async function situacaoParcelasRaw(): Promise<SituacaoParcela[]> {
+  const r = await agentQuery(`SELECT ds_situacao sit, COUNT(*) qt FROM ${SCHEMA}.tb_dsod_parcelas GROUP BY ds_situacao`, 20)
+  const itens = r.rows
+    .map(row => ({ situacao: String(row[0] ?? '').trim(), quantidade: num(row[1]) }))
+    .filter(x => x.situacao)
+  const total = itens.reduce((s, x) => s + x.quantidade, 0) || 1
+  return itens
+    .map(x => ({ situacao: LABEL_SITUACAO[x.situacao] ?? x.situacao, quantidade: x.quantidade, pct: (x.quantidade / total) * 100 }))
+    .sort((a, b) => b.quantidade - a.quantidade)
+}

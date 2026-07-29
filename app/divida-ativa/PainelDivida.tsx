@@ -11,6 +11,7 @@ interface Resumo {
   iptuDivida?: { imoveisComIptu: number; imoveisEmDivida: number; valorDivida: number }
   debitosPassiveis?: { total: number; quantidade: number; porTributo: { nome: string; valor: number }[] }
   recuperacao?: { lancado: number; pago: number; taxa: number; porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[] }
+  situacoes?: { situacao: string; quantidade: number; pct: number }[]
 }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
 
@@ -400,6 +401,40 @@ export default function PainelDivida() {
               })}
             </div>
             <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>Considera parcelas com vencimento a partir de 2019, saldo líquido em aberto por tributo/devedor/vencimento (mesma convenção de inadimplência usada nas telas de tributo).</div>
+          </div>
+        )
+      })() : null}
+
+      {/* Situação das Parcelas */}
+      {g.situacoes ? (() => {
+        const SIT_CORES: Record<string, string> = {
+          'Normal': '#9cabd9',
+          'Dívida Ativa (administrativa)': '#e8962e',
+          'Ajuizada': '#d64545',
+          'Em Ajuizamento': '#c5d0ee',
+        }
+        const maxSit = Math.max(1, ...g.situacoes.map(s => s.quantidade))
+        return (
+          <div style={{ ...card, marginTop: 18 }}>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação das Parcelas</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral, no universo completo (todos os tributos e exercícios)</div>
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+              {g.situacoes.map(s => {
+                const w = (s.quantidade / maxSit) * 100
+                return (
+                  <div key={s.situacao}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, color: '#3a4256', lineHeight: 1.2 }}>{s.situacao}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{s.quantidade.toLocaleString('pt-BR')} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+                    </div>
+                    <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: SIT_CORES[s.situacao] ?? '#283e93', borderRadius: 5 }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>"Normal" inclui parcelas já quitadas normalmente — o valor em aberto vencido dessa situação está no card "Débitos Passíveis de Inscrição"; o valor das demais situações está nos cards de dívida ativa acima.</div>
           </div>
         )
       })() : null}
