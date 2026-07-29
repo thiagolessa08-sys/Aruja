@@ -70,16 +70,20 @@ async function bucketsIssccRaw(): Promise<Map<number, BucketsIssccAno>> {
         AND g.ds_situacao NOT IN ('Recalculo','Validacao')
         AND g.cd_devedor IN (SELECT e.cd_origem FROM ${S}.tb_extr_isencoes e WHERE e.cd_tributo IN (${ISSCC}))
       GROUP BY g.no_exercicio_lancamento`, 300).catch(() => null),
-    // Suspenso: mov 20 · valor = |net| (SUM com sinal; devedores com net<0) — mesma
-    // convenção do IPTU/TCA. SUM(vl_movimento) sem sinal ficava errado (ex.: 2026 dava
-    // 862.034,34 em vez de 627.015,26 — validado contra dados reais).
+    // Suspenso: mov 20 · valor = |net| por devedor, só devedores com net<0 (soma global
+    // com sinal é só uma aproximação — some positivos e negativos, subestimando o total
+    // quando há devedores com net>0 misturados). Validado: 2026 = 627.015,26 pela
+    // aproximação vs 648.328,16 pelo valor correto por devedor.
     agentQuery(`
-      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento * pm.no_sinal) vl
-      FROM ${S}.tb_dsod_guias g
-      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      WHERE g.cd_tributo IN (${ISSCC}) AND pm.cd_tipo_movimento IN (20) AND p.no_parcela <> 0
-      GROUP BY g.no_exercicio_lancamento`, 300),
+      SELECT ex, SUM(-valor) vl FROM (
+        SELECT g.no_exercicio_lancamento ex, g.cd_devedor dev, SUM(pm.vl_movimento * pm.no_sinal) valor
+        FROM ${S}.tb_dsod_guias g
+        JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (${ISSCC}) AND pm.cd_tipo_movimento IN (20) AND p.no_parcela <> 0
+        GROUP BY g.no_exercicio_lancamento, g.cd_devedor
+        HAVING SUM(pm.vl_movimento * pm.no_sinal) < 0
+      ) t GROUP BY ex`, 300),
   ])
 
   const map = new Map<number, BucketsIssccAno>()
@@ -95,7 +99,7 @@ async function bucketsIssccRaw(): Promise<Map<number, BucketsIssccAno>> {
   for (const r of abertoR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
   for (const r of inadR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
   if (isenR) for (const r of isenR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.isento = num(r[1]); map.set(ex, b) }
-  for (const r of suspR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, -num(r[1])); map.set(ex, b) }
+  for (const r of suspR.rows) { const ex = num(r[0]); if (!ok(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, num(r[1])); map.set(ex, b) }
   return map
 }
 

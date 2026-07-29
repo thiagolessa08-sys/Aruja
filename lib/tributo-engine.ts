@@ -230,14 +230,19 @@ async function bucketsIptuRaw(): Promise<Map<number, BucketsIptuAno>> {
       WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (12, 5)
         AND pm.cd_tipo_lancamento IN (1) AND p.no_parcela NOT IN (0)
       GROUP BY g.no_exercicio_lancamento, pb.ds_setor_origem_baixa`, 400),
-    // Suspenso: movimento 20 · valor = |net| (devedores com net<0). Aproximado por -SUM(net).
+    // Suspenso: movimento 20 · valor = |net| por devedor, só devedores com net<0 (soma
+    // global com sinal é uma aproximação — mistura devedores net>0 e net<0; ITBI/ISSCC/TCA
+    // tinham divergências grandes com essa aproximação, validado contra dados reais).
     agentQuery(`
-      SELECT g.no_exercicio_lancamento AS ex, SUM(pm.vl_movimento * pm.no_sinal) AS net
-      FROM ${SCHEMA}.tb_dsod_guias g
-      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (20) AND p.no_parcela NOT IN (0)
-      GROUP BY g.no_exercicio_lancamento`, 200),
+      SELECT ex, SUM(-valor) net FROM (
+        SELECT g.no_exercicio_lancamento ex, g.cd_devedor dev, SUM(pm.vl_movimento * pm.no_sinal) valor
+        FROM ${SCHEMA}.tb_dsod_guias g
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (20) AND p.no_parcela NOT IN (0)
+        GROUP BY g.no_exercicio_lancamento, g.cd_devedor
+        HAVING SUM(pm.vl_movimento * pm.no_sinal) < 0
+      ) t GROUP BY ex`, 200),
   ])
 
   return montarBuckets(lanc, arrecRows.rows, abertoRows.rows, inadRows.rows, isenRows.rows, suspRows.rows)
@@ -271,7 +276,7 @@ function montarBuckets(lanc: Map<number, number>, arrecRows: unknown[][], aberto
   }
   for (const row of suspRows) {
     const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
-    const b = get(map, ex); b.suspenso = Math.max(0, -num(row[1])); map.set(ex, b)
+    const b = get(map, ex); b.suspenso = Math.max(0, num(row[1])); map.set(ex, b)
   }
   return map
 }
@@ -320,12 +325,15 @@ export async function bucketsIptuBairro(bairro: string): Promise<Map<number, Buc
         JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa=pm.cd_parcela_baixa
         WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (12,5) AND pm.cd_tipo_lancamento IN (1) AND p.no_parcela NOT IN (0)
         GROUP BY g.no_exercicio_lancamento, pb.ds_setor_origem_baixa`, 400),
-      agentQuery(`SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento*pm.no_sinal) net
-        FROM ${SCHEMA}.tb_dsod_guias g ${jb}
-        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
-        JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
-        WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (20) AND p.no_parcela NOT IN (0)
-        GROUP BY g.no_exercicio_lancamento`, 200),
+      agentQuery(`SELECT ex, SUM(-valor) net FROM (
+          SELECT g.no_exercicio_lancamento ex, g.cd_devedor dev, SUM(pm.vl_movimento*pm.no_sinal) valor
+          FROM ${SCHEMA}.tb_dsod_guias g ${jb}
+          JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia=g.cd_guia
+          JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela=p.cd_parcelas
+          WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (20) AND p.no_parcela NOT IN (0)
+          GROUP BY g.no_exercicio_lancamento, g.cd_devedor
+          HAVING SUM(pm.vl_movimento*pm.no_sinal) < 0
+        ) t GROUP BY ex`, 200),
     ])
     // Lançado do bairro (mesma regra do lancadoOficial: exclui Recalculo/Validacao)
     const lancMap = new Map<number, number>()
