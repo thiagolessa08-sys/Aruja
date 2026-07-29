@@ -5,11 +5,14 @@ import { useSaudacaoNome } from '../_components/useSaudacao'
 import TopNav from '../_components/TopNav'
 import PainelDivida from './PainelDivida'
 
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+
 export default function DividaAtivaPage() {
   const [saudacao, setSaudacao] = useState('Bom dia')
   const nome = useSaudacaoNome()
   const [anos, setAnos] = useState<number[]>([])
   const [ano, setAno] = useState<number | ''>('')
+  const [mes, setMes] = useState<number | ''>('') // mês selecionado (acumulado); '' = ano todo
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -45,8 +48,12 @@ export default function DividaAtivaPage() {
           <select aria-label="Exercício" value={ano} onChange={e => setAno(Number(e.target.value))} style={selectPill}>
             {anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
           </select>
+          <select aria-label="Mês" value={mes} onChange={e => setMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
+            <option value="">Mês: Ano todo</option>
+            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
         </div>
-        <PainelDivida ano={ano || undefined} onAnos={handleAnos} />
+        <PainelDivida ano={ano || undefined} mes={mes || undefined} onAnos={handleAnos} />
       </div>
     </div>
   )

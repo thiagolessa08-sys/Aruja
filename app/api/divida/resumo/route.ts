@@ -8,8 +8,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const ano = Number(req.nextUrl.searchParams.get('ano')) || undefined
+    const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
     const [data, iptuDivida, debitosPassiveis, situacoes, geral] = await Promise.all([
-      resumoDivida(ano), iptuDividaResumo(ano), debitosPassiveisDivida(ano), situacaoParcelas(ano),
+      resumoDivida(ano, mes), iptuDividaResumo(ano, mes), debitosPassiveisDivida(ano, mes), situacaoParcelas(ano, mes),
       ano ? resumoDivida() : Promise.resolve(null), // só p/ extrair a lista de anos quando filtrado
     ])
     const anos = (geral ?? data).recuperacao.porExercicio.map(x => x.ano).sort((a, b) => b - a)

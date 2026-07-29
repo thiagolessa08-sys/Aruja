@@ -8,7 +8,8 @@ export async function GET(req: NextRequest) {
   try {
     const limite = Number(req.nextUrl.searchParams.get('limite')) || 200
     const ano = Number(req.nextUrl.searchParams.get('ano')) || undefined
-    const devedores = await maioresDevedores(limite, ano)
+    const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
+    const devedores = await maioresDevedores(limite, ano, mes)
     return NextResponse.json({ devedores })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

@@ -88,7 +88,7 @@ function geomBars(d: { ano: number; valor: number }[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
-export default function PainelDivida({ ano, onAnos }: { ano?: number; onAnos?: (anos: number[]) => void } = {}) {
+export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?: number; onAnos?: (anos: number[]) => void } = {}) {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; valor: number } | null>(null)
   const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
@@ -97,8 +97,11 @@ export default function PainelDivida({ ano, onAnos }: { ano?: number; onAnos?: (
 
   useEffect(() => {
     setD(null)
-    const qs = ano ? `?ano=${ano}` : ''
-    fetch(`/api/divida/resumo${qs}`).then(r => r.ok ? r.json() : null)
+    const p = new URLSearchParams()
+    if (ano) p.set('ano', String(ano))
+    if (mes) p.set('mes', String(mes))
+    const qs = p.toString()
+    fetch(`/api/divida/resumo${qs ? `?${qs}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(x => {
         if (x && !x.error && typeof x.total === 'number') {
           setD(x)
@@ -106,13 +109,15 @@ export default function PainelDivida({ ano, onAnos }: { ano?: number; onAnos?: (
         }
       }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ano])
+  }, [ano, mes])
   useEffect(() => {
     setDevedores(null)
-    const qs = ano ? `&ano=${ano}` : ''
-    fetch(`/api/divida/devedores?limite=200${qs}`).then(r => r.ok ? r.json() : null)
+    const p = new URLSearchParams({ limite: '200' })
+    if (ano) p.set('ano', String(ano))
+    if (mes) p.set('mes', String(mes))
+    fetch(`/api/divida/devedores?${p.toString()}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.devedores)) setDevedores(x.devedores) }).catch(() => {})
-  }, [ano])
+  }, [ano, mes])
 
   const g = d ?? FALLBACK
   const pctJud = g.total ? (g.judicial / g.total) * 100 : 0
