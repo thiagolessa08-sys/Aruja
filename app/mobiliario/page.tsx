@@ -24,6 +24,17 @@ export default function MobiliarioPage() {
   const [rSituacao, setRSituacao] = useState<string>('')
   const [rMes, setRMes] = useState<number | ''>('') // mês selecionado (acumulado); '' = ano todo
 
+  // Exercício do ISS/TFE/TFHS (PainelTributo) — compartilhado entre as 3 abas, já que só
+  // uma fica visível por vez; cada uma repopula a lista de anos ao carregar sua série.
+  const [anosTrib, setAnosTrib] = useState<number[]>([])
+  const [anoTrib, setAnoTrib] = useState<number | ''>('')
+
+  function handleAnosTrib(recebidos: number[]) {
+    const lista = [...recebidos].sort((a, b) => b - a) // mais recente primeiro
+    setAnosTrib(prev => (prev.length === lista.length && prev.every((v, i) => v === lista[i]) ? prev : lista))
+    setAnoTrib(prev => (prev && lista.includes(prev)) ? prev : (lista[0] ?? ''))
+  }
+
   useEffect(() => {
     const h = new Date().getHours()
     setSaudacao(h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite')
@@ -122,15 +133,20 @@ export default function MobiliarioPage() {
                 </select>
               </>
             ) : (
-              <div style={{ ...selectPill, cursor: 'default', color: '#5b6477', maxWidth: 'none' }}>
-                {aba === 'iss' ? 'ISS / ISSQN' : aba === 'tfe' ? 'Taxa de Fiscalização de Estabelecimento' : 'Taxa de Fiscalização de Higiene e Saúde'} · todos os exercícios
-              </div>
+              <>
+                <div style={{ ...selectPill, cursor: 'default', color: '#5b6477', maxWidth: 'none' }}>
+                  {aba === 'iss' ? 'ISS / ISSQN' : aba === 'tfe' ? 'Taxa de Fiscalização de Estabelecimento' : 'Taxa de Fiscalização de Higiene e Saúde'}
+                </div>
+                <select aria-label="Exercício" value={anoTrib} onChange={e => setAnoTrib(Number(e.target.value))} style={selectPill}>
+                  {anosTrib.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+                </select>
+              </>
             )}
           </div>
         </div>
 
         {/* ===== PAINEL ===== */}
-        {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" />}
+        {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" ano={anoTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'iss' && (
           <div style={{ background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Limite Anual de Faturamento</span>
@@ -150,9 +166,9 @@ export default function MobiliarioPage() {
             <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>Valores de referência federais — confirme se houve atualização legislativa antes de usar para decisões fiscais.</div>
           </div>
         )}
-        {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" />}
+        {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" ano={anoTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'tfe' && <TfePorSegmento />}
-        {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" />}
+        {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" ano={anoTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'mob' && <PainelMobiliario filtros={filtros} />}
 
       </div>
