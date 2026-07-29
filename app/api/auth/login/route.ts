@@ -7,6 +7,8 @@ const USUARIOS: { id: number; email: string; senha: string; role: Perfil; nome: 
   { id: 1, email: process.env.ADMIN_EMAIL || 'admin@prefeitura.com', senha: process.env.ADMIN_PASSWORD || 'admin123', role: 'admin', nome: 'Administrador' },
   { id: 2, email: process.env.ORCAMENTO_EMAIL || 'orcamento@prefeitura.com', senha: process.env.ORCAMENTO_PASSWORD || 'orcamento123', role: 'orcamentario', nome: 'Orçamentário' },
   { id: 3, email: process.env.TRIBUTARIO_EMAIL || 'tributario@prefeitura.com', senha: process.env.TRIBUTARIO_PASSWORD || 'tributario123', role: 'tributario', nome: 'Tributário' },
+  { id: 4, email: process.env.ROBERTA_EMAIL || 'roberta@prefeitura.com', senha: process.env.ROBERTA_PASSWORD || 'roberta123', role: 'tributario', nome: 'Roberta' },
+  { id: 5, email: process.env.FRANCINE_EMAIL || 'francine@prefeitura.com', senha: process.env.FRANCINE_PASSWORD || 'francine123', role: 'tributario', nome: 'Francine' },
 ]
 
 export async function POST(req: NextRequest) {
