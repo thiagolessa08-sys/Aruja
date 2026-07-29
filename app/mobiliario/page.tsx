@@ -149,7 +149,7 @@ export default function MobiliarioPage() {
             <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>Valores de referência federais — confirme se houve atualização legislativa antes de usar para decisões fiscais.</div>
           </div>
         )}
-        {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="TFE" />}
+        {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" />}
         {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" />}
         {aba === 'mob' && <PainelMobiliario filtros={filtros} />}
 
