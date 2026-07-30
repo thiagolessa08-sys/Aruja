@@ -28,8 +28,8 @@ export default function MobiliarioPage() {
   // uma fica visível por vez; cada uma repopula a lista de anos ao carregar sua série.
   const [anosTrib, setAnosTrib] = useState<number[]>([])
   const [anoTrib, setAnoTrib] = useState<number | ''>('')
-  // Mês (acumulado) — só a aba TFE tem esse filtro por enquanto.
-  const [mesTfe, setMesTfe] = useState<number | ''>('')
+  // Mês (acumulado) — TFE e TFHS têm esse filtro; ISS ainda não.
+  const [mesTrib, setMesTrib] = useState<number | ''>('')
 
   function handleAnosTrib(recebidos: number[]) {
     const lista = [...recebidos].sort((a, b) => b - a) // mais recente primeiro
@@ -139,8 +139,8 @@ export default function MobiliarioPage() {
                 <select aria-label="Exercício" value={anoTrib} onChange={e => setAnoTrib(Number(e.target.value))} style={selectPill}>
                   {anosTrib.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
                 </select>
-                {aba === 'tfe' && (
-                  <select aria-label="Mês" value={mesTfe} onChange={e => setMesTfe(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
+                {(aba === 'tfe' || aba === 'tfhs') && (
+                  <select aria-label="Mês" value={mesTrib} onChange={e => setMesTrib(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
                     <option value="">Mês: Ano todo</option>
                     {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                   </select>
@@ -171,9 +171,9 @@ export default function MobiliarioPage() {
             <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>Valores de referência federais — confirme se houve atualização legislativa antes de usar para decisões fiscais.</div>
           </div>
         )}
-        {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" ano={anoTrib || undefined} mes={mesTfe || undefined} onAnos={handleAnosTrib} />}
+        {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'tfe' && <TfePorSegmento />}
-        {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" ano={anoTrib || undefined} onAnos={handleAnosTrib} />}
+        {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'mob' && <PainelMobiliario filtros={filtros} />}
 
       </div>
