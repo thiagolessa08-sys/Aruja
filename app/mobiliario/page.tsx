@@ -123,13 +123,13 @@ export default function MobiliarioPage() {
                 <select aria-label="Exercício" value={rAno} onChange={e => setRAno(Number(e.target.value))} style={selectPill}>
                   {opts.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
                 </select>
-                <select aria-label="Situação cadastral" value={rSituacao} onChange={e => setRSituacao(e.target.value)} style={selectPill}>
-                  <option value="">Situação: Todas</option>
-                  {opts.situacoes.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
                 <select aria-label="Mês" value={rMes} onChange={e => setRMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
                   <option value="">Mês: Ano todo</option>
                   {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+                <select aria-label="Situação cadastral" value={rSituacao} onChange={e => setRSituacao(e.target.value)} style={selectPill}>
+                  <option value="">Situação: Todas</option>
+                  {opts.situacoes.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </>
             ) : (
