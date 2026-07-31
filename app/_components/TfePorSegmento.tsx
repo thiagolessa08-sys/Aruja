@@ -12,13 +12,20 @@ const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color:
 
 // "Taxa de Fiscalização por Segmento" — TFE (cd_tributo 2002) lançado, agrupado pelo
 // segmento (ds_grupo) da empresa vinculada à guia. Fonte: /api/mobiliario/tfe-segmento.
-export default function TfePorSegmento() {
+// `ano`/`mes` (opcionais) refletem os filtros do painel (Exercício/Mês), mesma
+// convenção usada pelo PainelTributo.
+export default function TfePorSegmento({ ano, mes }: { ano?: number; mes?: number }) {
   const [itens, setItens] = useState<Item[] | null>(null)
 
   useEffect(() => {
-    fetch('/api/mobiliario/tfe-segmento').then(r => r.ok ? r.json() : null)
+    setItens(null)
+    const qs = new URLSearchParams()
+    if (ano) qs.set('ano', String(ano))
+    if (mes) qs.set('mes', String(mes))
+    const q = qs.toString()
+    fetch(`/api/mobiliario/tfe-segmento${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error && Array.isArray(d.porSegmento)) setItens(d.porSegmento) }).catch(() => {})
-  }, [])
+  }, [ano, mes])
 
   if (!itens) {
     return (
@@ -44,7 +51,9 @@ export default function TfePorSegmento() {
         <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Taxa de Fiscalização por Segmento</span>
         <span style={reportBadge}>Lançado</span>
       </div>
-      <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>TFE lançado por segmento da empresa (ds_grupo do cadastro mobiliário)</div>
+      <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+        TFE lançado por segmento da empresa (ds_grupo do cadastro mobiliário){ano ? ` — Exercício ${ano}` : ''}{mes ? ` até o mês ${mes}` : ''}
+      </div>
       <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
         {itens.map((t, i) => {
           const w = (t.valor / maxSeg) * 100

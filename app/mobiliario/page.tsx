@@ -173,11 +173,11 @@ export default function MobiliarioPage() {
           </div>
         )}
         {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
-        {aba === 'tfe' && <TfePorSegmento />}
-        {aba === 'tfe' && <MeiEnquadramentoLancamento />}
+        {aba === 'tfe' && <TfePorSegmento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
+        {aba === 'tfe' && <MeiEnquadramentoLancamento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
         {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'mob' && <PainelMobiliario filtros={filtros} />}
-        {aba === 'mob' && <MeiEnquadramentoLancamento />}
+        {aba === 'mob' && <MeiEnquadramentoLancamento ano={rAno || undefined} mes={rMes || undefined} />}
 
       </div>
     </div>
