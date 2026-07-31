@@ -1,5 +1,5 @@
 import { agentQuery } from '@/lib/agent'
-import { GrupoTributo, codigosDoGrupo, CODIGOS_CORE, CODIGOS_EXCLUIDOS } from '@/lib/tributos'
+import { GrupoTributo, codigosDoGrupo, CODIGOS, CODIGOS_CORE, CODIGOS_EXCLUIDOS, LABEL_GRUPO } from '@/lib/tributos'
 import { cached, TTL_15MIN } from '@/lib/cache'
 
 const SCHEMA = 'pref_aruja_sp'
@@ -107,6 +107,45 @@ export async function serieMensalTributo(grupo: GrupoTributo, ano: number): Prom
     for (let m = 1; m <= 12; m++) out.push(map.get(m) ?? { mes: m, lancado: 0, arrecadado: 0, saldo: 0 })
     return out
   })
+}
+
+export interface LancadoGrupo { grupo: GrupoTributo; label: string; lancado: number }
+
+const GRUPOS_ORDEM: GrupoTributo[] = ['iptu', 'itbi', 'isscc', 'iss', 'tfe', 'tfhs', 'outros']
+
+function caseGrupo(): string {
+  const whens = (['iptu', 'itbi', 'isscc', 'iss', 'tfe', 'tfhs'] as const)
+    .map(g => `WHEN g.cd_tributo IN (${CODIGOS[g].join(',')}) THEN '${g}'`).join(' ')
+  return `CASE ${whens} WHEN g.cd_tributo NOT IN (${EXCL}) THEN 'outros' END`
+}
+
+/**
+ * Lançado total por grupo de tributo (IPTU, ITBI, ISS Construção Civil, ISS/ISSQN, TFE,
+ * TFHS, Outros) — usado no gráfico "Tributos Lançados" da tela de Contribuintes. Mesma
+ * fonte/bucketing do serieTributo/whereTributo, só que numa única consulta com CASE em
+ * vez de uma consulta por grupo. `ano` (opcional) restringe ao exercício de lançamento.
+ */
+export async function lancadoPorGrupo(ano?: number): Promise<LancadoGrupo[]> {
+  return cached(`lancadoPorGrupo:${ano ?? 'all'}`, TTL_15MIN, () => lancadoPorGrupoRaw(ano))
+}
+
+async function lancadoPorGrupoRaw(ano?: number): Promise<LancadoGrupo[]> {
+  const filtroAno = ano ? `WHERE g.no_exercicio_lancamento = ${ano}` : ''
+  const grp = caseGrupo()
+  const r = await agentQuery(`
+    SELECT ${grp} AS grp, SUM(pp.vl_lancto) AS lancado
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    ${filtroAno}
+    GROUP BY ${grp}`, 20)
+  const map = new Map<string, number>()
+  for (const row of r.rows) {
+    if (row[0] != null) map.set(String(row[0]), num(row[1]))
+  }
+  return GRUPOS_ORDEM
+    .map(g => ({ grupo: g, label: LABEL_GRUPO[g], lancado: map.get(g) ?? 0 }))
+    .sort((a, b) => b.lancado - a.lancado)
 }
 
 /**

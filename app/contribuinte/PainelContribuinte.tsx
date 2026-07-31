@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 export interface FiltrosContribuinteUI { ano: number | ''; pessoa: '' | 'F' | 'J' }
 
@@ -119,6 +120,34 @@ function geomStacked(d: NovoAno[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
+const ABREV_GRUPO: Record<string, string> = { isscc: 'ISS CC', outros: 'Outros' }
+
+// ===== Barras: Tributos Lançados por grupo =====
+function geomGrupoBars(d: { grupo: string; label: string; lancado: number }[]) {
+  const W = 900, H = 280, top = 24, bottom = 232
+  const span = bottom - top - 8
+  const max = Math.max(1, ...d.map(x => x.lancado))
+  const n = Math.max(1, d.length)
+  const gw = W / n
+  const bw = Math.min(56, gw * 0.5)
+  const sc = (v: number) => (v / max) * span
+  const bars = d.map((x, i) => {
+    const cx = i * gw + gw / 2
+    const h = sc(x.lancado)
+    return {
+      cx, x: cx - bw / 2, y: bottom - h, h,
+      rotulo: ABREV_GRUPO[x.grupo] ?? x.label,
+      tip: {
+        title: x.label,
+        l1: `Lançado: ${fmtAbrev(x.lancado)}`, l1c: '#283e93',
+        left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - h) / H * 100).toFixed(1)}%`,
+      },
+    }
+  })
+  const ticks = [max, max / 2, 0].map(v => ({ v: Math.round(v / 1e6), y: bottom - sc(v) }))
+  return { bars, ticks, W, H, bottom, bw }
+}
+
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   if (dir === 'up') return azul ? '#6ee0a0' : '#1fa463'
   if (dir === 'down') return azul ? '#ff9b8a' : '#d64545'
@@ -138,6 +167,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
+  const [tributos, setTributos] = useState<{ grupo: string; label: string; lancado: number }[] | null>(null)
 
   const qs = buildQS(filtros)
 
@@ -145,6 +175,12 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
     fetch(`/api/contribuinte/graficos${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setGraf(d) }).catch(() => {})
   }, [qs])
+  useEffect(() => {
+    setTributos(null)
+    const q = filtros.ano ? `?ano=${filtros.ano}` : ''
+    fetch(`/api/contribuinte/tributos-lancados${q}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error && Array.isArray(d.grupos)) setTributos(d.grupos) }).catch(() => {})
+  }, [filtros.ano])
   useEffect(() => {
     fetch(`/api/contribuinte/kpis${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.kpis?.length) setKpis(d.kpis) }).catch(() => {})
@@ -316,6 +352,54 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
           </div>
           </div>
         </div>
+      </div>
+
+      {/* ===== Tributos Lançados por grupo ===== */}
+      <div style={{ ...card, display: 'flex', flexDirection: 'column', marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Tributos Lançados</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+              total lançado por grupo de tributo{filtros.ano ? ` — exercício ${filtros.ano}` : ' (todos os exercícios)'}
+            </div>
+          </div>
+          <span style={reportBadge}>Lançado</span>
+        </div>
+        {!tributos ? (
+          <div style={{ marginTop: 18, display: 'flex', alignItems: 'flex-end', gap: 16, height: 200 }}>
+            {[0, 1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} style={{ flex: 1, borderRadius: '6px 6px 0 0', background: '#eef1f7', height: `${40 + (i % 4) * 15}%` }} />
+            ))}
+          </div>
+        ) : (() => {
+          const gg = geomGrupoBars(tributos)
+          return (
+            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
+              <svg viewBox={`0 0 ${gg.W} ${gg.H}`} width="100%" height="280" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
+                <defs>
+                  <linearGradient id="ctbTrib" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
+                </defs>
+                {gg.ticks.map((t, i) => (
+                  <g key={i}>
+                    <line x1="0" y1={t.y.toFixed(1)} x2={String(gg.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
+                    <text x="2" y={(t.y - 4).toFixed(1)} fontSize="14" fill="#aeb6c6" style={axisFont}>{t.v} mi</text>
+                  </g>
+                ))}
+                <line x1="0" y1={gg.bottom} x2={String(gg.W)} y2={gg.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+                {gg.bars.map((b, i) => (
+                  <g key={i}>
+                    <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gg.bw.toFixed(1)} height={b.h.toFixed(1)} rx="4" fill="url(#ctbTrib)" />
+                    <text x={b.cx.toFixed(1)} y={String(gg.H - 6)} fontSize="14" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.rotulo}</text>
+                  </g>
+                ))}
+                {gg.bars.map((b, i) => (
+                  <rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - gg.bw).toFixed(1)} y="0" width={(gg.bw * 2).toFixed(1)} height={String(gg.H - 20)} fill="transparent" pointerEvents="all" />
+                ))}
+              </svg>
+              {tip ? <Tooltip t={tip} /> : null}
+            </div>
+          )
+        })()}
       </div>
 
       {/* ===== ROW 2 ===== */}
