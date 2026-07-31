@@ -320,3 +320,41 @@ export function resumoIptu(f: FiltrosResumo) {
     }
   })
 }
+
+// Drill do quadro "Imóveis por status de pagamento": lista os imóveis de uma categoria
+// (mesma classificação por guia do resumoIptu acima), respeitando bairro/rua/espólio/sem
+// número. Categoria é a chave interna (CotaUnica/Parcelado/PagoParcial/EmAberto), não o
+// rótulo exibido na tela.
+export type CategoriaPagamento = 'CotaUnica' | 'Parcelado' | 'PagoParcial' | 'EmAberto'
+export interface ImovelPagamento { cd: number; inscricao: string; numero: string; proprietario: string }
+
+export async function imoveisPorPagamento(f: FiltrosResumo, categoria: CategoriaPagamento, q?: string): Promise<ImovelPagamento[]> {
+  const { ano } = f
+  const { join: jb, where: jbw } = joinFiltroResumo(f)
+  const r = await agentQuery(`
+    SELECT TOP 300 cd_origem FROM (
+      SELECT g.cd_guia, g.cd_origem,
+        CASE
+          WHEN SUM(CASE WHEN p.no_parcela = 0 THEN pp.vl_pagto ELSE 0 END) > 0 THEN 'CotaUnica'
+          WHEN SUM(pp.vl_pagto) = 0 THEN 'EmAberto'
+          WHEN SUM(CASE WHEN p.no_parcela <> 0 THEN pp.vl_saldo ELSE 0 END) <= 0 THEN 'Parcelado'
+          ELSE 'PagoParcial'
+        END AS categoria
+      FROM ${S}.tb_dsod_guias g
+      ${jb}
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}
+      GROUP BY g.cd_guia, g.cd_origem
+    ) t WHERE categoria = '${categoria}'`, 300)
+
+  const cds = r.rows.map(row => String(row[0])).filter(c => c && c !== '0')
+  const det = await detalhesImoveis(cds)
+  let itens = cds.map(cd => {
+    const d = det.get(cd)
+    return { cd: Number(cd), inscricao: d?.inscricao ?? '', numero: d?.numero ?? '', proprietario: d?.proprietario ?? '' }
+  })
+  const qt = q?.trim().toLowerCase()
+  if (qt) itens = itens.filter(it => it.inscricao.toLowerCase().includes(qt) || it.proprietario.toLowerCase().includes(qt))
+  return itens.sort((a, b) => a.proprietario.localeCompare(b.proprietario))
+}
