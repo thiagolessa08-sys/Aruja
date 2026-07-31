@@ -82,6 +82,33 @@ async function serieTributoRaw(grupo: GrupoTributo, anoMin: number, anoMax: numb
     .sort((a, b) => a.ano - b.ano)
 }
 
+export interface MesTributo { mes: number; lancado: number; arrecadado: number; saldo: number }
+
+/**
+ * Drill do gráfico "Lançado × Arrecadado" (PainelTributo): abre o exercício clicado por
+ * mês de vencimento da parcela. Mesma fonte (tb_dsod_parcela_posicao) do serieTributo,
+ * só que agrupada por MONTH(p.dt_vencimento) em vez de exercício.
+ */
+export async function serieMensalTributo(grupo: GrupoTributo, ano: number): Promise<MesTributo[]> {
+  return cached(`serieMensalTributo:${grupo}:${ano}`, TTL_15MIN, async () => {
+    const r = await agentQuery(`
+      SELECT MONTH(p.dt_vencimento) AS m, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago, SUM(pp.vl_saldo) AS saldo
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE ${whereTributo(grupo)} AND g.no_exercicio_lancamento = ${ano}
+      GROUP BY MONTH(p.dt_vencimento)`, 40)
+    const map = new Map<number, MesTributo>()
+    for (const row of r.rows) {
+      const m = num(row[0])
+      if (m >= 1 && m <= 12) map.set(m, { mes: m, lancado: num(row[1]), arrecadado: num(row[2]), saldo: num(row[3]) })
+    }
+    const out: MesTributo[] = []
+    for (let m = 1; m <= 12; m++) out.push(map.get(m) ?? { mes: m, lancado: 0, arrecadado: 0, saldo: 0 })
+    return out
+  })
+}
+
 /**
  * Ranking de tributos (cd_tributo + nome) por lançado/arrecadado/saldo,
  * usado na aba "Outros Tributos". Junta com tb_dsod_tributos para o rótulo.

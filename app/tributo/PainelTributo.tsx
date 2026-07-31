@@ -9,6 +9,9 @@ import { fmtAbrev } from '@/lib/fmt-grafico'
 // Reutilizado por ISSCC, TFE, TFHS e Outros Tributos.
 
 interface SerieItem { ano: number; lancado: number; arrecadado: number; saldo: number; isencao: number; suspenso: number }
+interface MesItem { mes: number; lancado: number; arrecadado: number; saldo: number }
+
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
@@ -58,6 +61,34 @@ function geomBars(d: SerieItem[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
+// Barras Lançado × Arrecadado por mês — drill do exercício clicado no gráfico anual.
+function geomBarsMes(d: MesItem[]) {
+  const W = 960, H = 320, bottom = 268
+  const span = bottom - 30 - 8
+  const max = Math.max(1, ...d.flatMap(x => [x.lancado, x.arrecadado]))
+  const n = Math.max(1, d.length)
+  const gw = W / n
+  const bw = Math.min(26, gw * 0.28)
+  const sc = (v: number) => (v / max) * span
+  const bars = d.map((x, i) => {
+    const cx = i * gw + gw / 2
+    const hL = sc(x.lancado), hA = sc(x.arrecadado)
+    return {
+      cx, mes: x.mes,
+      lanc: { x: cx - bw - 3, y: bottom - hL, h: hL },
+      arr: { x: cx + 3, y: bottom - hA, h: hA },
+      tip: {
+        chart: 'bar' as const, title: MESES_ABREV[x.mes - 1],
+        l1: `Lançado: ${fmtAbrev(x.lancado)}`, l1c: '#283e93',
+        l2: `Arrecadado: ${fmtAbrev(x.arrecadado)}`, l2c: '#e8962e',
+        left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hL, hA)) / H * 100).toFixed(1)}%`,
+      },
+    }
+  })
+  const ticks = [max, max / 2, 0].map(v => ({ v: Math.round(v / 1e6), y: bottom - sc(v) }))
+  return { bars, ticks, W, H, bottom, bw }
+}
+
 // Área de inadimplência por ano
 function geomArea(d: SerieItem[]) {
   const W = 300, H = 100, xL = 34, xR = 290, yT = 14, yB = 84
@@ -95,9 +126,12 @@ function geomGauge(pct: number) {
 export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos }: { grupo: string; titulo: string; ano?: number; mes?: number; onAnos?: (anos: number[]) => void }) {
   const [tip, setTip] = useState<Tip | null>(null)
   const [serie, setSerie] = useState<SerieItem[] | null>(null)
+  const [drillAno, setDrillAno] = useState<number | null>(null)
+  const [serieMes, setSerieMes] = useState<MesItem[] | null>(null)
 
   useEffect(() => {
     setSerie(null)
+    setDrillAno(null)
     const qs = mes ? `&mes=${mes}` : ''
     fetch(`/api/tributo/serie?grupo=${grupo}${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -108,6 +142,13 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
       }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grupo, mes])
+
+  useEffect(() => {
+    if (drillAno == null) { setSerieMes(null); return }
+    setSerieMes(null)
+    fetch(`/api/tributo/serie-mensal?grupo=${grupo}&ano=${drillAno}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error && Array.isArray(d.serie)) setSerieMes(d.serie) }).catch(() => {})
+  }, [grupo, drillAno])
 
   const carregando = serie === null
   if (carregando) {
@@ -233,34 +274,60 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
       {/* ===== ROW 1 ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.68fr 1fr 1.32fr', gap: 18, marginTop: 20 }}>
 
-        {/* Barras Lançado × Arrecadado */}
+        {/* Barras Lançado × Arrecadado — clique numa barra do ano p/ abrir por mês */}
         <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Lançado × Arrecadado</span>
+            {drillAno != null ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>
+                <button onClick={() => setDrillAno(null)} aria-label="Voltar" style={{ border: 'none', background: '#eef1f7', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+                </button>
+                Lançado × Arrecadado — {drillAno} por mês
+              </span>
+            ) : (
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Lançado × Arrecadado</span>
+            )}
             <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Lançado</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e' }}></span>Arrecadado</span>
             </div>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
-            <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="tbLanc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
-                <linearGradient id="tbArr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
-              </defs>
-              {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 4).toFixed(1)} fontSize="17" fill="#aeb6c6" style={axisFont}>{t.v} mi</text></g>))}
-              <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-              {gb.bars.map((b, i) => (
-                <g key={i}>
-                  <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.lanc.h.toFixed(1)} rx="4" fill="url(#tbLanc)" />
-                  <rect x={b.arr.x.toFixed(1)} y={b.arr.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.arr.h.toFixed(1)} rx="4" fill="url(#tbArr)" />
-                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="20" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
-                </g>
-              ))}
-              {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - gb.bw - 6).toFixed(1)} y="0" width={(gb.bw * 2 + 12).toFixed(1)} height={String(gb.H - 22)} fill="transparent" pointerEvents="all" />))}
-            </svg>
-            {tip?.chart === 'bar' ? <Tooltip t={tip} /> : null}
-          </div>
+          {drillAno != null && serieMes === null ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+              <Spinner label={`Carregando ${drillAno} por mês…`} />
+            </div>
+          ) : (
+            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: drillAno != null ? 'default' : 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
+              {(() => {
+                const g = drillAno != null ? geomBarsMes(serieMes ?? []) : gb
+                const labels = drillAno != null ? (g as ReturnType<typeof geomBarsMes>).bars.map(b => MESES_ABREV[b.mes - 1]) : null
+                return (
+                  <svg viewBox={`0 0 ${g.W} ${g.H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
+                    <defs>
+                      <linearGradient id="tbLanc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
+                      <linearGradient id="tbArr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
+                    </defs>
+                    {g.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(g.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 4).toFixed(1)} fontSize="17" fill="#aeb6c6" style={axisFont}>{t.v} mi</text></g>))}
+                    <line x1="0" y1={g.bottom} x2={String(g.W)} y2={g.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+                    {g.bars.map((b, i) => (
+                      <g key={i}>
+                        <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width={g.bw.toFixed(1)} height={b.lanc.h.toFixed(1)} rx="4" fill="url(#tbLanc)" />
+                        <rect x={b.arr.x.toFixed(1)} y={b.arr.y.toFixed(1)} width={g.bw.toFixed(1)} height={b.arr.h.toFixed(1)} rx="4" fill="url(#tbArr)" />
+                        <text x={b.cx.toFixed(1)} y={String(g.H - 6)} fontSize="20" fill="#3a4256" textAnchor="middle" style={axisFont}>{labels ? labels[i] : (b as { ano: number }).ano}</text>
+                      </g>
+                    ))}
+                    {g.bars.map((b, i) => (
+                      <rect key={i}
+                        onMouseEnter={() => setTip(b.tip)}
+                        onClick={drillAno == null ? () => setDrillAno((b as { ano: number }).ano) : undefined}
+                        x={(b.cx - g.bw - 6).toFixed(1)} y="0" width={(g.bw * 2 + 12).toFixed(1)} height={String(g.H - 22)} fill="transparent" pointerEvents="all" />
+                    ))}
+                  </svg>
+                )
+              })()}
+              {tip?.chart === 'bar' ? <Tooltip t={tip} /> : null}
+            </div>
+          )}
         </div>
 
         {/* Insights */}
