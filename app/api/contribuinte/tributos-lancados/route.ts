@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   try {
     const ano = Number(req.nextUrl.searchParams.get('ano')) || undefined
-    const grupos = await lancadoPorGrupo(ano)
+    const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
+    const grupos = await lancadoPorGrupo(ano, mes)
     return NextResponse.json({ grupos })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

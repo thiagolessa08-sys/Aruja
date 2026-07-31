@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
-export interface FiltrosContribuinteUI { ano: number | ''; pessoa: '' | 'F' | 'J' }
+export interface FiltrosContribuinteUI { ano: number | ''; pessoa: '' | 'F' | 'J'; mes?: number | '' }
 
 interface Tip { left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
 
@@ -177,10 +177,13 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   }, [qs])
   useEffect(() => {
     setTributos(null)
-    const q = filtros.ano ? `?ano=${filtros.ano}` : ''
-    fetch(`/api/contribuinte/tributos-lancados${q}`).then(r => r.ok ? r.json() : null)
+    const p = new URLSearchParams()
+    if (filtros.ano) p.set('ano', String(filtros.ano))
+    if (filtros.mes) p.set('mes', String(filtros.mes))
+    const q = p.toString()
+    fetch(`/api/contribuinte/tributos-lancados${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error && Array.isArray(d.grupos)) setTributos(d.grupos) }).catch(() => {})
-  }, [filtros.ano])
+  }, [filtros.ano, filtros.mes])
   useEffect(() => {
     fetch(`/api/contribuinte/kpis${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.kpis?.length) setKpis(d.kpis) }).catch(() => {})
@@ -360,7 +363,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
           <div>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Tributos Lançados</span>
             <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-              total lançado por grupo de tributo{filtros.ano ? ` — exercício ${filtros.ano}` : ' (todos os exercícios)'}
+              total lançado por grupo de tributo{filtros.ano ? ` — exercício ${filtros.ano}` : ' (todos os exercícios)'}{filtros.mes ? ` até o mês ${filtros.mes}` : ''}
             </div>
           </div>
           <span style={reportBadge}>Lançado</span>

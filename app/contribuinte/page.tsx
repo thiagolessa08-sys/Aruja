@@ -8,6 +8,8 @@ import PainelContribuinte, { type FiltrosContribuinteUI } from './PainelContribu
 import TopNav from '../_components/TopNav'
 import { PESSOAS, type PessoaOpt } from '@/lib/contribuinte-filtros'
 
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+
 export default function ContribuintePage() {
   const router = useRouter()
   const [saudacao, setSaudacao] = useState('Bom dia')
@@ -16,6 +18,7 @@ export default function ContribuintePage() {
   const [opts, setOpts] = useState<{ anos: number[]; pessoas: PessoaOpt[] }>({ anos: [], pessoas: PESSOAS })
   const [rAno, setRAno] = useState<number | ''>('')
   const [rPessoa, setRPessoa] = useState<'' | 'F' | 'J'>('')
+  const [rMes, setRMes] = useState<number | ''>('') // mês (acumulado) do gráfico Tributos Lançados; '' = ano todo
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -51,7 +54,7 @@ export default function ContribuintePage() {
     backgroundRepeat: 'no-repeat', backgroundPosition: 'right 11px center', backgroundImage: chevron('%23283e93'),
   }
 
-  const filtros: FiltrosContribuinteUI = { ano: rAno, pessoa: rPessoa }
+  const filtros: FiltrosContribuinteUI = { ano: rAno, pessoa: rPessoa, mes: rMes }
 
   return (
     <div style={{ minHeight: '100vh', background: '#eef2f9', padding: '26px 14px', fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>
@@ -72,6 +75,10 @@ export default function ContribuintePage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <select aria-label="Exercício" value={rAno} onChange={e => setRAno(Number(e.target.value))} style={selectPill}>
               {opts.anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
+            </select>
+            <select aria-label="Mês" value={rMes} onChange={e => setRMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
+              <option value="">Mês: Ano todo</option>
+              {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
             <select aria-label="Tipo de pessoa" value={rPessoa} onChange={e => setRPessoa(e.target.value as '' | 'F' | 'J')} style={selectPill}>
               <option value="">Pessoa: Todas</option>

@@ -123,21 +123,27 @@ function caseGrupo(): string {
  * Lançado total por grupo de tributo (IPTU, ITBI, ISS Construção Civil, ISS/ISSQN, TFE,
  * TFHS, Outros) — usado no gráfico "Tributos Lançados" da tela de Contribuintes. Mesma
  * fonte/bucketing do serieTributo/whereTributo, só que numa única consulta com CASE em
- * vez de uma consulta por grupo. `ano` (opcional) restringe ao exercício de lançamento.
+ * vez de uma consulta por grupo. `ano` (opcional) restringe ao exercício de lançamento;
+ * `mes` (opcional) acumula as parcelas com vencimento até aquele mês — mesma convenção
+ * do PainelTributo/mei-enquadramento.
  */
-export async function lancadoPorGrupo(ano?: number): Promise<LancadoGrupo[]> {
-  return cached(`lancadoPorGrupo:${ano ?? 'all'}`, TTL_15MIN, () => lancadoPorGrupoRaw(ano))
+export async function lancadoPorGrupo(ano?: number, mes?: number): Promise<LancadoGrupo[]> {
+  return cached(`lancadoPorGrupo:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => lancadoPorGrupoRaw(ano, mes))
 }
 
-async function lancadoPorGrupoRaw(ano?: number): Promise<LancadoGrupo[]> {
-  const filtroAno = ano ? `WHERE g.no_exercicio_lancamento = ${ano}` : ''
+async function lancadoPorGrupoRaw(ano?: number, mes?: number): Promise<LancadoGrupo[]> {
+  const cond = [
+    ano ? `g.no_exercicio_lancamento = ${ano}` : '',
+    mes ? `MONTH(p.dt_vencimento) <= ${mes}` : '',
+  ].filter(Boolean).join(' AND ')
+  const filtro = cond ? `WHERE ${cond}` : ''
   const grp = caseGrupo()
   const r = await agentQuery(`
     SELECT ${grp} AS grp, SUM(pp.vl_lancto) AS lancado
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-    ${filtroAno}
+    ${filtro}
     GROUP BY ${grp}`, 20)
   const map = new Map<string, number>()
   for (const row of r.rows) {
