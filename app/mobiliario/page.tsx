@@ -28,7 +28,7 @@ export default function MobiliarioPage() {
   // uma fica visível por vez; cada uma repopula a lista de anos ao carregar sua série.
   const [anosTrib, setAnosTrib] = useState<number[]>([])
   const [anoTrib, setAnoTrib] = useState<number | ''>('')
-  // Mês (acumulado) — TFE e TFHS têm esse filtro; ISS ainda não.
+  // Mês (acumulado) — compartilhado entre ISS/TFE/TFHS, mesma lógica do anoTrib.
   const [mesTrib, setMesTrib] = useState<number | ''>('')
 
   function handleAnosTrib(recebidos: number[]) {
@@ -139,7 +139,7 @@ export default function MobiliarioPage() {
                 <select aria-label="Exercício" value={anoTrib} onChange={e => setAnoTrib(Number(e.target.value))} style={selectPill}>
                   {anosTrib.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
                 </select>
-                {(aba === 'tfe' || aba === 'tfhs') && (
+                {(aba === 'iss' || aba === 'tfe' || aba === 'tfhs') && (
                   <select aria-label="Mês" value={mesTrib} onChange={e => setMesTrib(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
                     <option value="">Mês: Ano todo</option>
                     {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
@@ -151,7 +151,7 @@ export default function MobiliarioPage() {
         </div>
 
         {/* ===== PAINEL ===== */}
-        {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" ano={anoTrib || undefined} onAnos={handleAnosTrib} />}
+        {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'iss' && (
           <div style={{ background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Limite Anual de Faturamento</span>
