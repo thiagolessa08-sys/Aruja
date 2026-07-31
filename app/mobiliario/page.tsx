@@ -176,6 +176,7 @@ export default function MobiliarioPage() {
         {aba === 'tfe' && <TfePorSegmento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
         {aba === 'tfe' && <MeiEnquadramentoLancamento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
         {aba === 'tfhs' && <PainelTributo grupo="tfhs" titulo="TFHS" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
+        {aba === 'tfhs' && <MeiEnquadramentoLancamento tributo="tfhs" ano={anoTrib || undefined} mes={mesTrib || undefined} />}
         {aba === 'mob' && <PainelMobiliario filtros={filtros} />}
         {aba === 'mob' && <MeiEnquadramentoLancamento ano={rAno || undefined} mes={rMes || undefined} />}
 

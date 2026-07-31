@@ -7,32 +7,39 @@ interface Dados {
   porExercicio: { exercicio: number; lancado: number }[]
 }
 
+type Tributo = 'tfe' | 'tfhs'
+const LABEL: Record<Tributo, string> = { tfe: 'TFE', tfhs: 'TFHS' }
+const CD: Record<Tributo, number> = { tfe: 2002, tfhs: 2003 }
+
 const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
 const n = (v: number) => v.toLocaleString('pt-BR')
 
 // "Análise de Enquadramento vs Lançamento (MEIs)" — compara o total de empresas
 // enquadradas como MEI no cadastro (situação Ativo) com a quantidade dessas MEIs que
-// tiveram TFE (cd_tributo 2002) efetivamente lançado, por exercício. Fonte:
-// /api/mobiliario/mei-enquadramento. `ano` (opcional) apenas destaca a barra do
-// exercício selecionado no painel; `mes` acumula as parcelas até aquele mês (mesma
-// convenção do PainelTributo), refazendo a consulta.
-export default function MeiEnquadramentoLancamento({ ano, mes }: { ano?: number; mes?: number }) {
+// tiveram TFE/TFHS efetivamente lançado, por exercício. Fonte:
+// /api/mobiliario/mei-enquadramento. `tributo` escolhe TFE (cd_tributo 2002, padrão) ou
+// TFHS (cd_tributo 2003) — mesma ponte g.cd_origem = cd_contr_mob validada para ambos.
+// `ano` (opcional) apenas destaca a barra do exercício selecionado no painel; `mes`
+// acumula as parcelas até aquele mês (mesma convenção do PainelTributo), refazendo a consulta.
+export default function MeiEnquadramentoLancamento({ tributo = 'tfe', ano, mes }: { tributo?: Tributo; ano?: number; mes?: number }) {
   const [dados, setDados] = useState<Dados | null>(null)
+  const label = LABEL[tributo]
 
   useEffect(() => {
     setDados(null)
-    const qs = mes ? `?mes=${mes}` : ''
-    fetch(`/api/mobiliario/mei-enquadramento${qs}`).then(r => r.ok ? r.json() : null)
+    const qs = new URLSearchParams({ tributo })
+    if (mes) qs.set('mes', String(mes))
+    fetch(`/api/mobiliario/mei-enquadramento?${qs.toString()}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setDados(d) }).catch(() => {})
-  }, [mes])
+  }, [tributo, mes])
 
   if (!dados) {
     return (
       <div style={{ ...card, marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Análise de Enquadramento vs Lançamento (MEIs)</span>
-          <span style={reportBadge}>TFE</span>
+          <span style={reportBadge}>{label}</span>
         </div>
         <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
           {[0, 1, 2].map(i => (
@@ -49,10 +56,10 @@ export default function MeiEnquadramentoLancamento({ ano, mes }: { ano?: number;
     <div style={{ ...card, marginTop: 18 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Análise de Enquadramento vs Lançamento (MEIs)</span>
-        <span style={reportBadge}>TFE</span>
+        <span style={reportBadge}>{label}</span>
       </div>
       <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-        MEIs ativos no cadastro x MEIs com TFE lançado, por exercício{mes ? ` — acumulado até o mês ${mes}` : ''}
+        MEIs ativos no cadastro x MEIs com {label} lançado, por exercício{mes ? ` — acumulado até o mês ${mes}` : ''}
       </div>
 
       <div style={{ marginTop: 16, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
@@ -71,7 +78,7 @@ export default function MeiEnquadramentoLancamento({ ano, mes }: { ano?: number;
                 <span style={{ fontSize: 11.5, color: selecionado ? '#283e93' : '#3a4256', fontWeight: selecionado ? 700 : 400 }}>
                   Exercício {e.exercicio}{selecionado ? ' (selecionado)' : ''}
                 </span>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44' }}>{n(e.lancado)} com TFE lançado ({pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%)</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44' }}>{n(e.lancado)} com {label} lançado ({pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%)</span>
               </div>
               <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: selecionado ? '#e8962e' : '#283e93', borderRadius: 5 }} />
@@ -81,7 +88,7 @@ export default function MeiEnquadramentoLancamento({ ano, mes }: { ano?: number;
         })}
       </div>
       <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 12 }}>
-        Enquadramento: ds_tipo_empresa = MEI no cadastro mobiliário. Lançamento: guias de TFE (cd_tributo 2002) lançadas no exercício, vinculadas à mesma empresa.
+        Enquadramento: ds_tipo_empresa = MEI no cadastro mobiliário. Lançamento: guias de {label} (cd_tributo {CD[tributo]}) lançadas no exercício, vinculadas à mesma empresa.
       </div>
     </div>
   )
