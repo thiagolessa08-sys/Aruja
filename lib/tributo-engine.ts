@@ -109,7 +109,7 @@ export async function serieMensalTributo(grupo: GrupoTributo, ano: number): Prom
   })
 }
 
-export interface LancadoGrupo { grupo: GrupoTributo; label: string; lancado: number }
+export interface LancadoGrupo { grupo: GrupoTributo; label: string; lancado: number; debito: number }
 
 const GRUPOS_ORDEM: GrupoTributo[] = ['iptu', 'itbi', 'isscc', 'iss', 'tfe', 'tfhs', 'outros']
 
@@ -120,12 +120,14 @@ function caseGrupo(): string {
 }
 
 /**
- * Lançado total por grupo de tributo (IPTU, ITBI, ISS Construção Civil, ISS/ISSQN, TFE,
- * TFHS, Outros) — usado no gráfico "Tributos Lançados" da tela de Contribuintes. Mesma
- * fonte/bucketing do serieTributo/whereTributo, só que numa única consulta com CASE em
- * vez de uma consulta por grupo. `ano` (opcional) restringe ao exercício de lançamento;
- * `mes` (opcional) acumula as parcelas com vencimento até aquele mês — mesma convenção
- * do PainelTributo/mei-enquadramento.
+ * Lançado × Débitos (saldo em aberto) por grupo de tributo (IPTU, ITBI, ISS Construção
+ * Civil, ISS/ISSQN, TFE, TFHS, Outros) — usado no gráfico "Tributos Lançados" da tela de
+ * Contribuintes. "Débitos" = valores em aberto que o contribuinte possui (vl_saldo),
+ * mesmo campo usado como saldo devedor em serieTributo. Mesma fonte/bucketing do
+ * serieTributo/whereTributo, só que numa única consulta com CASE em vez de uma consulta
+ * por grupo. `ano` (opcional) restringe ao exercício de lançamento; `mes` (opcional)
+ * acumula as parcelas com vencimento até aquele mês — mesma convenção do
+ * PainelTributo/mei-enquadramento.
  */
 export async function lancadoPorGrupo(ano?: number, mes?: number): Promise<LancadoGrupo[]> {
   return cached(`lancadoPorGrupo:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => lancadoPorGrupoRaw(ano, mes))
@@ -139,18 +141,18 @@ async function lancadoPorGrupoRaw(ano?: number, mes?: number): Promise<LancadoGr
   const filtro = cond ? `WHERE ${cond}` : ''
   const grp = caseGrupo()
   const r = await agentQuery(`
-    SELECT ${grp} AS grp, SUM(pp.vl_lancto) AS lancado
+    SELECT ${grp} AS grp, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_saldo) AS saldo
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     ${filtro}
     GROUP BY ${grp}`, 20)
-  const map = new Map<string, number>()
+  const map = new Map<string, { lancado: number; debito: number }>()
   for (const row of r.rows) {
-    if (row[0] != null) map.set(String(row[0]), num(row[1]))
+    if (row[0] != null) map.set(String(row[0]), { lancado: num(row[1]), debito: num(row[2]) })
   }
   return GRUPOS_ORDEM
-    .map(g => ({ grupo: g, label: LABEL_GRUPO[g], lancado: map.get(g) ?? 0 }))
+    .map(g => ({ grupo: g, label: LABEL_GRUPO[g], lancado: map.get(g)?.lancado ?? 0, debito: map.get(g)?.debito ?? 0 }))
     .sort((a, b) => b.lancado - a.lancado)
 }
 

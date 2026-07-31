@@ -154,25 +154,28 @@ function geomStackedMes(d: { mes: number; pf: number; pj: number }[]) {
 
 const ABREV_GRUPO: Record<string, string> = { isscc: 'ISS CC', outros: 'Outros' }
 
-// ===== Barras: Tributos Lançados por grupo =====
-function geomGrupoBars(d: { grupo: string; label: string; lancado: number }[]) {
+// ===== Barras: Tributos Lançados × Débitos (saldo em aberto) por grupo =====
+function geomGrupoBars(d: { grupo: string; label: string; lancado: number; debito: number }[]) {
   const W = 900, H = 280, top = 24, bottom = 232
   const span = bottom - top - 8
-  const max = Math.max(1, ...d.map(x => x.lancado))
+  const max = Math.max(1, ...d.flatMap(x => [x.lancado, x.debito]))
   const n = Math.max(1, d.length)
   const gw = W / n
-  const bw = Math.min(56, gw * 0.5)
+  const bw = Math.min(30, gw * 0.24)
   const sc = (v: number) => (v / max) * span
   const bars = d.map((x, i) => {
     const cx = i * gw + gw / 2
-    const h = sc(x.lancado)
+    const hL = sc(x.lancado), hD = sc(x.debito)
     return {
-      cx, x: cx - bw / 2, y: bottom - h, h,
+      cx,
+      lanc: { x: cx - bw - 3, y: bottom - hL, h: hL },
+      deb: { x: cx + 3, y: bottom - hD, h: hD },
       rotulo: ABREV_GRUPO[x.grupo] ?? x.label,
       tip: {
         title: x.label,
         l1: `Lançado: ${fmtAbrev(x.lancado)}`, l1c: '#283e93',
-        left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - h) / H * 100).toFixed(1)}%`,
+        l2: `Débitos (em aberto): ${fmtAbrev(x.debito)}`, l2c: '#d64545',
+        left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hL, hD)) / H * 100).toFixed(1)}%`,
       },
     }
   })
@@ -200,7 +203,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
-  const [tributos, setTributos] = useState<{ grupo: string; label: string; lancado: number }[] | null>(null)
+  const [tributos, setTributos] = useState<{ grupo: string; label: string; lancado: number; debito: number }[] | null>(null)
   const [drillAnoNovos, setDrillAnoNovos] = useState<number | null>(null)
   const [serieMesNovos, setSerieMesNovos] = useState<{ mes: number; pf: number; pj: number }[] | null>(null)
 
@@ -423,16 +426,19 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
         </div>
       </div>
 
-      {/* ===== Tributos Lançados por grupo ===== */}
+      {/* ===== Tributos Lançados × Débitos por grupo ===== */}
       <div style={{ ...card, display: 'flex', flexDirection: 'column', marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <div>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Tributos Lançados</span>
             <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-              total lançado por grupo de tributo{filtros.ano ? ` — exercício ${filtros.ano}` : ' (todos os exercícios)'}{filtros.mes ? ` até o mês ${filtros.mes}` : ''}
+              lançado × débitos (valores em aberto) por grupo de tributo{filtros.ano ? ` — exercício ${filtros.ano}` : ' (todos os exercícios)'}{filtros.mes ? ` até o mês ${filtros.mes}` : ''}
             </div>
           </div>
-          <span style={reportBadge}>Lançado</span>
+          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Lançado</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#d64545' }}></span>Débitos</span>
+          </div>
         </div>
         {!tributos ? (
           <div style={{ marginTop: 18, display: 'flex', alignItems: 'flex-end', gap: 16, height: 200 }}>
@@ -447,6 +453,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
               <svg viewBox={`0 0 ${gg.W} ${gg.H}`} width="100%" height="280" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
                 <defs>
                   <linearGradient id="ctbTrib" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
+                  <linearGradient id="ctbDeb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d64545" /><stop offset="100%" stopColor="#f2b3b3" /></linearGradient>
                 </defs>
                 {gg.ticks.map((t, i) => (
                   <g key={i}>
@@ -457,12 +464,13 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                 <line x1="0" y1={gg.bottom} x2={String(gg.W)} y2={gg.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
                 {gg.bars.map((b, i) => (
                   <g key={i}>
-                    <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gg.bw.toFixed(1)} height={b.h.toFixed(1)} rx="4" fill="url(#ctbTrib)" />
+                    <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width={gg.bw.toFixed(1)} height={b.lanc.h.toFixed(1)} rx="4" fill="url(#ctbTrib)" />
+                    <rect x={b.deb.x.toFixed(1)} y={b.deb.y.toFixed(1)} width={gg.bw.toFixed(1)} height={b.deb.h.toFixed(1)} rx="4" fill="url(#ctbDeb)" />
                     <text x={b.cx.toFixed(1)} y={String(gg.H - 6)} fontSize="14" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.rotulo}</text>
                   </g>
                 ))}
                 {gg.bars.map((b, i) => (
-                  <rect key={i} onMouseEnter={() => setTipTrib(b.tip)} x={(b.cx - gg.bw).toFixed(1)} y="0" width={(gg.bw * 2).toFixed(1)} height={String(gg.H - 20)} fill="transparent" pointerEvents="all" />
+                  <rect key={i} onMouseEnter={() => setTipTrib(b.tip)} x={(b.cx - gg.bw - 6).toFixed(1)} y="0" width={(gg.bw * 2 + 12).toFixed(1)} height={String(gg.H - 20)} fill="transparent" pointerEvents="all" />
                 ))}
               </svg>
               {tipTrib ? <Tooltip t={tipTrib} /> : null}
