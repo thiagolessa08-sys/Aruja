@@ -128,10 +128,13 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
   const [serie, setSerie] = useState<SerieItem[] | null>(null)
   const [drillAno, setDrillAno] = useState<number | null>(null)
   const [serieMes, setSerieMes] = useState<MesItem[] | null>(null)
+  const [drillAnoInad, setDrillAnoInad] = useState<number | null>(null)
+  const [serieMesInad, setSerieMesInad] = useState<MesItem[] | null>(null)
 
   useEffect(() => {
     setSerie(null)
     setDrillAno(null)
+    setDrillAnoInad(null)
     const qs = mes ? `&mes=${mes}` : ''
     fetch(`/api/tributo/serie?grupo=${grupo}${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -149,6 +152,13 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
     fetch(`/api/tributo/serie-mensal?grupo=${grupo}&ano=${drillAno}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error && Array.isArray(d.serie)) setSerieMes(d.serie) }).catch(() => {})
   }, [grupo, drillAno])
+
+  useEffect(() => {
+    if (drillAnoInad == null) { setSerieMesInad(null); return }
+    setSerieMesInad(null)
+    fetch(`/api/tributo/serie-mensal?grupo=${grupo}&ano=${drillAnoInad}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error && Array.isArray(d.serie)) setSerieMesInad(d.serie) }).catch(() => {})
+  }, [grupo, drillAnoInad])
 
   const carregando = serie === null
   if (carregando) {
@@ -384,20 +394,38 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
       {/* ===== ROW 2 ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.68fr 1.32fr', gap: 18, marginTop: 18 }}>
 
-        {/* Área inadimplência por ano */}
+        {/* Área inadimplência por ano — clique num ponto p/ abrir por mês */}
         <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Inadimplência por Exercício</span>
+            {drillAnoInad != null ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>
+                <button onClick={() => setDrillAnoInad(null)} aria-label="Voltar" style={{ border: 'none', background: '#eef1f7', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+                </button>
+                Inadimplência — {drillAnoInad} por mês
+              </span>
+            ) : (
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Inadimplência por Exercício</span>
+            )}
             <span style={reportBadge}>Saldo devedor</span>
           </div>
           <div style={{ flex: 1, minHeight: 200, marginTop: 14 }}>
-            <AreaSerie
-              data={s.map(x => ({ ano: x.ano, valor: x.saldo }))}
-              cor="#d64545"
-              nome="Inadimplência"
-              fmtValor={fmtAbrev}
-              fmtEixoY={fmtAbrev}
-            />
+            {drillAnoInad != null && serieMesInad === null ? (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Spinner label={`Carregando ${drillAnoInad} por mês…`} />
+              </div>
+            ) : (
+              <AreaSerie
+                data={drillAnoInad != null
+                  ? (serieMesInad ?? []).map(x => ({ ano: MESES_ABREV[x.mes - 1], valor: x.saldo }))
+                  : s.map(x => ({ ano: x.ano, valor: x.saldo }))}
+                cor="#d64545"
+                nome="Inadimplência"
+                fmtValor={fmtAbrev}
+                fmtEixoY={fmtAbrev}
+                onPointClick={drillAnoInad == null ? (ano) => setDrillAnoInad(Number(ano)) : undefined}
+              />
+            )}
           </div>
         </div>
 

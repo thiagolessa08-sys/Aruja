@@ -14,17 +14,24 @@ interface Props {
   fmtEixoY?: (v: number) => string
   /** Rótulo da série no tooltip (ex.: "Inadimplência"). */
   nome?: string
+  /** Se informado, clicar num ponto (ex.: um ano) dispara o drill — cursor vira "pointer". */
+  onPointClick?: (chave: PontoSerie['ano']) => void
 }
 
 // Gráfico de linha/área responsivo (recharts). Eixos e fontes se ajustam
 // automaticamente à largura — sem necessidade de calcular fontSize por viewBox.
-export default function AreaSerie({ data, cor = '#283e93', fmtValor, fmtEixoY, nome = 'Valor' }: Props) {
+export default function AreaSerie({ data, cor = '#283e93', fmtValor, fmtEixoY, nome = 'Valor', onPointClick }: Props) {
   const id = useId().replace(/:/g, '')
   const gradId = `grad-${id}`
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={data} margin={{ top: 12, right: 12, left: 4, bottom: 4 }}>
+      <AreaChart
+        data={data}
+        margin={{ top: 12, right: 12, left: 4, bottom: 4 }}
+        style={{ cursor: onPointClick ? 'pointer' : undefined }}
+        onClick={onPointClick ? (state) => { if (state?.activeLabel != null) onPointClick(state.activeLabel as PontoSerie['ano']) } : undefined}
+      >
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={cor} stopOpacity={0.28} />
