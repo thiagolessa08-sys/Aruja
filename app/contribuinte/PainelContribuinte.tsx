@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import LoadingOverlay from '../_components/LoadingOverlay'
+import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 export interface FiltrosContribuinteUI { ano: number | ''; pessoa: '' | 'F' | 'J'; mes?: number | '' }
@@ -120,6 +120,38 @@ function geomStacked(d: NovoAno[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+// ===== Barras empilhadas: PF × PJ por mês — drill do exercício clicado =====
+function geomStackedMes(d: { mes: number; pf: number; pj: number }[]) {
+  const W = 900, H = 300, bottom = 252
+  const span = bottom - 28 - 8
+  const max = Math.max(1, ...d.map(x => x.pf + x.pj))
+  const n = Math.max(1, d.length)
+  const gw = W / n
+  const bw = Math.min(56, gw * 0.5)
+  const sc = (v: number) => (v / max) * span
+  const bars = d.map((x, i) => {
+    const cx = i * gw + gw / 2
+    const hPf = sc(x.pf), hPj = sc(x.pj)
+    const tot = x.pf + x.pj
+    return {
+      cx, mes: x.mes, x: cx - bw / 2,
+      pf: { y: bottom - hPf, h: hPf },
+      pj: { y: bottom - hPf - hPj, h: hPj },
+      topY: bottom - hPf - hPj, tot,
+      tip: {
+        title: MESES_ABREV[x.mes - 1],
+        l1: `Pessoa Física: ${fmtInt(x.pf)}`, l1c: '#283e93',
+        l2: `Pessoa Jurídica: ${fmtInt(x.pj)}`, l2c: '#7d8fce',
+        left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - hPf - hPj) / H * 100).toFixed(1)}%`,
+      },
+    }
+  })
+  const ticks = [max, max / 2, 0].map(v => ({ v: Math.round(v / 1000), y: bottom - sc(v) }))
+  return { bars, ticks, W, H, bottom, bw }
+}
+
 const ABREV_GRUPO: Record<string, string> = { isscc: 'ISS CC', outros: 'Outros' }
 
 // ===== Barras: Tributos Lançados por grupo =====
@@ -168,13 +200,22 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
   const [tributos, setTributos] = useState<{ grupo: string; label: string; lancado: number }[] | null>(null)
+  const [drillAnoNovos, setDrillAnoNovos] = useState<number | null>(null)
+  const [serieMesNovos, setSerieMesNovos] = useState<{ mes: number; pf: number; pj: number }[] | null>(null)
 
   const qs = buildQS(filtros)
 
   useEffect(() => {
+    setDrillAnoNovos(null)
     fetch(`/api/contribuinte/graficos${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setGraf(d) }).catch(() => {})
   }, [qs])
+  useEffect(() => {
+    if (drillAnoNovos == null) { setSerieMesNovos(null); return }
+    setSerieMesNovos(null)
+    fetch(`/api/contribuinte/novos-mensal?ano=${drillAnoNovos}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error && Array.isArray(d.serie)) setSerieMesNovos(d.serie) }).catch(() => {})
+  }, [drillAnoNovos])
   useEffect(() => {
     setTributos(null)
     const p = new URLSearchParams()
@@ -260,42 +301,66 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
       {/* ===== ROW 1 ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1.3fr', gap: 18, marginTop: 20 }}>
 
-        {/* BARRAS EMPILHADAS: Novos Contribuintes por Ano (PF × PJ) */}
+        {/* BARRAS EMPILHADAS: Novos Contribuintes por Ano (PF × PJ) — clique num ano p/ abrir por mês */}
         <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Novos Contribuintes por Ano</span>
+            {drillAnoNovos != null ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>
+                <button onClick={() => setDrillAnoNovos(null)} aria-label="Voltar" style={{ border: 'none', background: '#eef1f7', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#283e93" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+                </button>
+                Novos Contribuintes — {drillAnoNovos} por mês
+              </span>
+            ) : (
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Novos Contribuintes por Ano</span>
+            )}
             <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>PF</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#7d8fce' }}></span>PJ</span>
             </div>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
-            <svg viewBox={`0 0 ${gs.W} ${gs.H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="ctbPf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#3f5bb5" /></linearGradient>
-                <linearGradient id="ctbPj" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#7d8fce" /><stop offset="100%" stopColor="#aab8e3" /></linearGradient>
-              </defs>
-              {gs.ticks.map((t, i) => (
-                <g key={i}>
-                  <line x1="0" y1={t.y.toFixed(1)} x2={String(gs.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
-                  <text x="2" y={(t.y - 4).toFixed(1)} fontSize="14" fill="#aeb6c6" style={axisFont}>{t.v}k</text>
-                </g>
-              ))}
-              <line x1="0" y1={gs.bottom} x2={String(gs.W)} y2={gs.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-              {gs.bars.map((b, i) => (
-                <g key={i}>
-                  <rect x={b.x.toFixed(1)} y={b.pf.y.toFixed(1)} width={gs.bw.toFixed(1)} height={b.pf.h.toFixed(1)} fill="url(#ctbPf)" />
-                  <rect x={b.x.toFixed(1)} y={b.pj.y.toFixed(1)} width={gs.bw.toFixed(1)} height={b.pj.h.toFixed(1)} rx="3" fill="url(#ctbPj)" />
-                  <text x={b.cx.toFixed(1)} y={String(gs.H - 6)} fontSize="17" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
-                  <text x={b.cx.toFixed(1)} y={(b.topY - 7).toFixed(1)} fontSize="15" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtInt(b.tot)}</text>
-                </g>
-              ))}
-              {gs.bars.map((b, i) => (
-                <rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - gs.bw).toFixed(1)} y="0" width={(gs.bw * 2).toFixed(1)} height={String(gs.H - 20)} fill="transparent" pointerEvents="all" />
-              ))}
-            </svg>
-            {tip ? <Tooltip t={tip} /> : null}
-          </div>
+          {drillAnoNovos != null && serieMesNovos === null ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+              <Spinner label={`Carregando ${drillAnoNovos} por mês…`} />
+            </div>
+          ) : (
+            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: drillAnoNovos != null ? 'default' : 'pointer', flex: 1, display: 'flex', alignItems: 'center' }}>
+              {(() => {
+                const g2 = drillAnoNovos != null ? geomStackedMes(serieMesNovos ?? []) : gs
+                const rotulos = drillAnoNovos != null ? (g2 as ReturnType<typeof geomStackedMes>).bars.map(b => MESES_ABREV[b.mes - 1]) : null
+                return (
+                  <svg viewBox={`0 0 ${g2.W} ${g2.H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
+                    <defs>
+                      <linearGradient id="ctbPf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#3f5bb5" /></linearGradient>
+                      <linearGradient id="ctbPj" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#7d8fce" /><stop offset="100%" stopColor="#aab8e3" /></linearGradient>
+                    </defs>
+                    {g2.ticks.map((t, i) => (
+                      <g key={i}>
+                        <line x1="0" y1={t.y.toFixed(1)} x2={String(g2.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
+                        <text x="2" y={(t.y - 4).toFixed(1)} fontSize="14" fill="#aeb6c6" style={axisFont}>{t.v}k</text>
+                      </g>
+                    ))}
+                    <line x1="0" y1={g2.bottom} x2={String(g2.W)} y2={g2.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+                    {g2.bars.map((b, i) => (
+                      <g key={i}>
+                        <rect x={b.x.toFixed(1)} y={b.pf.y.toFixed(1)} width={g2.bw.toFixed(1)} height={b.pf.h.toFixed(1)} fill="url(#ctbPf)" />
+                        <rect x={b.x.toFixed(1)} y={b.pj.y.toFixed(1)} width={g2.bw.toFixed(1)} height={b.pj.h.toFixed(1)} rx="3" fill="url(#ctbPj)" />
+                        <text x={b.cx.toFixed(1)} y={String(g2.H - 6)} fontSize="17" fill="#3a4256" textAnchor="middle" style={axisFont}>{rotulos ? rotulos[i] : (b as { ano: number }).ano}</text>
+                        <text x={b.cx.toFixed(1)} y={(b.topY - 7).toFixed(1)} fontSize="15" fill="#283e93" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtInt(b.tot)}</text>
+                      </g>
+                    ))}
+                    {g2.bars.map((b, i) => (
+                      <rect key={i}
+                        onMouseEnter={() => setTip(b.tip)}
+                        onClick={drillAnoNovos == null ? () => setDrillAnoNovos((b as { ano: number }).ano) : undefined}
+                        x={(b.cx - g2.bw).toFixed(1)} y="0" width={(g2.bw * 2).toFixed(1)} height={String(g2.H - 20)} fill="transparent" pointerEvents="all" />
+                    ))}
+                  </svg>
+                )
+              })()}
+              {tip ? <Tooltip t={tip} /> : null}
+            </div>
+          )}
         </div>
 
         {/* Insights */}
