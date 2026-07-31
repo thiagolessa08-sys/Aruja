@@ -305,6 +305,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       const p = new URLSearchParams({ ano: String(v.anoRef) })
       if (mes) p.set('mes', String(mes))
       if (bairroSel) p.set('bairro', bairroSel)
+      if (bairroSel && ruaSel) p.set('rua', ruaSel)
       if (espolio) p.set('espolio', '1')
       if (semNumero) p.set('semnumero', '1')
       const rel = await fetchJson(`/api/imobiliario/iptu-relatorio?${p}`)
@@ -329,13 +330,14 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         suspenso: { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
       }
 
+      const ruaAtiva = bairroSel && ruaSel ? ruaSel : null
       const dados: DadosRelatorio = {
-        titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}`,
-        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}`,
+        titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}${ruaAtiva ? ' · ' + ruaAtiva : ''}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''} · ${ruaAtiva ? 'contribuintes da rua' : bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}`,
         cards: idsAtivos.map(cl => cardPorId[cl.id]).filter((x): x is { rotulo: string; valor: string } => !!x),
         colunas: [bairroSel ? 'Contribuinte' : 'Bairro', ...idsAtivos.map(cl => cl.label)],
         linhas: itens.map(l => [l.nome, ...idsAtivos.map(cl => valorPorId[cl.id](l))]),
-        arquivo: `IPTU-${bairroSel ? bairroSel.replace(/\s+/g, '-') : 'bairros'}-${v.anoRef}`,
+        arquivo: `IPTU-${ruaAtiva ? ruaAtiva.replace(/\s+/g, '-') : bairroSel ? bairroSel.replace(/\s+/g, '-') : 'bairros'}-${v.anoRef}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
       await fn(dados)

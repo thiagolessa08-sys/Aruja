@@ -1,8 +1,8 @@
 // Relatório de download (PDF/Excel) do IPTU: por BAIRRO (sem bairro selecionado no filtro
-// da tela) ou por CONTRIBUINTE (bairro selecionado). Sempre respeita ano + mês (YTD)
-// selecionados. Isolado do motor de bairros (lib/iptu-agg.ts) para não arriscar o
-// drill interativo bairro→rua já validado — aqui o agrupamento por bairro selecionado
-// é por CONTRIBUINTE, não por rua.
+// da tela) ou por CONTRIBUINTE (bairro selecionado). Sempre respeita ano + mês (YTD) +
+// espólio/sem número selecionados; se a rua também estiver selecionada (drill bairro→rua),
+// estreita o filtro a essa rua, mantendo o agrupamento por contribuinte. Isolado do motor
+// de bairros (lib/iptu-agg.ts) para não arriscar o drill interativo bairro→rua já validado.
 import { agentQuery } from '@/lib/agent'
 
 const S = 'pref_aruja_sp'
@@ -10,7 +10,7 @@ const num = (v: unknown) => Number(v) || 0
 const MOV_ABERTO = '0,1,2,3,11,12,14,20', LANC_ABERTO = '0,4,7,10,1'
 const SEM_RV = ` AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
 
-export interface FiltrosRelatorioIptu { ano: number; mes: number | null; bairro: string | null; espolio: boolean; semNumero: boolean }
+export interface FiltrosRelatorioIptu { ano: number; mes: number | null; bairro: string | null; rua: string | null; espolio: boolean; semNumero: boolean }
 export interface LinhaRelatorioIptu {
   nome: string
   lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number
@@ -20,6 +20,10 @@ export interface LinhaRelatorioIptu {
 function base(f: FiltrosRelatorioIptu) {
   let w = `g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${f.ano} AND p.no_parcela <> 0`
   if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
+  // Drill de rua (bairro → rua → imóvel, mesmo nível do gráfico interativo "IPTU por
+  // Bairro") — só faz sentido combinado com bairro; estreita ainda mais o agrupamento
+  // por contribuinte abaixo, sem mudar o nível de agrupamento em si.
+  if (f.bairro && f.rua) w += ` AND c.ds_endereco = '${f.rua.replace(/'/g, "''")}'`
   // Filtros combináveis (um ou ambos ativos), mesmos usados no gráfico interativo de bairros.
   if (f.espolio) w += ` AND cp.nm_rsocial LIKE '%ESP_LIO%'`
   if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)`
