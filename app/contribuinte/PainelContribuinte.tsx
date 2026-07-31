@@ -196,6 +196,7 @@ function buildQS(f: FiltrosContribuinteUI): string {
 
 export default function PainelContribuinte({ filtros }: { filtros: FiltrosContribuinteUI }) {
   const [tip, setTip] = useState<Tip | null>(null)
+  const [tipTrib, setTipTrib] = useState<Tip | null>(null)
   const [kpis, setKpis] = useState<KpiCard[]>(KPIS_FALLBACK)
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
@@ -442,7 +443,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
         ) : (() => {
           const gg = geomGrupoBars(tributos)
           return (
-            <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
+            <div onMouseLeave={() => setTipTrib(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
               <svg viewBox={`0 0 ${gg.W} ${gg.H}`} width="100%" height="280" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
                 <defs>
                   <linearGradient id="ctbTrib" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
@@ -461,10 +462,10 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                   </g>
                 ))}
                 {gg.bars.map((b, i) => (
-                  <rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - gg.bw).toFixed(1)} y="0" width={(gg.bw * 2).toFixed(1)} height={String(gg.H - 20)} fill="transparent" pointerEvents="all" />
+                  <rect key={i} onMouseEnter={() => setTipTrib(b.tip)} x={(b.cx - gg.bw).toFixed(1)} y="0" width={(gg.bw * 2).toFixed(1)} height={String(gg.H - 20)} fill="transparent" pointerEvents="all" />
                 ))}
               </svg>
-              {tip ? <Tooltip t={tip} /> : null}
+              {tipTrib ? <Tooltip t={tipTrib} /> : null}
             </div>
           )
         })()}
