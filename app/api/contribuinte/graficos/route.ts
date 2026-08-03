@@ -87,12 +87,12 @@ export async function GET(req: NextRequest) {
     const v = vincRows.rows[0] ?? []
     const num = (x: unknown) => Number(x) || 0
     const vinculos = [
-      { label: 'Mobiliário (empresa)', n: num(v[0]) },
-      { label: 'Proprietário de imóvel', n: num(v[1]) },
-      { label: 'Transmissão (ITBI)', n: num(v[2]) },
-      { label: 'Sócio', n: num(v[3]) },
-      { label: 'Tomador de serviço', n: num(v[4]) },
-      { label: 'Responsável tributário', n: num(v[5]) },
+      { campo: 'ic_pessoa_contribuinte_mobiliario', label: 'Mobiliário (empresa)', n: num(v[0]) },
+      { campo: 'ic_pessoa_proprietario', label: 'Proprietário de imóvel', n: num(v[1]) },
+      { campo: 'ic_pessoa_itbi', label: 'Transmissão (ITBI)', n: num(v[2]) },
+      { campo: 'ic_pessoa_socio', label: 'Sócio', n: num(v[3]) },
+      { campo: 'ic_tomador_servico', label: 'Tomador de serviço', n: num(v[4]) },
+      { campo: 'ic_pessoa_responsavel_tributario', label: 'Responsável tributário', n: num(v[5]) },
     ].filter(x => x.n > 0).sort((a, b) => b.n - a.n)
 
     // Score de adimplência: em cobrança acumulada × adimplente

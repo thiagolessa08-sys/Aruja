@@ -12,7 +12,7 @@ interface NovoAno { ano: number; pf: number; pj: number }
 interface Setor { setor: string; label: string; n: number }
 interface SitItem { label: string; n: number; pct: number }
 interface Evol { ano: number; novos: number; pf: number; pj: number; pctPj: number }
-interface Vinculo { label: string; n: number }
+interface Vinculo { campo: string; label: string; n: number }
 interface Score { adimplente: number; emCobranca: number; total: number; pctAdimplente: number }
 interface Graficos {
   novosPorAno: NovoAno[]
@@ -72,12 +72,12 @@ const FALLBACK_GRAF: Graficos = {
     { ano: 2021, novos: 5167, pf: 3400, pj: 1767, pctPj: 34.2 },
   ],
   vinculos: [
-    { label: 'Mobiliário (empresa)', n: 35924 },
-    { label: 'Sócio', n: 29817 },
-    { label: 'Proprietário de imóvel', n: 19053 },
-    { label: 'Transmissão (ITBI)', n: 14211 },
-    { label: 'Tomador de serviço', n: 2741 },
-    { label: 'Responsável tributário', n: 452 },
+    { campo: 'ic_pessoa_contribuinte_mobiliario', label: 'Mobiliário (empresa)', n: 35924 },
+    { campo: 'ic_pessoa_socio', label: 'Sócio', n: 29817 },
+    { campo: 'ic_pessoa_proprietario', label: 'Proprietário de imóvel', n: 19053 },
+    { campo: 'ic_pessoa_itbi', label: 'Transmissão (ITBI)', n: 14211 },
+    { campo: 'ic_tomador_servico', label: 'Tomador de serviço', n: 2741 },
+    { campo: 'ic_pessoa_responsavel_tributario', label: 'Responsável tributário', n: 452 },
   ],
   score: { adimplente: 116762, emCobranca: 64343, total: 181105, pctAdimplente: 64.5 },
 }
@@ -207,6 +207,12 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   const [drillAnoNovos, setDrillAnoNovos] = useState<number | null>(null)
   const [serieMesNovos, setSerieMesNovos] = useState<{ mes: number; pf: number; pj: number }[] | null>(null)
 
+  // Drill do gráfico "Vínculos do Contribuinte": clique num vínculo → lista de contribuintes
+  const [vinculoSel, setVinculoSel] = useState<Vinculo | null>(null)
+  const [buscaVinculo, setBuscaVinculo] = useState('')
+  const [contribuintesVinculo, setContribuintesVinculo] = useState<{ cd: number; nome: string; doc: string }[]>([])
+  const [carregandoVinculo, setCarregandoVinculo] = useState(false)
+
   const qs = buildQS(filtros)
 
   useEffect(() => {
@@ -229,6 +235,19 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
     fetch(`/api/contribuinte/tributos-lancados${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error && Array.isArray(d.grupos)) setTributos(d.grupos) }).catch(() => {})
   }, [filtros.ano, filtros.mes])
+  useEffect(() => {
+    if (!vinculoSel) { setContribuintesVinculo([]); return }
+    let vivo = true
+    setCarregandoVinculo(true)
+    const t = setTimeout(() => {
+      const p = new URLSearchParams({ campo: vinculoSel.campo })
+      if (buscaVinculo.trim()) p.set('q', buscaVinculo.trim())
+      fetch(`/api/contribuinte/vinculo-contribuintes?${p.toString()}`).then(r => r.ok ? r.json() : null)
+        .then(d => { if (vivo && d?.itens) setContribuintesVinculo(d.itens) })
+        .finally(() => { if (vivo) setCarregandoVinculo(false) })
+    }, 300)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [vinculoSel, buscaVinculo])
   useEffect(() => {
     fetch(`/api/contribuinte/kpis${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.kpis?.length) setKpis(d.kpis) }).catch(() => {})
@@ -536,28 +555,59 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
 
       {/* ===== ROW 3: Vínculos + Score de Adimplência ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
-        {/* Vínculos */}
+        {/* Vínculos — clique num vínculo faz drill para a lista de contribuintes */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <div>
-              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Vínculos do Contribuinte</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>papéis do contribuinte na base (um contribuinte pode ter vários)</div>
-            </div>
+            {vinculoSel ? (
+              <button onClick={() => { setVinculoSel(null); setBuscaVinculo('') }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 16, fontWeight: 600 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+                {vinculoSel.label}
+              </button>
+            ) : (
+              <div>
+                <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Vínculos do Contribuinte</span>
+                <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>papéis do contribuinte na base (um contribuinte pode ter vários)</div>
+              </div>
+            )}
             <span style={dots}>···</span>
           </div>
-          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
-            {(() => { const mx = Math.max(1, ...g.vinculos.map(v => v.n)); return g.vinculos.map((v, i) => (
-              <div key={v.label}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: '#3a4256' }}>{v.label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(v.n)}</span>
-                </div>
-                <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${(v.n / mx * 100).toFixed(1)}%`, background: SETOR_CORES[i % SETOR_CORES.length], borderRadius: 5 }} />
-                </div>
+
+          {vinculoSel ? (
+            <div style={{ marginTop: 12, position: 'relative' }}>
+              {carregandoVinculo ? <LoadingOverlay label="Carregando contribuintes…" /> : null}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                <input value={buscaVinculo} onChange={e => setBuscaVinculo(e.target.value)} placeholder="Buscar por nome ou CPF/CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
               </div>
-            )) })()}
-          </div>
+              <div style={{ marginTop: 10, maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {contribuintesVinculo.length ? contribuintesVinculo.map(c => (
+                  <div key={c.cd} style={{ padding: '8px 6px', borderRadius: 8, borderBottom: '1px solid #f0f2f8' }}>
+                    <div style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{c.nome || '—'}</div>
+                    <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 1 }}>{c.doc || '—'}</div>
+                  </div>
+                )) : !carregandoVinculo ? (
+                  <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum contribuinte encontrado.</div>
+                ) : null}
+                {contribuintesVinculo.length >= 200 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 200 primeiros — refine a busca para ver mais.</div> : null}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+              {(() => { const mx = Math.max(1, ...g.vinculos.map(v => v.n)); return g.vinculos.map((v, i) => (
+                <div key={v.label} onClick={() => setVinculoSel(v)} style={{ cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: '#3a4256' }}>{v.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(v.n)}</span>
+                  </div>
+                  <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${(v.n / mx * 100).toFixed(1)}%`, background: SETOR_CORES[i % SETOR_CORES.length], borderRadius: 5 }} />
+                  </div>
+                </div>
+              )) })()}
+              <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 2 }}>Clique num vínculo para ver os contribuintes</div>
+            </div>
+          )}
         </div>
 
         {/* Score de Adimplência */}
