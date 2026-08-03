@@ -76,8 +76,35 @@ export async function GET(req: NextRequest) {
       { label: 'Sem informação', n: semInfo + outros, pct: ((semInfo + outros) / totSit) * 100 },
     ]
 
-    // Devedores por setor (distinct), excluindo setores ocultos
-    const devedores = devRows.rows
+    // Devedores por setor (distinct), excluindo setores ocultos. Se ano/mes/pessoa
+    // estiverem selecionados, refaz a contagem restringindo aos devedores com guia no
+    // exercício/mês informado (ponte g.cd_devedor = dc.cd_devedor) e/ou ao tipo de pessoa
+    // (join tb_dsod_contribuinte). Sem filtro, mantém a consulta original (join com guias
+    // reduziria a contagem de alguns setores mesmo sem filtro real — checado via agente).
+    let devFiltradoRows = devRows
+    if (f.ano || f.mes || f.pessoa) {
+      const cond: string[] = []
+      let joins = ''
+      if (f.pessoa) {
+        joins += ` JOIN ${SCHEMA}.tb_dsod_contribuinte c ON c.cd_contr = dc.cd_contr`
+        cond.push(`c.ic_pessoa = '${f.pessoa}'`)
+      }
+      if (f.ano || f.mes) {
+        joins += ` JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_devedor = dc.cd_devedor`
+        if (f.ano) cond.push(`g.no_exercicio_lancamento = ${f.ano}`)
+        if (f.mes) {
+          joins += ` JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia`
+          cond.push(`MONTH(p.dt_vencimento) <= ${f.mes}`)
+        }
+      }
+      devFiltradoRows = await agentQuery(`
+        SELECT dc.ds_setor_devedor AS setor, COUNT(DISTINCT dc.cd_contr) AS n
+        FROM ${SCHEMA}.tb_dsod_devedor_contribuinte dc
+        ${joins}
+        WHERE ${cond.join(' AND ')}
+        GROUP BY dc.ds_setor_devedor`, 100)
+    }
+    const devedores = devFiltradoRows.rows
       .map(r => ({ setor: String(r[0] ?? '').trim(), n: Number(r[1]) || 0 }))
       .filter(d => d.setor && !SETORES_OCULTOS.has(d.setor))
       .map(d => ({ setor: d.setor, label: SETOR_LABEL[d.setor] ?? d.setor, n: d.n }))

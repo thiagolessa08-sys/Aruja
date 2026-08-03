@@ -193,6 +193,7 @@ function buildQS(f: FiltrosContribuinteUI): string {
   const p = new URLSearchParams()
   if (f.ano) p.set('ano', String(f.ano))
   if (f.pessoa) p.set('pessoa', f.pessoa)
+  if (f.mes) p.set('mes', String(f.mes))
   const s = p.toString()
   return s ? `?${s}` : ''
 }
@@ -506,7 +507,10 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Contribuintes com Pendência por Setor</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>contribuintes distintos em cobrança (sem valor R$ na base)</div>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+                contribuintes distintos em cobrança (sem valor R$ na base)
+                {filtros.ano ? ` — exercício ${filtros.ano}` : ''}{filtros.mes ? ` até o mês ${filtros.mes}` : ''}{filtros.pessoa ? ` — ${filtros.pessoa === 'F' ? 'Pessoa Física' : 'Pessoa Jurídica'}` : ''}
+              </div>
             </div>
             <span style={reportBadge}>Devedores</span>
           </div>

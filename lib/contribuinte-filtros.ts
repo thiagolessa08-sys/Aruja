@@ -2,8 +2,9 @@
 // Restrição IQ: nada de literal de texto no WHERE → GROUP BY + filtro em JS.
 
 export interface FiltrosContribuinte {
-  ano: number | ''      // ano de inscrição (dt_inscr) em destaque
+  ano: number | ''      // ano de inscrição (dt_inscr) em destaque / exercício de lançamento (guias)
   pessoa: '' | 'F' | 'J' // tipo de pessoa
+  mes: number | ''       // mês (acumulado) — parcelas com vencimento até o mês informado
 }
 
 export interface PessoaOpt { id: 'F' | 'J'; label: string }
@@ -31,5 +32,7 @@ export function lerFiltros(sp: URLSearchParams): FiltrosContribuinte {
   const ano = anoRaw && /^\d{4}$/.test(anoRaw) ? Number(anoRaw) : ''
   const p = sp.get('pessoa')
   const pessoa = p === 'F' || p === 'J' ? p : ''
-  return { ano, pessoa }
+  const mesRaw = Number(sp.get('mes'))
+  const mes = mesRaw >= 1 && mesRaw <= 12 ? mesRaw : ''
+  return { ano, pessoa, mes }
 }
