@@ -52,13 +52,14 @@ function queryMetricaBairro(f: FiltrosBairro, grupo: string): string {
             WHERE datepart(year, e.dt_fim) >= ${f.ano}
               AND (e.ds_isencao NOT IN ('TCA','Não Incidência de ITBI','TCA - Imóvel Locado a Órgão Público') OR e.ds_isencao IS NULL))
         GROUP BY ${grupo}`
-    case 'suspenso': // item 9 — só grupos de imóvel com net<0 (mov 20)
-      return `SELECT k, COUNT(DISTINCT cd_devedor) im, SUM(valor) vl FROM (
-        SELECT ${grupo} k, g.cd_devedor cd_devedor, SUM(pm.vl_movimento) valor
+    case 'suspenso': // item 9 — mesma fórmula (flat, por sinal) do card "Total Suspenso" do
+      // topo da tela (lib/tributo-engine.ts) — antes esta consulta usava uma variação
+      // por devedor (HAVING net<0) que não batia com o total do card, dando a impressão
+      // de que o filtro "Suspenso" não refletia corretamente.
+      return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(-(pm.vl_movimento * pm.no_sinal)) vl
         ${b.from}
         WHERE ${b.where} AND pm.cd_tipo_movimento IN (20)
-        GROUP BY ${grupo}, g.cd_devedor HAVING SUM(pm.vl_movimento * pm.no_sinal) < 0
-      ) t GROUP BY k`
+        GROUP BY ${grupo}`
     case 'emAberto': // item 7 — saldo líquido em aberto (net>0) por parcela vencendo/a vencer
       return `SELECT k, COUNT(DISTINCT cd_devedor) im, SUM(valor) vl FROM (
         SELECT ${grupo} k, g.cd_devedor cd_devedor, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
