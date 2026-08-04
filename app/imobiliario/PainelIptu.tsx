@@ -493,7 +493,46 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           {drillPrevisto ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Projeção mês a mês de {drillAno} — totais previstos distribuídos pela sazonalidade dos anos anteriores.</div> : null}
         </div>
 
-      {/* ===== ONDA 3: IPTU por bairro (logo após a Evolução) ===== */}
+      {/* ===== ONDA 2: Resumo de imóveis (lazy) ===== */}
+      <div ref={obsResumo.ref}>
+      {res ? (
+        <div style={{ ...card, marginTop: 18 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Resumo de Imóveis {v ? `· ${v.anoRef}` : ''}</span>
+          <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Base: imóveis com IPTU (compõem o valor lançado). As demais contagens são a interseção com essa base.</div>
+          {(() => {
+            const base = Math.max(1, res.resumo.comIptu)
+            const pct = (n: number) => `${(100 * n / base).toFixed(1).replace('.', ',')}% da base`
+            const inters = [
+              { l: 'Com ITBI', val: res.resumo.comItbi, c: '#1fa463' },
+              { l: 'Com TCA', val: res.resumo.comTca, c: '#8094d6' },
+              { l: 'Com empresa no endereço', val: res.resumo.comEmpresa, c: '#e8962e' },
+              { l: 'IPTU sem lançamento de TCA', val: res.resumo.iptuSemTca, c: '#d64545' },
+            ]
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr repeat(4,1fr)', gap: 12, marginTop: 14 }}>
+                <div style={{ background: '#f7f9fd', border: '1.5px solid #e3e9f5', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', letterSpacing: '-.5px' }}>{res.resumo.totalImoveis.toLocaleString('pt-BR')}</div>
+                  <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3, lineHeight: 1.25 }}>Total de imóveis (cadastro)</div>
+                </div>
+                <div style={{ background: '#283e93', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{res.resumo.comIptu.toLocaleString('pt-BR')}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 3, lineHeight: 1.25 }}>Imóveis com IPTU (base)</div>
+                </div>
+                {inters.map(x => (
+                  <div key={x.l} style={{ background: '#f7f9fd', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 21, fontWeight: 700, color: x.c, letterSpacing: '-.5px' }}>{x.val.toLocaleString('pt-BR')}</div>
+                    <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3, lineHeight: 1.25 }}>{x.l}</div>
+                    <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 2 }}>{pct(x.val)}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </div>
+      ) : (obsResumo.visible ? <div style={{ ...card, marginTop: 18 }}><Spinner label="Carregando resumo…" /></div> : null)}
+      </div>
+
+      {/* ===== ONDA 3: IPTU por bairro ===== */}
       <div ref={obsBairros.ref} style={{ ...card, marginTop: 18, position: 'relative' }}>
         {carregandoBairros ? <LoadingOverlay label="Agregando por bairro…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -577,45 +616,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         {nivelBairro === 'bairro' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num bairro para detalhar por rua</div>
           : nivelBairro === 'rua' ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique numa rua para detalhar por imóvel</div>
           : <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num imóvel para ver o detalhamento completo (abre na Pesquisa de Imóvel, abaixo)</div>}
-      </div>
-
-      {/* ===== ONDA 2: Resumo de imóveis (lazy) ===== */}
-      <div ref={obsResumo.ref}>
-      {res ? (
-        <div style={{ ...card, marginTop: 18 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Resumo de Imóveis {v ? `· ${v.anoRef}` : ''}</span>
-          <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Base: imóveis com IPTU (compõem o valor lançado). As demais contagens são a interseção com essa base.</div>
-          {(() => {
-            const base = Math.max(1, res.resumo.comIptu)
-            const pct = (n: number) => `${(100 * n / base).toFixed(1).replace('.', ',')}% da base`
-            const inters = [
-              { l: 'Com ITBI', val: res.resumo.comItbi, c: '#1fa463' },
-              { l: 'Com TCA', val: res.resumo.comTca, c: '#8094d6' },
-              { l: 'Com empresa no endereço', val: res.resumo.comEmpresa, c: '#e8962e' },
-              { l: 'IPTU sem lançamento de TCA', val: res.resumo.iptuSemTca, c: '#d64545' },
-            ]
-            return (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr repeat(4,1fr)', gap: 12, marginTop: 14 }}>
-                <div style={{ background: '#f7f9fd', border: '1.5px solid #e3e9f5', borderRadius: 12, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', letterSpacing: '-.5px' }}>{res.resumo.totalImoveis.toLocaleString('pt-BR')}</div>
-                  <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3, lineHeight: 1.25 }}>Total de imóveis (cadastro)</div>
-                </div>
-                <div style={{ background: '#283e93', borderRadius: 12, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{res.resumo.comIptu.toLocaleString('pt-BR')}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 3, lineHeight: 1.25 }}>Imóveis com IPTU (base)</div>
-                </div>
-                {inters.map(x => (
-                  <div key={x.l} style={{ background: '#f7f9fd', borderRadius: 12, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 21, fontWeight: 700, color: x.c, letterSpacing: '-.5px' }}>{x.val.toLocaleString('pt-BR')}</div>
-                    <div style={{ fontSize: 11, color: '#5b6477', marginTop: 3, lineHeight: 1.25 }}>{x.l}</div>
-                    <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 2 }}>{pct(x.val)}</div>
-                  </div>
-                ))}
-              </div>
-            )
-          })()}
-        </div>
-      ) : (obsResumo.visible ? <div style={{ ...card, marginTop: 18 }}><Spinner label="Carregando resumo…" /></div> : null)}
       </div>
 
       {/* ===== ONDA 2: Quadros situação × status de pagamento ===== */}
