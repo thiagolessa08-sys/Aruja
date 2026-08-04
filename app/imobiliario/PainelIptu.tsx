@@ -618,6 +618,114 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           : <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num imóvel para ver o detalhamento completo (abre na Pesquisa de Imóvel, abaixo)</div>}
       </div>
 
+      {/* ===== Pesquisa de imóvel devedor (largura total, abaixo) ===== */}
+      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+        {carregandoDet ? <LoadingOverlay label="Carregando imóvel…" /> : null}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Pesquisa de Imóvel</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* seletor do campo de busca */}
+            <select value={buscaTipo} onChange={e => { setBuscaTipo(e.target.value as 'inscricao' | 'codigo' | 'nome'); setMatches([]) }}
+              style={{ border: '1.5px solid #e3e9f5', borderRadius: 12, padding: '7px 10px', fontSize: 12, color: '#283e93', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}>
+              <option value="inscricao">Inscrição</option>
+              <option value="codigo">Código</option>
+              <option value="nome">Nome</option>
+            </select>
+          <div style={{ position: 'relative', width: 320, maxWidth: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+              <input value={buscaImovel} onChange={e => setBuscaImovel(e.target.value)} placeholder={buscaTipo === 'inscricao' ? 'Inscrição do imóvel…' : buscaTipo === 'codigo' ? 'Código do imóvel…' : 'Nome do proprietário…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+              {buscaImovel || imovelDet ? (
+                <button onClick={() => { setBuscaImovel(''); setMatches([]); setImovelDet(null) }} title="Limpar pesquisa"
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', display: 'flex', alignItems: 'center', padding: 0, flex: 'none' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              ) : null}
+            </div>
+            {matches.length ? (
+              <div style={{ position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', left: 0, right: 0, maxHeight: 280, overflowY: 'auto', background: '#fff', borderRadius: 12, border: '1px solid #e3e9f5', boxShadow: '0 12px 30px rgba(20,40,90,0.18)', padding: 5 }}>
+                {matches.map(m => (
+                  <div key={m.cd} onClick={() => abrirImovel(m.cd)} style={{ padding: '7px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
+                    <div style={{ color: '#1f2a44', fontWeight: 600 }}>{m.proprietario || `Imóvel ${m.cd}`}</div>
+                    <div style={{ color: '#9098a8', fontSize: 11 }}>Insc. {m.inscricao || m.cd} · {m.endereco}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          </div>
+        </div>
+
+        {imovelDet ? (() => {
+          const d = imovelDet
+          const FLAGS = [
+            { on: d.flags.itbi, label: 'ITBI' }, { on: d.flags.isscc, label: 'ISSCC' }, { on: d.flags.tca, label: 'TCA' },
+            { on: d.flags.espolio, label: 'Espólio' }, { on: d.flags.semNumero, label: 'Sem número' },
+          ]
+          return (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{d.proprietario || `Imóvel ${d.cd}`}</div>
+                  {/* item 15: status do imóvel logo abaixo do nome */}
+                  {d.status ? <div style={{ marginTop: 5 }}><span style={{ fontSize: 11, fontWeight: 600, color: '#283e93', background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '3px 10px' }}>Status: {d.status}</span></div> : null}
+                  <div style={{ fontSize: 12, color: '#5b6477', marginTop: 5 }}>Código {d.cd} · Código Devedor {d.cdDevedor || '—'} · Inscrição {d.inscricao || '—'} · {d.cpfCnpj}</div>
+                  <div style={{ fontSize: 12, color: '#5b6477' }}>{d.endereco}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-start' }}>
+                  {FLAGS.map(f => (
+                    <span key={f.label} style={{ fontSize: 11, fontWeight: 600, borderRadius: 14, padding: '5px 12px', background: f.on ? '#e9f6ee' : '#f4f7fc', color: f.on ? '#1fa463' : '#aeb6c6', border: `1px solid ${f.on ? '#bfe6cd' : '#e3e9f5'}` }}>{f.on ? '✓ ' : '– '}{f.label}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>{['Ano', 'Lançado', 'Arrecadado', 'Em aberto', 'Inadimplência'].map((h, i) => (
+                    <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 600, padding: '9px 12px', textAlign: i === 0 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {d.anos.map((a, i) => (
+                      <tr key={a.ano}>
+                        <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', color: '#1f2a44', fontWeight: 600, fontSize: 12, padding: '8px 12px', borderBottom: '1px solid #eef1f7' }}>{a.ano}</td>
+                        {[a.lancado, a.arrecadado, a.emAberto, a.inadimplencia].map((val, ci) => (
+                          <td key={ci} style={{ background: i % 2 ? '#f7f9fd' : '#fff', color: ci === 3 && val > 0 ? '#d64545' : '#5b6477', fontWeight: ci === 3 && val > 0 ? 700 : 500, fontSize: 12, padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{val ? 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Parcelas do exercício mais recente (item 15: por parcela) */}
+              {d.parcelas.length ? (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 8 }}>Parcelas · exercício {d.anoParcela}</div>
+                  <div style={{ border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+                    <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr>{['Parcela', 'Vencimento', 'Lançado', 'Pago', 'Saldo'].map((h, i) => (
+                          <th key={h} style={{ position: 'sticky', top: 0, background: '#3a55ad', color: '#fff', fontSize: 11.5, fontWeight: 600, padding: '8px 12px', textAlign: i <= 1 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                        ))}</tr></thead>
+                        <tbody>
+                          {d.parcelas.map((pc, i) => (
+                            <tr key={i}>
+                              <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', color: '#1f2a44', fontWeight: 600, borderBottom: '1px solid #eef1f7' }}>{pc.parcela === 0 ? 'Cota única' : pc.parcela}</td>
+                              <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', color: '#5b6477', borderBottom: '1px solid #eef1f7' }}>{pc.vencimento ? pc.vencimento.split('-').reverse().join('/') : '—'}</td>
+                              {[pc.lancado, pc.pago, pc.saldo].map((val, ci) => (
+                                <td key={ci} style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', textAlign: 'right', color: ci === 2 && val > 0 ? '#d64545' : '#5b6477', fontWeight: ci === 2 && val > 0 ? 700 : 500, borderBottom: '1px solid #eef1f7' }}>{val ? 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )
+        })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}
+      </div>
+
       {/* ===== ONDA 2: Quadros situação × status de pagamento ===== */}
       {res ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 18 }}>
@@ -823,114 +931,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           </div>
         )}
       </div>
-      </div>
-
-      {/* ===== Pesquisa de imóvel devedor (largura total, abaixo) ===== */}
-      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
-        {carregandoDet ? <LoadingOverlay label="Carregando imóvel…" /> : null}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Pesquisa de Imóvel</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {/* seletor do campo de busca */}
-            <select value={buscaTipo} onChange={e => { setBuscaTipo(e.target.value as 'inscricao' | 'codigo' | 'nome'); setMatches([]) }}
-              style={{ border: '1.5px solid #e3e9f5', borderRadius: 12, padding: '7px 10px', fontSize: 12, color: '#283e93', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}>
-              <option value="inscricao">Inscrição</option>
-              <option value="codigo">Código</option>
-              <option value="nome">Nome</option>
-            </select>
-          <div style={{ position: 'relative', width: 320, maxWidth: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-              <input value={buscaImovel} onChange={e => setBuscaImovel(e.target.value)} placeholder={buscaTipo === 'inscricao' ? 'Inscrição do imóvel…' : buscaTipo === 'codigo' ? 'Código do imóvel…' : 'Nome do proprietário…'} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
-              {buscaImovel || imovelDet ? (
-                <button onClick={() => { setBuscaImovel(''); setMatches([]); setImovelDet(null) }} title="Limpar pesquisa"
-                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', display: 'flex', alignItems: 'center', padding: 0, flex: 'none' }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                </button>
-              ) : null}
-            </div>
-            {matches.length ? (
-              <div style={{ position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', left: 0, right: 0, maxHeight: 280, overflowY: 'auto', background: '#fff', borderRadius: 12, border: '1px solid #e3e9f5', boxShadow: '0 12px 30px rgba(20,40,90,0.18)', padding: 5 }}>
-                {matches.map(m => (
-                  <div key={m.cd} onClick={() => abrirImovel(m.cd)} style={{ padding: '7px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
-                    <div style={{ color: '#1f2a44', fontWeight: 600 }}>{m.proprietario || `Imóvel ${m.cd}`}</div>
-                    <div style={{ color: '#9098a8', fontSize: 11 }}>Insc. {m.inscricao || m.cd} · {m.endereco}</div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-          </div>
-        </div>
-
-        {imovelDet ? (() => {
-          const d = imovelDet
-          const FLAGS = [
-            { on: d.flags.itbi, label: 'ITBI' }, { on: d.flags.isscc, label: 'ISSCC' }, { on: d.flags.tca, label: 'TCA' },
-            { on: d.flags.espolio, label: 'Espólio' }, { on: d.flags.semNumero, label: 'Sem número' },
-          ]
-          return (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{d.proprietario || `Imóvel ${d.cd}`}</div>
-                  {/* item 15: status do imóvel logo abaixo do nome */}
-                  {d.status ? <div style={{ marginTop: 5 }}><span style={{ fontSize: 11, fontWeight: 600, color: '#283e93', background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '3px 10px' }}>Status: {d.status}</span></div> : null}
-                  <div style={{ fontSize: 12, color: '#5b6477', marginTop: 5 }}>Código {d.cd} · Código Devedor {d.cdDevedor || '—'} · Inscrição {d.inscricao || '—'} · {d.cpfCnpj}</div>
-                  <div style={{ fontSize: 12, color: '#5b6477' }}>{d.endereco}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-start' }}>
-                  {FLAGS.map(f => (
-                    <span key={f.label} style={{ fontSize: 11, fontWeight: 600, borderRadius: 14, padding: '5px 12px', background: f.on ? '#e9f6ee' : '#f4f7fc', color: f.on ? '#1fa463' : '#aeb6c6', border: `1px solid ${f.on ? '#bfe6cd' : '#e3e9f5'}` }}>{f.on ? '✓ ' : '– '}{f.label}</span>
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginTop: 14, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead><tr>{['Ano', 'Lançado', 'Arrecadado', 'Em aberto', 'Inadimplência'].map((h, i) => (
-                    <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 12, fontWeight: 600, padding: '9px 12px', textAlign: i === 0 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                  ))}</tr></thead>
-                  <tbody>
-                    {d.anos.map((a, i) => (
-                      <tr key={a.ano}>
-                        <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', color: '#1f2a44', fontWeight: 600, fontSize: 12, padding: '8px 12px', borderBottom: '1px solid #eef1f7' }}>{a.ano}</td>
-                        {[a.lancado, a.arrecadado, a.emAberto, a.inadimplencia].map((val, ci) => (
-                          <td key={ci} style={{ background: i % 2 ? '#f7f9fd' : '#fff', color: ci === 3 && val > 0 ? '#d64545' : '#5b6477', fontWeight: ci === 3 && val > 0 ? 700 : 500, fontSize: 12, padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{val ? 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {/* Parcelas do exercício mais recente (item 15: por parcela) */}
-              {d.parcelas.length ? (
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 8 }}>Parcelas · exercício {d.anoParcela}</div>
-                  <div style={{ border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-                    <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead><tr>{['Parcela', 'Vencimento', 'Lançado', 'Pago', 'Saldo'].map((h, i) => (
-                          <th key={h} style={{ position: 'sticky', top: 0, background: '#3a55ad', color: '#fff', fontSize: 11.5, fontWeight: 600, padding: '8px 12px', textAlign: i <= 1 ? 'left' : 'right', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                        ))}</tr></thead>
-                        <tbody>
-                          {d.parcelas.map((pc, i) => (
-                            <tr key={i}>
-                              <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', color: '#1f2a44', fontWeight: 600, borderBottom: '1px solid #eef1f7' }}>{pc.parcela === 0 ? 'Cota única' : pc.parcela}</td>
-                              <td style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', color: '#5b6477', borderBottom: '1px solid #eef1f7' }}>{pc.vencimento ? pc.vencimento.split('-').reverse().join('/') : '—'}</td>
-                              {[pc.lancado, pc.pago, pc.saldo].map((val, ci) => (
-                                <td key={ci} style={{ background: i % 2 ? '#f7f9fd' : '#fff', fontSize: 11.5, padding: '7px 12px', textAlign: 'right', color: ci === 2 && val > 0 ? '#d64545' : '#5b6477', fontWeight: ci === 2 && val > 0 ? 700 : 500, borderBottom: '1px solid #eef1f7' }}>{val ? 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )
-        })() : <div style={{ fontSize: 12, color: '#9098a8', padding: '18px 0', textAlign: 'center' }}>Digite a inscrição, o código ou o nome do proprietário para ver o detalhamento do imóvel.</div>}
       </div>
 
     </div>
