@@ -47,13 +47,16 @@ export async function GET(req: NextRequest) {
         GROUP BY ds_setor_devedor`, 100),
     ])
 
-    // Snapshot por tipo de pessoa e situação
+    // Snapshot por tipo de pessoa e situação. ic_pessoa fora de F/J (branco/nulo, ~311
+    // registros) é ruído de cadastro e fica de fora — mesma convenção do insights.ts,
+    // que soma só F+J (186.178) em vez do COUNT(*) bruto da tabela (186.489).
     let totalAll = 0, pfTot = 0, pjTot = 0
     let ativosAll = 0, ativosF = 0, ativosJ = 0
     for (const r of sitRows.rows) {
       const sit = String(r[0] ?? '').trim()
       const p = String(r[1] ?? '').trim()
       const n = Number(r[2]) || 0
+      if (p !== 'F' && p !== 'J') continue
       totalAll += n
       if (p === 'F') pfTot += n
       if (p === 'J') pjTot += n
