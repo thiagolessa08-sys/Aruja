@@ -155,6 +155,11 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [buscaStatus, setBuscaStatus] = useState('')
   const [imoveisStatus, setImoveisStatus] = useState<{ cd: number; inscricao: string; numero: string; proprietario: string }[] | null>(null)
   const [carregandoStatus, setCarregandoStatus] = useState(false)
+  // Drill do quadro "Imóveis por situação da guia" (situação → lista de imóveis)
+  const [sitSel, setSitSel] = useState<string | null>(null)
+  const [buscaSit, setBuscaSit] = useState('')
+  const [imoveisSit, setImoveisSit] = useState<{ cd: number; inscricao: string; numero: string; proprietario: string }[] | null>(null)
+  const [carregandoSit, setCarregandoSit] = useState(false)
   // Lazy-load das seções pesadas (só busca quando aparecem na tela)
   const obsDiario = useOnScreen<HTMLDivElement>()
   const obsBairros = useOnScreen<HTMLDivElement>()
@@ -305,6 +310,26 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     }, 300)
     return () => { vivo = false; clearTimeout(t) }
   }, [statusSel, buscaStatus, ano, bairroSel, ruaSel, espolio, semNumero])
+
+  // Drill "Imóveis por situação da guia": busca a lista quando uma situação está
+  // selecionada, respeitando os mesmos filtros do gráfico "IPTU por Bairro".
+  useEffect(() => {
+    if (!sitSel || !ano) { setImoveisSit(null); return }
+    let vivo = true
+    setCarregandoSit(true)
+    const t = setTimeout(() => {
+      const p = new URLSearchParams({ ano: String(ano), situacao: sitSel })
+      if (bairroSel) p.set('bairro', bairroSel)
+      if (bairroSel && ruaSel) p.set('rua', ruaSel)
+      if (espolio) p.set('espolio', '1')
+      if (semNumero) p.set('semnumero', '1')
+      if (buscaSit.trim()) p.set('q', buscaSit.trim())
+      fetchJson(`/api/imobiliario/iptu-situacao-imoveis?${p}`)
+        .then(d => { if (vivo && d?.itens) setImoveisSit(d.itens) })
+        .finally(() => { if (vivo) setCarregandoSit(false) })
+    }, 300)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [sitSel, buscaSit, ano, bairroSel, ruaSel, espolio, semNumero])
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 20, padding: 18, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 
@@ -729,26 +754,58 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       {/* ===== ONDA 2: Quadros situação × status de pagamento ===== */}
       {res ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 18 }}>
-          {/* Imóveis por situação da guia — estático (sem drill) */}
+          {/* Imóveis por situação da guia — clique numa situação faz drill pra lista de imóveis */}
           {(() => {
             const itens = res.situacao.map(s => ({ rot: s.situacao, qt: s.qt, cor: '#283e93' }))
             const mx = Math.max(1, ...itens.map(i => i.qt))
             return (
-              <div style={card}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis por situação da guia</span>
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
-                  {itens.map((it, i) => (
-                    <div key={i}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                        <span style={{ color: '#3a4256', fontWeight: 600 }}>{it.rot}</span>
-                        <span style={{ color: it.cor, fontWeight: 700 }}>{it.qt.toLocaleString('pt-BR')}</span>
-                      </div>
-                      <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${Math.max(3, 100 * it.qt / mx).toFixed(1)}%`, borderRadius: 8, background: it.cor }} />
-                      </div>
+              <div style={{ ...card, position: 'relative' }}>
+                {carregandoSit ? <LoadingOverlay label="Carregando imóveis…" /> : null}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  {sitSel ? (
+                    <button onClick={() => { setSitSel(null); setBuscaSit('') }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 15, fontWeight: 600 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+                      {sitSel}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis por situação da guia</span>
+                  )}
+                  {sitSel ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                      <input value={buscaSit} onChange={e => setBuscaSit(e.target.value)} placeholder="Buscar inscrição ou proprietário…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 170, fontFamily: 'inherit' }} />
                     </div>
-                  ))}
+                  ) : null}
                 </div>
+                {sitSel ? (
+                  <div style={{ marginTop: 12, maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                    {(imoveisSit ?? []).length ? (imoveisSit ?? []).map(it => (
+                      <div key={it.cd} onClick={() => abrirImovel(it.cd)} style={{ padding: '8px 4px', borderRadius: 8, cursor: 'pointer', borderBottom: '1px solid #f0f2f8' }}>
+                        <div style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{it.proprietario || `Imóvel ${it.cd}`}</div>
+                        <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 1 }}>{it.inscricao ? `Insc. ${it.inscricao}` : `Código ${it.cd}`}{it.numero ? ` · Nº ${it.numero}` : ''}</div>
+                      </div>
+                    )) : !carregandoSit ? (
+                      <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum imóvel encontrado.</div>
+                    ) : null}
+                    {(imoveisSit ?? []).length >= 300 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 6 }}>Mostrando os 300 primeiros — refine a busca para ver mais.</div> : null}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                    {itens.map((it, i) => (
+                      <div key={i} onClick={() => setSitSel(it.rot)} style={{ cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                          <span style={{ color: '#3a4256', fontWeight: 600 }}>{it.rot}</span>
+                          <span style={{ color: it.cor, fontWeight: 700 }}>{it.qt.toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.max(3, 100 * it.qt / mx).toFixed(1)}%`, borderRadius: 8, background: it.cor }} />
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 2 }}>Clique numa situação para ver os imóveis</div>
+                  </div>
+                )}
               </div>
             )
           })()}

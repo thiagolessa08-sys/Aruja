@@ -359,3 +359,30 @@ export async function imoveisPorPagamento(f: FiltrosResumo, categoria: Categoria
   if (qt) itens = itens.filter(it => it.inscricao.toLowerCase().includes(qt) || it.proprietario.toLowerCase().includes(qt))
   return itens.sort((a, b) => a.proprietario.localeCompare(b.proprietario))
 }
+
+// Drill do quadro "Imóveis por situação da guia" (resumoIptu.situacao): lista os imóveis
+// daquela ds_situacao (Ativa/Recalculo/Validacao/…), respeitando bairro/rua/espólio/sem
+// número. Ao contrário de imoveisPorPagamento, NÃO exclui Recalculo/Validacao — o quadro
+// mostra justamente essas situações.
+export interface ImovelSituacao { cd: number; inscricao: string; numero: string; proprietario: string }
+
+export async function imoveisPorSituacao(f: FiltrosResumo, situacao: string, q?: string): Promise<ImovelSituacao[]> {
+  const { ano } = f
+  const { join: jb, where: jbw } = joinFiltroResumo(f)
+  const filtroSit = situacao === '—' ? `(g.ds_situacao IS NULL OR g.ds_situacao = '')` : `g.ds_situacao = '${situacao.replace(/'/g, "''")}'`
+  const r = await agentQuery(`
+    SELECT DISTINCT TOP 300 g.cd_origem
+    FROM ${S}.tb_dsod_guias g
+    ${jb}
+    WHERE g.cd_tributo = 1 AND g.no_exercicio_lancamento = ${ano} AND ${filtroSit}${jbw}`, 300)
+
+  const cds = r.rows.map(row => String(row[0])).filter(c => c && c !== '0')
+  const det = await detalhesImoveis(cds)
+  let itens = cds.map(cd => {
+    const d = det.get(cd)
+    return { cd: Number(cd), inscricao: d?.inscricao ?? '', numero: d?.numero ?? '', proprietario: d?.proprietario ?? '' }
+  })
+  const qt2 = q?.trim().toLowerCase()
+  if (qt2) itens = itens.filter(it => it.inscricao.toLowerCase().includes(qt2) || it.proprietario.toLowerCase().includes(qt2))
+  return itens.sort((a, b) => a.proprietario.localeCompare(b.proprietario))
+}
