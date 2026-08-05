@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     const anoAnt = anoRef - 1
     const proximo = anoMax + 1
 
-    const zero: BucketsItbiAno = { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 }
+    const zero: BucketsItbiAno = { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0, cancelado: 0 }
     const bRef = buckets.get(anoRef) ?? zero
     const bAnt = buckets.get(anoAnt) ?? zero
     const lancMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.lancado ?? 0) : (buckets.get(a)?.lancado ?? 0)
@@ -69,10 +69,10 @@ export async function GET(req: NextRequest) {
     for (let a = anoMax - 4; a <= anoMax; a++) histAnos.push(a)
     const hist = histAnos.map(a => {
       const b = buckets.get(a) ?? zero
-      return { ano: a, lancado: lancMes(a), arrecadado: arrecMes(a), emAberto: abertoMes(a), inadimplencia: inadMes(a), isento: b.isento, suspenso: b.suspenso }
+      return { ano: a, lancado: lancMes(a), arrecadado: arrecMes(a), emAberto: abertoMes(a), inadimplencia: inadMes(a), isento: b.isento, suspenso: b.suspenso, cancelado: b.cancelado }
     })
     const evolucao = hist.map(h => ({
-      ano: h.ano, lancado: h.lancado, arrecadado: h.arrecadado, emAberto: h.emAberto, inadimplencia: h.inadimplencia, isento: h.isento, suspenso: h.suspenso, previsto: false, ...pctFn(h.lancado, h.arrecadado, h.inadimplencia),
+      ano: h.ano, lancado: h.lancado, arrecadado: h.arrecadado, emAberto: h.emAberto, inadimplencia: h.inadimplencia, isento: h.isento, suspenso: h.suspenso, cancelado: h.cancelado, previsto: false, ...pctFn(h.lancado, h.arrecadado, h.inadimplencia),
     }))
     const projL = tendencia(hist.map(h => ({ x: h.ano, y: h.lancado })))
     const projA = tendencia(hist.map(h => ({ x: h.ano, y: h.arrecadado })))
@@ -80,10 +80,11 @@ export async function GET(req: NextRequest) {
     const projI = tendencia(hist.map(h => ({ x: h.ano, y: h.inadimplencia })))
     const projIs = tendencia(hist.map(h => ({ x: h.ano, y: h.isento })))
     const projSu = tendencia(hist.map(h => ({ x: h.ano, y: h.suspenso })))
+    const projC = tendencia(hist.map(h => ({ x: h.ano, y: h.cancelado })))
     const pl = Math.max(0, projL(proximo)), pa = Math.max(0, projA(proximo)), pe = Math.max(0, projE(proximo)), pi = Math.max(0, projI(proximo))
     evolucao.push({
       ano: proximo, lancado: pl, arrecadado: pa, emAberto: pe, inadimplencia: pi,
-      isento: Math.max(0, projIs(proximo)), suspenso: Math.max(0, projSu(proximo)), previsto: true,
+      isento: Math.max(0, projIs(proximo)), suspenso: Math.max(0, projSu(proximo)), cancelado: Math.max(0, projC(proximo)), previsto: true,
       arrecPct: pl ? (pa / pl) * 100 : 0, inadPct: pl ? (pi / pl) * 100 : 0,
     })
 

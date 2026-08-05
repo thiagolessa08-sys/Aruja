@@ -30,9 +30,10 @@ export interface BucketsItbiAno {
   inadimplente: number    // vencido (net>1)
   isento: number
   suspenso: number
+  cancelado: number       // guias com ds_situacao = 'Cancelada' (valor que seria lançado)
 }
 
-const zeroBucket = (): BucketsItbiAno => ({ lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0 })
+const zeroBucket = (): BucketsItbiAno => ({ lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0, cancelado: 0 })
 
 // Piso de exercício para os cálculos "net" (em aberto/inadimplência) — limita custo. Os
 // KPIs e a evolução mostram os últimos ~5 anos, então 2019 cobre com folga.
@@ -56,7 +57,7 @@ async function bucketsItbiRaw(): Promise<Map<number, BucketsItbiAno>> {
       HAVING SUM(pm.vl_movimento*pm.no_sinal) > ${vencido ? '1' : '0'}
     ) t GROUP BY ex`
 
-  const [lancR, arrecR, abertoR, inadR, suspR] = await Promise.all([
+  const [lancR, arrecR, abertoR, inadR, suspR, cancR] = await Promise.all([
     // Lançado — mov 1,2,3
     agentQuery(`
       SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
@@ -90,6 +91,15 @@ async function bucketsItbiRaw(): Promise<Map<number, BucketsItbiAno>> {
       JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
       WHERE g.cd_tributo = ${ITBI} AND pm.cd_tipo_movimento = 20 AND p.no_parcela <> 0 AND it.vl_total > 0
       GROUP BY g.no_exercicio_lancamento`, 200),
+    // Cancelado — guias com ds_situacao = 'Cancelada' (valor que seria lançado, mov 1,2,3)
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
+      FROM ${S}.tb_dsod_guias g ${JITBI}
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo = ${ITBI} AND g.ds_situacao = 'Cancelada' AND pm.cd_tipo_movimento IN (1,2,3)
+        AND p.no_parcela <> 0 AND it.vl_total > 0
+      GROUP BY g.no_exercicio_lancamento`, 200),
   ])
 
   const map = new Map<number, BucketsItbiAno>()
@@ -101,6 +111,7 @@ async function bucketsItbiRaw(): Promise<Map<number, BucketsItbiAno>> {
   for (const r of abertoR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
   for (const r of inadR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
   for (const r of suspR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.suspenso = Math.max(0, -num(r[1])); map.set(ex, b) }
+  for (const r of cancR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.cancelado = num(r[1]); map.set(ex, b) }
 
   // Isento (não incidência) — best-effort: pode falhar por permissão em tb_extr_isencoes.
   const isento = await isentoItbiPorExercicio()
