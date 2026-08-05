@@ -47,7 +47,7 @@ const METRICAS_BAIRRO_ITBI: { id: MetricaBairroItbiUI; label: string; cor: strin
   { id: 'isento', label: 'Isento', cor: '#8094d6' },
   { id: 'suspenso', label: 'Suspenso', cor: '#5b6477' },
 ]
-interface ItemBairroItbi { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }
+interface ItemBairroItbi { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string; idItbi?: number }
 
 interface Cmp { atual: number; ant: number; pct: number }
 interface Visao {
@@ -517,7 +517,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                       else if (nivelBairro === 'rua') setRuaSel(b.nome)
                       else if (nivelBairro === 'imovel' && b.cd) abrirImovel(b.cd)
                     }
-                    const detalheImovel = [b.inscricao ? `Insc. ${b.inscricao}` : '', b.numero ? `Nº ${b.numero}` : ''].filter(Boolean).join(' · ')
+                    const detalheImovel = [b.inscricao ? `Insc. ${b.inscricao}` : '', b.numero ? `Nº ${b.numero}` : '', b.idItbi ? `ID ITBI ${b.idItbi}` : ''].filter(Boolean).join(' · ')
                     return (
                       <div key={i} onClick={clicavel ? acao : undefined} style={{ cursor: clicavel ? 'pointer' : 'default' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>

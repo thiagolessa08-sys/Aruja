@@ -89,14 +89,36 @@ async function agregadoBairroItbi(f: FiltrosBairroItbi, grupo: string) {
     .sort((a, b) => b.valor - a.valor)
 }
 
-export function bairrosItbi(f: FiltrosBairroItbi): Promise<ItemBairro[]> {
+export interface ItemBairroItbi extends ItemBairro { idItbi?: number }
+
+// Ponte imóvel (cd_devedor) → cd_itbi (id da transmissão) no exercício, para exibir o ID
+// ITBI junto do imóvel no drill "ITBI por Bairro". Um imóvel pode ter mais de uma
+// transmissão no mesmo exercício (ex.: cotas de coproprietários) — nesse caso fica com o
+// cd_itbi mais recente (MAX), suficiente para identificação (o histórico completo já
+// aparece em Consultar Imóvel).
+async function idItbiPorImovel(ano: number, cds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>()
+  if (!cds.length) return map
+  const r = await agentQuery(`
+    SELECT g.cd_devedor, MAX(it.cd_itbi) idItbi
+    FROM ${S}.tb_dsod_guias g
+    ${JITBI}
+    WHERE g.cd_tributo = 10 AND g.no_exercicio_lancamento = ${ano} AND it.vl_total > 0
+      AND g.cd_devedor IN (${cds.join(',')})
+    GROUP BY g.cd_devedor`, cds.length)
+  for (const row of r.rows) map.set(String(row[0]), num(row[1]))
+  return map
+}
+
+export function bairrosItbi(f: FiltrosBairroItbi): Promise<ItemBairroItbi[]> {
   const grupo = f.rua ? 'g.cd_devedor' : f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
   const met = f.metrica ?? 'lancado'
   const key = `itbiBairros:${f.ano}:${met}:${f.espolio ? 1 : 0}:${f.semNumero ? 1 : 0}:${f.bairro ?? ''}:${f.rua ?? ''}`
   return cached(key, CACHE_TTL, async () => {
     const base = await agregadoBairroItbi({ ...f, metrica: met }, grupo)
     if (!f.rua) return base.map(b => ({ nome: b.chave || '—', imoveis: b.imoveis, valor: b.valor }))
-    const det = await detalhesImoveis(base.map(b => b.chave).filter(c => c && c !== '0'))
+    const cds = base.map(b => b.chave).filter(c => c && c !== '0')
+    const [det, idItbi] = await Promise.all([detalhesImoveis(cds), idItbiPorImovel(f.ano, cds)])
     return base.map(b => {
       const d = det.get(b.chave)
       return {
@@ -106,6 +128,7 @@ export function bairrosItbi(f: FiltrosBairroItbi): Promise<ItemBairro[]> {
         cd: Number(b.chave) || undefined,
         inscricao: d?.inscricao || '',
         numero: d?.numero || '',
+        idItbi: idItbi.get(b.chave),
       }
     })
   })
