@@ -63,6 +63,7 @@ interface Visao {
 interface RankingImovel {
   itens: { cd: number; qt: number; venal: number; inscricao: string; endereco: string }[]
   faixas: { um: number; dois: number; tresCinco: number; seisMais: number }
+  abaixoVenal: number
 }
 interface MatchImovel { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string; noPeriodo?: boolean }
 interface Transmissao {
@@ -598,6 +599,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                   { l: '2 transmissões', n: fx.dois, c: '#7d8fce' },
                   { l: '3 a 5', n: fx.tresCinco, c: '#3f5bb5' },
                   { l: '6 ou mais', n: fx.seisMais, c: '#283e93' },
+                  { l: 'Valor ≤ venal', n: ranking.abaixoVenal, c: '#d64545' },
                 ]
                 const q = buscaRanking.trim().toLowerCase()
                 const itensFiltrados = q ? ranking.itens.filter(it => it.inscricao.toLowerCase().includes(q) || it.endereco.toLowerCase().includes(q)) : ranking.itens
@@ -612,13 +614,15 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                     {/* Distribuição */}
                     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                       {distr.map(d => (
-                        <div key={d.l} style={{ flex: '1 1 0', minWidth: 90, background: '#f7f9fd', borderRadius: 10, padding: '8px 10px' }}>
+                        <div key={d.l} title={d.l === 'Valor ≤ venal' ? 'Imóveis cujo valor de aquisição declarado é menor ou igual ao valor venal' : undefined}
+                          style={{ flex: '1 1 0', minWidth: 90, background: '#f7f9fd', borderRadius: 10, padding: '8px 10px' }}>
                           <div style={{ fontSize: 16, fontWeight: 700, color: d.c }}>{fmtInt(d.n)}</div>
                           <div style={{ fontSize: 10, color: '#5b6477' }}>{d.l}</div>
                           <div style={{ fontSize: 9.5, color: '#aeb6c6' }}>{(100 * d.n / totFx).toFixed(1).replace('.', ',')}%</div>
                         </div>
                       ))}
                     </div>
+                    <div style={{ fontSize: 9.5, color: '#aeb6c6', marginTop: 4 }}>"Valor ≤ venal": imóveis com valor de aquisição declarado abaixo ou igual ao valor venal (ITBI provavelmente calculado sobre o venal).</div>
                     {/* Top imóveis (respeita a busca por inscrição/endereço) */}
                     <div style={{ marginTop: 14, maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
                       {!itensFiltrados.length ? (

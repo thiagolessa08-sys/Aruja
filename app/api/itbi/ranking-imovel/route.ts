@@ -14,7 +14,7 @@ const num = (v: unknown) => Number(v) || 0
 async function ranking(top: number, ano: number | null, mes: number | null) {
   const filtroData = ano ? ` AND YEAR(it.dt_lancamento) = ${ano}${mes ? ` AND MONTH(it.dt_lancamento) <= ${mes}` : ''}` : ''
   return cached(`itbiRankImovel:${top}:${ano ?? ''}:${mes ?? ''}`, TTL_15MIN, async () => {
-    const [rankR, distR] = await Promise.all([
+    const [rankR, distR, venalR] = await Promise.all([
       agentQuery(`SELECT TOP ${top} iiu.cd_imovel_urbano, COUNT(DISTINCT it.cd_itbi) qt, SUM(it.vl_venal) venal,
           i.no_inscricao_imovel, c.ds_endereco, c.nm_bairro
         FROM ${S}.tb_dsod_itbi it
@@ -32,6 +32,12 @@ async function ranking(top: number, ano: number | null, mes: number | null) {
           WHERE it.vl_total > 0${filtroData}
           GROUP BY iiu.cd_imovel_urbano
         ) t GROUP BY qt`, 200),
+      // Imóveis com valor de aquisição declarado abaixo/igual ao valor venal (indicativo de
+      // que o ITBI foi calculado sobre o venal, por ser o maior dos dois — regra usual).
+      agentQuery(`SELECT COUNT(DISTINCT iiu.cd_imovel_urbano) n
+        FROM ${S}.tb_dsod_itbi it
+        JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = it.cd_itbi
+        WHERE it.vl_total > 0 AND it.vl_venal > 0 AND it.vl_aquisicao_original <= it.vl_venal${filtroData}`, 1),
     ])
 
     const itens = rankR.rows.map(r => ({
@@ -49,7 +55,8 @@ async function ranking(top: number, ano: number | null, mes: number | null) {
       else if (qt <= 5) faixas.tresCinco += n
       else faixas.seisMais += n
     }
-    return { itens, faixas }
+    const abaixoVenal = num(venalR.rows[0]?.[0])
+    return { itens, faixas, abaixoVenal }
   })
 }
 
