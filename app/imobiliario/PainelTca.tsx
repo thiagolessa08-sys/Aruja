@@ -233,7 +233,7 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
             <div style={{ ...card, minWidth: 0, position: 'relative' }}>
               {carregMes ? <LoadingOverlay label="Carregando meses…" /> : null}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução da TCA (5 anos)'}{filtroLabel ? ` · ${filtroLabel}` : ''}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução da TCA (3 anos)'}{filtroLabel ? ` · ${filtroLabel}` : ''}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
                     {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }, { label: 'Isento', cor: '#8094d6' }, { label: 'Suspenso', cor: '#5b6477' }].map(m => (
