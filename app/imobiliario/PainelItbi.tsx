@@ -636,7 +636,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                             </span>
                             <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtInt(it.qt)}×</span>
                           </div>
-                          {it.idItbi ? <div style={{ fontSize: 10, color: '#aeb6c6', marginBottom: 4 }}>ID ITBI {it.idItbi}{it.qt > 1 ? ' (mais recente)' : ''}</div> : null}
+                          {it.idItbi ? <div style={{ fontSize: 10, color: '#aeb6c6', marginBottom: 4 }}>ID ITBI {it.idItbi}</div> : null}
                           <div style={{ height: 12, borderRadius: 6, background: '#eef1f7', overflow: 'hidden' }}>
                             <div style={{ height: '100%', width: `${Math.max(3, 100 * it.qt / mx).toFixed(1)}%`, borderRadius: 6, background: '#3f5bb5' }} />
                           </div>
