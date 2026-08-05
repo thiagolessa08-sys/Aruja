@@ -3,6 +3,7 @@
 // (confirmada: 619/621 casam). Isento via tb_extr_isencoes filtrando pelo cd_tributo do ISSCC.
 import { agentQuery } from '@/lib/agent'
 import { cached, TTL_15MIN } from '@/lib/cache'
+import { detalhesImoveis } from '@/lib/iptu-agg'
 
 const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
@@ -209,6 +210,37 @@ export async function historicoAreaEdificada(): Promise<Map<number, AreaAno>> {
     }
     return map
   })
+}
+
+// Drill do quadro "Vínculos mobiliários e imobiliários": lista os imóveis com ISSCC no
+// exercício de uma das 3 categorias (mesma classificação de app/api/isscc/vinculos).
+export type CategoriaVinculoIsscc = 'imoveis' | 'comMobiliario' | 'proprietarioPJ'
+export interface ImovelVinculoIsscc { cd: number; inscricao: string; numero: string; proprietario: string }
+
+export async function imoveisPorVinculoIsscc(ano: number, categoria: CategoriaVinculoIsscc, q?: string): Promise<ImovelVinculoIsscc[]> {
+  const base = `g.cd_tributo IN (${ISSCC}) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
+  let sql: string
+  if (categoria === 'comMobiliario') {
+    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g
+      WHERE ${base} AND g.cd_origem IN (SELECT mf.cd_imovel_urbano FROM ${S}.tb_dsod_contribuinte_mob_fisico mf)`
+  } else if (categoria === 'proprietarioPJ') {
+    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g
+      JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_origem
+      JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario
+      WHERE ${base} AND cp.ic_pessoa = 'J'`
+  } else {
+    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g WHERE ${base}`
+  }
+  const r = await agentQuery(sql, 300)
+  const cds = r.rows.map(row => String(row[0])).filter(c => c && c !== '0')
+  const det = await detalhesImoveis(cds)
+  let itens = cds.map(cd => {
+    const d = det.get(cd)
+    return { cd: Number(cd), inscricao: d?.inscricao ?? '', numero: d?.numero ?? '', proprietario: d?.proprietario ?? '' }
+  })
+  const qt = q?.trim().toLowerCase()
+  if (qt) itens = itens.filter(it => it.inscricao.toLowerCase().includes(qt) || it.proprietario.toLowerCase().includes(qt))
+  return itens.sort((a, b) => a.proprietario.localeCompare(b.proprietario))
 }
 
 /** Data de atualização (carga) = MAX(dt_alter_ods) das guias de ISSCC. */

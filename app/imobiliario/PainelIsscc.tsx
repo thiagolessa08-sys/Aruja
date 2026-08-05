@@ -74,6 +74,11 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
   // Vínculos mobiliários/imobiliários (agregado)
   const [vinculos, setVinculos] = useState<{ imoveis: number; comMobiliario: number; proprietarioPJ: number } | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  // Drill do quadro "Vínculos mobiliários e imobiliários": clique numa categoria → lista de imóveis
+  const [vinculoSel, setVinculoSel] = useState<{ categoria: 'imoveis' | 'comMobiliario' | 'proprietarioPJ'; label: string } | null>(null)
+  const [buscaVinculo, setBuscaVinculo] = useState('')
+  const [imoveisVinculo, setImoveisVinculo] = useState<{ cd: number; inscricao: string; numero: string; proprietario: string }[]>([])
+  const [carregandoVinculo, setCarregandoVinculo] = useState(false)
 
   useEffect(() => {
     let vivo = true
@@ -105,6 +110,21 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
     fetchJson(`/api/isscc/vinculos?ano=${ano}`).then(d => { if (vivo && d && !d.error) setVinculos(d) })
     return () => { vivo = false }
   }, [ano])
+  useEffect(() => { setVinculoSel(null); setBuscaVinculo('') }, [ano])
+
+  // Drill "Vínculos mobiliários e imobiliários": busca a lista quando uma categoria está selecionada
+  useEffect(() => {
+    if (!vinculoSel || !ano) { setImoveisVinculo([]); return }
+    let vivo = true
+    setCarregandoVinculo(true)
+    const t = setTimeout(() => {
+      const p = new URLSearchParams({ ano: String(ano), categoria: vinculoSel.categoria })
+      if (buscaVinculo.trim()) p.set('q', buscaVinculo.trim())
+      fetchJson(`/api/isscc/vinculos-imoveis?${p}`).then(d => { if (vivo && d?.itens) setImoveisVinculo(d.itens) })
+        .finally(() => { if (vivo) setCarregandoVinculo(false) })
+    }, 300)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [vinculoSel, buscaVinculo, ano])
 
   useEffect(() => {
     let vivo = true
@@ -281,21 +301,52 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
           <SecaoBairros endpoint="/api/isscc/bairros" ano={ano} titulo="ISSCC por Bairro" mostrarNaoLancados permitirDrillImovel />
 
-          {/* Vínculos mobiliários e imobiliários (agregado) */}
-          <div style={{ ...card, marginTop: 18 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Vínculos mobiliários e imobiliários</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Imóveis com lançamento de ISSCC no exercício e seus vínculos</div>
-            {vinculos ? (() => {
+          {/* Vínculos mobiliários e imobiliários (agregado) — clique numa categoria faz drill pra lista de imóveis */}
+          <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+            {carregandoVinculo ? <LoadingOverlay label="Carregando imóveis…" /> : null}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              {vinculoSel ? (
+                <button onClick={() => { setVinculoSel(null); setBuscaVinculo('') }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 15, fontWeight: 600 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+                  {vinculoSel.label}
+                </button>
+              ) : (
+                <div>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Vínculos mobiliários e imobiliários</span>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Imóveis com lançamento de ISSCC no exercício e seus vínculos</div>
+                </div>
+              )}
+              {vinculoSel ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                  <input value={buscaVinculo} onChange={e => setBuscaVinculo(e.target.value)} placeholder="Buscar inscrição ou proprietário…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 170, fontFamily: 'inherit' }} />
+                </div>
+              ) : null}
+            </div>
+            {vinculoSel ? (
+              <div style={{ marginTop: 12, maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                {imoveisVinculo.length ? imoveisVinculo.map(it => (
+                  <div key={it.cd} style={{ padding: '8px 4px', borderRadius: 8, borderBottom: '1px solid #f0f2f8' }}>
+                    <div style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{it.proprietario || `Imóvel ${it.cd}`}</div>
+                    <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 1 }}>{it.inscricao ? `Insc. ${it.inscricao}` : `Código ${it.cd}`}{it.numero ? ` · Nº ${it.numero}` : ''}</div>
+                  </div>
+                )) : !carregandoVinculo ? (
+                  <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum imóvel encontrado.</div>
+                ) : null}
+                {imoveisVinculo.length >= 300 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 6 }}>Mostrando os 300 primeiros — refine a busca para ver mais.</div> : null}
+              </div>
+            ) : vinculos ? (() => {
               const base = Math.max(1, vinculos.imoveis)
               const itens = [
-                { l: 'Imóveis com ISSCC', v: vinculos.imoveis, c: '#283e93', pct: 100 },
-                { l: 'Com empresa no endereço (mobiliário)', v: vinculos.comMobiliario, c: '#e8962e', pct: 100 * vinculos.comMobiliario / base },
-                { l: 'Proprietário PJ (imobiliário)', v: vinculos.proprietarioPJ, c: '#1fa463', pct: 100 * vinculos.proprietarioPJ / base },
+                { l: 'Imóveis com ISSCC', v: vinculos.imoveis, c: '#283e93', pct: 100, categoria: 'imoveis' as const },
+                { l: 'Com empresa no endereço (mobiliário)', v: vinculos.comMobiliario, c: '#e8962e', pct: 100 * vinculos.comMobiliario / base, categoria: 'comMobiliario' as const },
+                { l: 'Proprietário PJ (imobiliário)', v: vinculos.proprietarioPJ, c: '#1fa463', pct: 100 * vinculos.proprietarioPJ / base, categoria: 'proprietarioPJ' as const },
               ]
               return (
                 <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 13 }}>
                   {itens.map((it, i) => (
-                    <div key={i}>
+                    <div key={i} onClick={() => setVinculoSel({ categoria: it.categoria, label: it.l })} style={{ cursor: 'pointer' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
                         <span style={{ color: '#3a4256', fontWeight: 600 }}>{it.l}</span>
                         <span style={{ color: it.c, fontWeight: 700 }}>{it.v.toLocaleString('pt-BR')} {i > 0 ? <span style={{ color: '#9098a8', fontWeight: 400 }}>({it.pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%)</span> : null}</span>
@@ -305,7 +356,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
                       </div>
                     </div>
                   ))}
-                  <div style={{ fontSize: 10, color: '#aeb6c6' }}>Mobiliário = empresa registrada no endereço do imóvel. Imobiliário = proprietário pessoa jurídica.</div>
+                  <div style={{ fontSize: 10, color: '#aeb6c6' }}>Mobiliário = empresa registrada no endereço do imóvel. Imobiliário = proprietário pessoa jurídica. Clique numa categoria para ver os imóveis.</div>
                 </div>
               )
             })() : <Spinner label="Carregando vínculos…" padding={20} />}
