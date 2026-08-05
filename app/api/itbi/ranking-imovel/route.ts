@@ -16,7 +16,7 @@ async function ranking(top: number, ano: number | null, mes: number | null) {
   return cached(`itbiRankImovel:${top}:${ano ?? ''}:${mes ?? ''}`, TTL_15MIN, async () => {
     const [rankR, distR, venalR] = await Promise.all([
       agentQuery(`SELECT TOP ${top} iiu.cd_imovel_urbano, COUNT(DISTINCT it.cd_itbi) qt, SUM(it.vl_venal) venal,
-          i.no_inscricao_imovel, c.ds_endereco, c.nm_bairro
+          i.no_inscricao_imovel, c.ds_endereco, c.nm_bairro, MAX(it.cd_itbi) idItbi
         FROM ${S}.tb_dsod_itbi it
         JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = it.cd_itbi
         LEFT JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = iiu.cd_imovel_urbano
@@ -44,6 +44,7 @@ async function ranking(top: number, ano: number | null, mes: number | null) {
       cd: num(r[0]), qt: num(r[1]), venal: num(r[2]),
       inscricao: String(r[3] ?? '').trim(),
       endereco: `${String(r[4] ?? '').trim()}${String(r[5] ?? '').trim() ? ' — ' + String(r[5]).trim() : ''}`,
+      idItbi: num(r[6]),
     }))
 
     // Faixas de distribuição

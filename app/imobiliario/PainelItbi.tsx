@@ -61,7 +61,7 @@ interface Visao {
   evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; cancelado: number; previsto: boolean; arrecPct: number; inadPct: number }[]
 }
 interface RankingImovel {
-  itens: { cd: number; qt: number; venal: number; inscricao: string; endereco: string }[]
+  itens: { cd: number; qt: number; venal: number; inscricao: string; endereco: string; idItbi: number }[]
   faixas: { um: number; dois: number; tresCinco: number; seisMais: number }
   abaixoVenal: number
 }
@@ -630,12 +630,13 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                         <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Nenhum imóvel encontrado para a busca.</div>
                       ) : itensFiltrados.map((it, i) => (
                         <div key={it.cd} onClick={() => abrirImovel(it.cd)} style={{ cursor: 'pointer' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 2 }}>
                             <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {i + 1}. {it.inscricao || `Imóvel ${it.cd}`} <span style={{ color: '#9098a8', fontWeight: 500 }}>{it.endereco ? `· ${it.endereco}` : ''}</span>
                             </span>
                             <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtInt(it.qt)}×</span>
                           </div>
+                          {it.idItbi ? <div style={{ fontSize: 10, color: '#aeb6c6', marginBottom: 4 }}>ID ITBI {it.idItbi}{it.qt > 1 ? ' (mais recente)' : ''}</div> : null}
                           <div style={{ height: 12, borderRadius: 6, background: '#eef1f7', overflow: 'hidden' }}>
                             <div style={{ height: '100%', width: `${Math.max(3, 100 * it.qt / mx).toFixed(1)}%`, borderRadius: 6, background: '#3f5bb5' }} />
                           </div>
