@@ -6,7 +6,7 @@ import LoadingOverlay from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Tip {
-  chart: 'report' | 'arrec' | 'divida'
+  chart: 'report' | 'arrec' | 'divida' | 'categoria'
   left: string
   top: string
   title: string
@@ -230,6 +230,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
   const tipReport = tip && tip.chart === 'report' ? tip : null
   const tipArrec = tip && tip.chart === 'arrec' ? tip : null
   const tipDivida = tip && tip.chart === 'divida' ? tip : null
+  const tipCategoria = tip && tip.chart === 'categoria' ? tip : null
 
   const g = graf ?? FALLBACK_GRAF
   const gl = geomLinha(g.porAno)
@@ -397,12 +398,22 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                 </div>
 
                 {/* Barras horizontais clicáveis — mais grossas só no 1º nível (Categoria) */}
-                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {vis.map((it, i) => {
                     const w = Math.max(6, 100 * it.v / maxV)
                     const alt = drill.length === 0 ? 40 : 22 // 1º nível bem mais grosso
                     return (
-                      <div key={i} onClick={() => { if (canDrill) setDrill([...drill, it.label]) }} title={`${it.label}: ${fmtAbrev(it.v)}`} style={{ cursor: canDrill ? 'pointer' : 'default' }}>
+                      <div key={i} onClick={() => { if (canDrill) setDrill([...drill, it.label]) }}
+                        onMouseEnter={(e) => {
+                          const wrap = e.currentTarget.parentElement
+                          if (!wrap) return
+                          const wrapRect = wrap.getBoundingClientRect()
+                          const rowRect = e.currentTarget.getBoundingClientRect()
+                          const left = ((rowRect.left + rowRect.width * (w / 100) - wrapRect.left) / wrapRect.width) * 100
+                          const top = ((rowRect.top - wrapRect.top) / wrapRect.height) * 100
+                          setTip({ chart: 'categoria', title: it.label, l1: fmtAbrev(it.v), l1c: '#283e93', left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` })
+                        }}
+                        style={{ cursor: canDrill ? 'pointer' : 'default' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 4 }}>
                           <span title={it.label} style={{ color: '#3a4256', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
                           <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtAbrev(it.v)}</span>
@@ -420,6 +431,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                     </div>
                   ) : null}
                   {!vis.length ? <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Sem dados neste nível.</div> : null}
+                  {tipCategoria ? <Tooltip t={tipCategoria} /> : null}
                 </div>
                 {canDrill && vis.length ? <div style={{ marginTop: 12, fontSize: 10.5, color: '#aeb6c6' }}>Clique numa barra para detalhar</div> : null}
               </>
