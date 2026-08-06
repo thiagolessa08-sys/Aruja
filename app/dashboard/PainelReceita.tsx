@@ -164,7 +164,7 @@ function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
 // Ícone de tendência (seta) — exibido acima da porcentagem de variação do KPI.
 function trendIcon(dir: 'up' | 'down' | 'flat', cor: string) {
   const path = dir === 'up' ? 'M4 14l6-6 4 4 6-8M14 4h6v6'
-    : dir === 'down' ? 'M4 6l6 6 4-4 6 8M14 20h6v-6'
+    : dir === 'down' ? 'M4 6l6 6 4-4 6 8M14 16h6v-6'
     : 'M4 12h16'
   return (
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
