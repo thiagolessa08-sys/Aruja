@@ -319,9 +319,9 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                 <div style={{ width: 34, height: 34, borderRadius: 10, background: azul ? 'rgba(255,255,255,0.14)' : '#e9edf8', color: azul ? '#fff' : '#283e93', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{kpiIcons[i]}</div>
                 <span style={{ fontSize: 19, fontWeight: 700, color: azul ? '#fff' : '#1f2a44', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>{k.value}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
                 <span style={{ fontSize: 11, color: azul ? 'rgba(255,255,255,0.6)' : '#9098a8' }}>{k.subLabel} <span style={{ color: azul ? 'rgba(255,255,255,0.95)' : '#3a4256', fontWeight: 600 }}>{k.subValue}</span></span>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flex: 'none' }}>
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4, flex: 'none' }}>
                   {trendIcon(k.dir, pctColor(k.dir, azul))}
                   <span style={{ fontSize: 12, fontWeight: 700, color: pctColor(k.dir, azul) }}>{k.pct}</span>
                 </div>
