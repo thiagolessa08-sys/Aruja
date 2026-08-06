@@ -25,7 +25,7 @@ export default function DashboardPage() {
   // Filtros do painel de Receita
   const [optsRec, setOptsRec] = useState<{ anos: number[]; impostosTaxas: { alinea: string; naturezas: string[] }[] }>({ anos: [], impostosTaxas: [] })
   const [rAno, setRAno] = useState<number | ''>('')
-  const [rMes, setRMes] = useState('')
+  const [rMes, setRMes] = useState(() => String(new Date().getMonth() + 1)) // mês corrente por padrão
   // filtro "Impostos e Taxas": valor com prefixo — 'A::<alinea>' (nível 1) ou 'N::<natureza>' (nível 2)
   const [rIT, setRIT] = useState('')
 
