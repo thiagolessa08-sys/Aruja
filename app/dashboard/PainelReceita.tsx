@@ -161,6 +161,18 @@ function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   return azul ? 'rgba(255,255,255,0.6)' : '#9098a8'
 }
 
+// Ícone de tendência (seta) — exibido acima da porcentagem de variação do KPI.
+function trendIcon(dir: 'up' | 'down' | 'flat', cor: string) {
+  const path = dir === 'up' ? 'M4 14l6-6 4 4 6-8M14 4h6v6'
+    : dir === 'down' ? 'M4 6l6 6 4-4 6 8M14 20h6v-6'
+    : 'M4 12h16'
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d={path} />
+    </svg>
+  )
+}
+
 const INSIGHTS_FALLBACK = [
   'Arrecadação acumulada de 2026 soma R$ 350,4 mi, +8,6% frente ao mesmo período de 2025.',
   'Impostos lideram a receita de 2026 com R$ 106,5 mi, seguidos das transferências estaduais.',
@@ -309,7 +321,10 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
                 <span style={{ fontSize: 11, color: azul ? 'rgba(255,255,255,0.6)' : '#9098a8' }}>{k.subLabel} <span style={{ color: azul ? 'rgba(255,255,255,0.95)' : '#3a4256', fontWeight: 600 }}>{k.subValue}</span></span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: pctColor(k.dir, azul), flex: 'none' }}>{k.pct}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flex: 'none' }}>
+                  {trendIcon(k.dir, pctColor(k.dir, azul))}
+                  <span style={{ fontSize: 12, fontWeight: 700, color: pctColor(k.dir, azul) }}>{k.pct}</span>
+                </div>
               </div>
             </div>
           )
