@@ -167,7 +167,7 @@ function trendIcon(dir: 'up' | 'down' | 'flat', cor: string) {
     : dir === 'down' ? 'M4 6l6 6 4-4 6 8M14 20h6v-6'
     : 'M4 12h16'
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
       <path d={path} />
     </svg>
   )
