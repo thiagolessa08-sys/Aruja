@@ -6,7 +6,7 @@ import LoadingOverlay from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Tip {
-  chart: 'report' | 'arrec'
+  chart: 'report' | 'arrec' | 'divida'
   left: string
   top: string
   title: string
@@ -229,6 +229,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
 
   const tipReport = tip && tip.chart === 'report' ? tip : null
   const tipArrec = tip && tip.chart === 'arrec' ? tip : null
+  const tipDivida = tip && tip.chart === 'divida' ? tip : null
 
   const g = graf ?? FALLBACK_GRAF
   const gl = geomLinha(g.porAno)
@@ -237,6 +238,16 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
   // Donut Dívida Ativa
   const da = g.dividaAtiva
   const donutC = 2 * Math.PI * 66
+  // Posição (left/top em % do viewBox 200×200) do meio-arco de um segmento do donut,
+  // já considerando o transform="rotate(-90 100 100)" do grupo (mesmo padrão de
+  // Tooltip usado em "Arrecadação por Mês").
+  const donutPos = (startOff: number, len: number) => {
+    const frac = (startOff + len / 2) / donutC
+    const ang = frac * 2 * Math.PI
+    const x = 100 + 66 * Math.sin(ang)
+    const y = 100 - 66 * Math.cos(ang)
+    return { left: `${(x / 200 * 100).toFixed(1)}%`, top: `${(y / 200 * 100).toFixed(1)}%` }
+  }
   let _off = 0
   const donut = [
     { nome: 'IMPOSTOS', v: da.impostos, cor: '#283e93' },
@@ -479,16 +490,17 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                 </div>
                 {segN.length ? (
                   <>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                    <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', display: 'flex', justifyContent: 'center', marginTop: 12 }}>
                       <svg viewBox="0 0 200 200" width="200" height="200">
                         <g transform="rotate(-90 100 100)">
                           {segN.map((s, i) => (
-                            <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}>
-                              <title>{`${s.nat}: ${fmtReais(s.v)} (${fmtPct(s.pct)})`}</title>
-                            </circle>
+                            <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
+                              onMouseEnter={() => setTip({ chart: 'divida', title: s.nat, l1: `${fmtReais(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
+                              style={{ cursor: 'pointer' }} />
                           ))}
                         </g>
                       </svg>
+                      {tipDivida ? <Tooltip t={tipDivida} /> : null}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 16 }}>
                       {segN.map((s, i) => (
@@ -505,7 +517,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
             )
           })() : (
             <>
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
+              <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', display: 'flex', justifyContent: 'center', marginTop: 18 }}>
                 <svg viewBox="0 0 200 200" width="210" height="210">
                   <g transform="rotate(-90 100 100)">
                     {donut.map((s, i) => {
@@ -513,13 +525,13 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                       return (
                         <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30"
                           strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
-                          onClick={() => { if (temNat) setDaDrill(s.nome) }} style={{ cursor: temNat ? 'pointer' : 'default' }}>
-                          <title>{`${s.nome}: ${fmtReais(s.v)} (${fmtPct(s.pct)})`}</title>
-                        </circle>
+                          onMouseEnter={() => setTip({ chart: 'divida', title: s.nome, l1: `${fmtReais(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
+                          onClick={() => { if (temNat) setDaDrill(s.nome) }} style={{ cursor: temNat ? 'pointer' : 'default' }} />
                       )
                     })}
                   </g>
                 </svg>
+                {tipDivida ? <Tooltip t={tipDivida} /> : null}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 16 }}>
                 {donut.map((s, i) => {
