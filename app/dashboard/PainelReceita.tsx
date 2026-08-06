@@ -120,17 +120,27 @@ function geomLinha(d: PorAno[]) {
 // Geometria — gráfico de barras "Arrecadação por Mês"
 function geomBar(d: PorMes[]) {
   const W = 1080, H = 380, top = 40, bottom = 300
-  const max = Math.max(1, ...d.flatMap(m => [m.anoAnterior, m.anoAtual]))
+  // Math.abs: um mês com Ano Atual negativo (restituições > arrecadação, comum em naturezas
+  // filtradas específicas) não pode "sumir" da escala — sua magnitude conta pra escala igual
+  // a um valor positivo.
+  const max = Math.max(1, ...d.flatMap(m => [Math.abs(m.anoAnterior), Math.abs(m.anoAtual)]))
   const sc = (v: number) => (v / max) * (bottom - top - 10)
   const gw = W / 12
   const bars = d.map((m, i) => {
     const cx = i * gw + gw / 2
-    const hAnt = sc(m.anoAnterior), hAtu = sc(m.anoAtual)
+    const hAnt = sc(m.anoAnterior)
+    const hAtu = sc(Math.abs(m.anoAtual))
+    const atuNeg = m.anoAtual < 0
+    // Barra do Ano Atual: cresce pra cima quando positiva (padrão), pra baixo (a partir da
+    // baseline) quando negativa — antes um valor negativo simplesmente não desenhava a
+    // barra (só aparecia no tooltip), dando a impressão de "coluna sumida".
+    const antTop = bottom - hAnt
+    const atuTop = atuNeg ? bottom : bottom - hAtu
     return {
       cx, nome: m.nome, pct: fmtPct(m.pct), vAnt: m.anoAnterior, vAtu: m.anoAtual,
-      ant: { x: cx - 28, y: bottom - hAnt, h: hAnt },
-      atu: m.anoAtual > 0 ? { x: cx + 4, y: bottom - hAtu, h: hAtu } : null,
-      tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtAbrev(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtAbrev(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - Math.max(hAnt, hAtu)) / H * 100).toFixed(1)}%` },
+      ant: { x: cx - 28, y: antTop, h: hAnt },
+      atu: m.anoAtual !== 0 ? { x: cx + 4, y: atuTop, h: hAtu, neg: atuNeg } : null,
+      tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtAbrev(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtAbrev(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${(Math.min(antTop, atuTop) / H * 100).toFixed(1)}%` },
     }
   })
   const media = d.reduce((s, m) => s + m.anoAnterior, 0) / 12
@@ -472,14 +482,16 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
               <defs>
                 <linearGradient id="arrAnt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#b9c4e8" /></linearGradient>
                 <linearGradient id="arrAtu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f5d7a6" /></linearGradient>
+                <linearGradient id="arrAtuNeg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f5b8b8" /><stop offset="100%" stopColor="#d64545" /></linearGradient>
               </defs>
               <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
               {gb.bars.map((b, i) => (
                 <g key={i}>
                   <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill="url(#arrAnt)" />
-                  {b.atu ? <rect x={b.atu.x.toFixed(1)} y={b.atu.y.toFixed(1)} width="24" height={b.atu.h.toFixed(1)} rx="6" fill="url(#arrAtu)" /> : null}
+                  {b.atu ? <rect x={b.atu.x.toFixed(1)} y={b.atu.y.toFixed(1)} width="24" height={b.atu.h.toFixed(1)} rx="6" fill={b.atu.neg ? 'url(#arrAtuNeg)' : 'url(#arrAtu)'} /> : null}
                   {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
                   {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
+                  {b.atu && b.atu.neg ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y + b.atu.h + 16).toFixed(1)} fontSize="11" fontWeight="600" fill="#d64545" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
                   <text x={b.cx.toFixed(1)} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.nome}</text>
                   <text x={b.cx.toFixed(1)} y="350" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="middle">{b.pct}</text>
                 </g>
