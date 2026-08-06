@@ -158,7 +158,7 @@ export default function DashboardPage() {
                   <option value="">Mês: Todos</option>
                   {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
-                <ImpostoTaxaSelect grupos={optsRec.impostosTaxas} value={rIT} onChange={setRIT} style={selectPill} />
+                <ImpostoTaxaSelect grupos={optsRec.impostosTaxas} value={rIT} onChange={setRIT} style={{ ...selectPill, maxWidth: 260 }} />
               </>
             )}
           </div>
