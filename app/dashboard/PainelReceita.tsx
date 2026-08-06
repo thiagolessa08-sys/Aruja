@@ -119,32 +119,48 @@ function geomLinha(d: PorAno[]) {
 
 // Geometria — gráfico de barras "Arrecadação por Mês"
 function geomBar(d: PorMes[]) {
-  const W = 1080, H = 380, top = 40, bottom = 300
-  // Math.abs: um mês com Ano Atual negativo (restituições > arrecadação, comum em naturezas
-  // filtradas específicas) não pode "sumir" da escala — sua magnitude conta pra escala igual
-  // a um valor positivo.
-  const max = Math.max(1, ...d.flatMap(m => [Math.abs(m.anoAnterior), Math.abs(m.anoAtual)]))
-  const sc = (v: number) => (v / max) * (bottom - top - 10)
+  const W = 1080, H = 380, top = 40, floor = 300, margin = 10
+  const avail = floor - top - margin // espaço total disponível p/ barras (250, igual ao original)
+
+  // Um mês pode ter Ano Atual negativo (restituição > arrecadação — comum em naturezas
+  // filtradas específicas, ex.: um lançamento em janeiro estornado inteiro em fevereiro).
+  // Escalar tudo contra um único "max" (mesmo em módulo) fazia a barra negativa precisar do
+  // espaço INTEIRO abaixo da linha de base — que só tem folga até a área dos rótulos — e ela
+  // saía do viewBox (a "coluna sumida" relatada). Correção: dividir o espaço vertical
+  // disponível proporcionalmente entre o lado positivo e o negativo, então nenhuma barra,
+  // em nenhum dos dois sentidos, ultrapassa a área reservada.
+  const valores = d.flatMap(m => [m.anoAnterior, m.anoAtual])
+  const maxPos = Math.max(0, ...valores.filter(v => v > 0))
+  const maxNegAbs = Math.max(0, ...valores.filter(v => v < 0).map(v => -v))
+  const temNeg = maxNegAbs > 0
+  const posSpace = temNeg ? avail * (maxPos / (maxPos + maxNegAbs || 1)) : avail
+  const negSpace = avail - posSpace
+  const bottom = temNeg ? top + posSpace : floor // baseline — fixa em `floor` quando não há negativos (comportamento idêntico ao anterior)
+  const scPos = (v: number) => maxPos ? (v / maxPos) * posSpace : 0
+  const scNeg = (v: number) => maxNegAbs ? (v / maxNegAbs) * negSpace : 0
+  const alturaAssinada = (v: number) => v >= 0 ? scPos(v) : scNeg(-v)
+
   const gw = W / 12
   const bars = d.map((m, i) => {
     const cx = i * gw + gw / 2
-    const hAnt = sc(m.anoAnterior)
-    const hAtu = sc(Math.abs(m.anoAtual))
+    const hAnt = alturaAssinada(m.anoAnterior)
+    const hAtu = alturaAssinada(m.anoAtual)
+    const antNeg = m.anoAnterior < 0
     const atuNeg = m.anoAtual < 0
-    // Barra do Ano Atual: cresce pra cima quando positiva (padrão), pra baixo (a partir da
-    // baseline) quando negativa — antes um valor negativo simplesmente não desenhava a
-    // barra (só aparecia no tooltip), dando a impressão de "coluna sumida".
-    const antTop = bottom - hAnt
+    // Barra cresce pra cima quando positiva (padrão), pra baixo (a partir da baseline)
+    // quando negativa — antes um valor negativo simplesmente não desenhava a barra (só
+    // aparecia no tooltip), dando a impressão de "coluna sumida".
+    const antTop = antNeg ? bottom : bottom - hAnt
     const atuTop = atuNeg ? bottom : bottom - hAtu
     return {
       cx, nome: m.nome, pct: fmtPct(m.pct), vAnt: m.anoAnterior, vAtu: m.anoAtual,
-      ant: { x: cx - 28, y: antTop, h: hAnt },
+      ant: { x: cx - 28, y: antTop, h: hAnt, neg: antNeg },
       atu: m.anoAtual !== 0 ? { x: cx + 4, y: atuTop, h: hAtu, neg: atuNeg } : null,
       tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtAbrev(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtAbrev(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${(Math.min(antTop, atuTop) / H * 100).toFixed(1)}%` },
     }
   })
   const media = d.reduce((s, m) => s + m.anoAnterior, 0) / 12
-  return { bars, W, H, bottom, yMedia: bottom - sc(media), media }
+  return { bars, W, H, bottom, yMedia: bottom - alturaAssinada(media), media }
 }
 
 interface KpiCard {
@@ -487,9 +503,10 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
               <line x1="8" y1={gb.bottom} x2="1072" y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
               {gb.bars.map((b, i) => (
                 <g key={i}>
-                  <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill="url(#arrAnt)" />
+                  <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill={b.ant.neg ? 'url(#arrAtuNeg)' : 'url(#arrAnt)'} />
                   {b.atu ? <rect x={b.atu.x.toFixed(1)} y={b.atu.y.toFixed(1)} width="24" height={b.atu.h.toFixed(1)} rx="6" fill={b.atu.neg ? 'url(#arrAtuNeg)' : 'url(#arrAtu)'} /> : null}
                   {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
+                  {b.ant.neg ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y + b.ant.h + 16).toFixed(1)} fontSize="11" fontWeight="600" fill="#d64545" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
                   {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
                   {b.atu && b.atu.neg ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y + b.atu.h + 16).toFixed(1)} fontSize="11" fontWeight="600" fill="#d64545" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
                   <text x={b.cx.toFixed(1)} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.nome}</text>
