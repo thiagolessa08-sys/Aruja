@@ -35,6 +35,14 @@ async function gerarInsights(): Promise<string[]> {
     arrec.set(`${ano}-${mes}`, v)
     if (ano > anoAtual || (ano === anoAtual && mes > mesAtual)) { anoAtual = ano; mesAtual = mes }
   }
+  // O mês em execução (mês corrente do calendário) ainda está acumulando arrecadação —
+  // incluí-lo nas análises distorce tendência/comparação (parece queda por estar incompleto).
+  // Se o último mês com dado é o mês corrente, recua para o último mês fechado.
+  const agora = new Date()
+  if (anoAtual === agora.getFullYear() && mesAtual === agora.getMonth() + 1) {
+    mesAtual -= 1
+    if (mesAtual === 0) { mesAtual = 12; anoAtual -= 1 }
+  }
   const anoAnt = anoAtual - 1
   const ytd = (ano: number) => { let s = 0; for (let m = 1; m <= mesAtual; m++) s += arrec.get(`${ano}-${m}`) ?? 0; return s }
   const ytdAtual = ytd(anoAtual), ytdAnt = ytd(anoAnt)
