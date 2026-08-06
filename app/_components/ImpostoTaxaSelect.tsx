@@ -36,7 +36,7 @@ export default function ImpostoTaxaSelect({
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button type="button" aria-label="Impostos e Taxas" title={label} onClick={() => setOpen(o => !o)}
-        style={{ ...style, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        style={{ ...style, textAlign: 'left', whiteSpace: 'nowrap' }}>
         {label}
       </button>
       {open ? (
