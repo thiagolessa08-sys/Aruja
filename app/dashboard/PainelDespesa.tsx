@@ -622,7 +622,12 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
       {/* ===== Fornecedores (busca + Top 10 + rolagem) ===== */}
       <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Fornecedores</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Fornecedores</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: '#9098a8' }}>
+              {Number(filtros.mes) ? `${MESES_NOME[Number(filtros.mes) - 1]}/${fornecedores.ano}` : fornecedores.ano}
+            </span>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '6px 10px' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
