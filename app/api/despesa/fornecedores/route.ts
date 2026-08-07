@@ -12,7 +12,9 @@ export async function GET(req: NextRequest) {
   try {
     const filtros = lerFiltros(req.nextUrl.searchParams)
     const ordCol = indCol(filtros.indicador) // ordena pelo indicador escolhido
-    const we = whereExtra(filtros) // mês + secretaria
+    // mesExato=true: com mês selecionado, mostra só o valor DAQUELE mês (não o acumulado
+    // jan→mês) — o usuário quer ver quem foi pago/liquidado/empenhado naquele mês específico.
+    const we = whereExtra(filtros, true)
 
     const anoR = await agentQuery(`
       SELECT MAX(d.NO_ANO) AS ano

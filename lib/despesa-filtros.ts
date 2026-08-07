@@ -46,8 +46,11 @@ export function lerFiltros(sp: URLSearchParams): Filtros {
 
 // Fragmento WHERE (assumindo aliases f = fato, d = calendário).
 // Aplica SEMPRE o filtro oficial: ano >= 2023 e unidades orçamentárias 02.01–02.19.
-export function whereExtra(f: Filtros): string {
+// `mesExato`: por padrão o mês acumula jan→mês (YTD, comparação justa de evolução/KPIs).
+// Passe true para restringir só ao mês escolhido (ex.: Fornecedores — o usuário espera ver
+// quem recebeu NAQUELE mês, não o acumulado do ano até ali).
+export function whereExtra(f: Filtros, mesExato = false): string {
   let w = ` AND d.NO_ANO >= ${ANO_MIN_DESPESA}` + whereUO('f.SK_INSTITUCIONAL', f.secretaria)
-  if (f.mes) w += ` AND d.NO_MES <= ${f.mes}` // acumula jan→mês (YTD), não o mês isolado
+  if (f.mes) w += mesExato ? ` AND d.NO_MES = ${f.mes}` : ` AND d.NO_MES <= ${f.mes}`
   return w
 }
