@@ -212,6 +212,18 @@ function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   return azul ? 'rgba(255,255,255,0.6)' : '#9098a8'
 }
 
+// Ícone de tendência (seta) — exibido na linha do valor principal, acima da porcentagem.
+function trendIcon(dir: 'up' | 'down' | 'flat', cor: string) {
+  const path = dir === 'up' ? 'M4 14l6-6 4 4 6-8M14 4h6v6'
+    : dir === 'down' ? 'M4 6l6 6 4-4 6 8M14 16h6v-6'
+    : 'M4 12h16'
+  return (
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d={path} />
+    </svg>
+  )
+}
+
 const INSIGHTS_FALLBACK = [
   'Despesa paga acumulada de 2026 soma R$ 575,9 mi, +10,5% frente ao mesmo período de 2025.',
   'Outras Despesas Correntes e Pessoal lideram os gastos pagos em 2026.',
@@ -376,9 +388,12 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
               ? { background: '#283e93', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 20px rgba(40,62,147,0.22)' }
               : { background: '#fff', borderRadius: 16, padding: '12px 14px', boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: azul ? 'rgba(255,255,255,0.88)' : '#1f2a44', lineHeight: 1.25, display: 'block' }}>{k.label}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: azul ? 'rgba(255,255,255,0.14)' : '#e9edf8', color: azul ? '#fff' : '#283e93', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{kpiIcons[i]}</div>
-                <span style={{ fontSize: 19, fontWeight: 700, color: azul ? '#fff' : '#1f2a44', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>{k.value}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: azul ? 'rgba(255,255,255,0.14)' : '#e9edf8', color: azul ? '#fff' : '#283e93', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{kpiIcons[i]}</div>
+                  <span style={{ fontSize: 19, fontWeight: 700, color: azul ? '#fff' : '#1f2a44', letterSpacing: '-.5px', whiteSpace: 'nowrap' }}>{k.value}</span>
+                </div>
+                <div style={{ flex: 'none' }}>{trendIcon(k.dir, pctColor(k.dir, azul))}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
                 <span style={{ fontSize: 11, color: azul ? 'rgba(255,255,255,0.6)' : '#9098a8' }}>{k.subLabel} <span style={{ color: azul ? 'rgba(255,255,255,0.95)' : '#3a4256', fontWeight: 600 }}>{k.subValue}</span></span>
