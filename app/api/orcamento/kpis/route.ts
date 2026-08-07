@@ -15,15 +15,13 @@ interface Kpi {
   dir: 'up' | 'down' | 'flat'
 }
 
-function fmtMi(v: number): string {
-  return (v / 1_000_000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
-}
-
-// Formato adaptativo pelo valor da base: mi p/ milhões, K p/ milhares, senão o número cru.
+// Formato adaptativo pelo valor da base: bi/mi/k conforme a grandeza, senão o número cru
+// (mesma convenção usada nos gráficos e nos KPIs de Despesa).
 function fmtAdapt(v: number): string {
   const a = Math.abs(v)
+  if (a >= 1e9) return (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
   if (a >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
-  if (a >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' K'
+  if (a >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' k'
   return v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 }
 
@@ -109,8 +107,9 @@ export async function GET(req: NextRequest) {
     const arrecAnoAntTotal = ytd(anoAnt, mesAtual)
     const arrecMesAnterior = get(mesAntAno, mesAntMes)
 
-    // Com filtro de mês, valores menores → usa K/mi conforme a base (Receita item 1)
-    const fmt = f.mes ? fmtAdapt : fmtMi
+    // Unidade (bi/mi/k) sempre conforme a grandeza do valor, com ou sem filtro de mês —
+    // "Arrecadação Mês" por ex. é sempre um valor mensal, que pode cair na casa dos milhares.
+    const fmt = fmtAdapt
 
     const kpis: Kpi[] = [
       { label: 'Orçado', value: fmt(orcAtual), subLabel: 'Ano Anterior', subValue: fmt(orcAnt), ...variacao(orcAtual, orcAnt) },
