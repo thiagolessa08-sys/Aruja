@@ -454,7 +454,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
               </select>
             </div>
           </div>
-          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 11 }}>
+          <div style={{ marginTop: 18, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6 }}>
             {subElemento.itens.length === 0 ? (
               <span style={{ fontSize: 12, color: '#9098a8' }}>Sem dados para este elemento.</span>
             ) : (

@@ -45,8 +45,10 @@ export async function GET(req: NextRequest) {
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO`, 1)
     const ano = filtros.ano || Number(anoR.rows[0]?.[0]) || new Date().getFullYear()
 
+    // TOP 200 cobre folgadamente o total de subelementos distintos (128 em 2026) — o gráfico
+    // mostra todos, com scroll no lugar de cortar nos 10 maiores.
     const itensR = await agentQuery(`
-      SELECT TOP 10 nd.DS_SUB_ELEMENTO AS subelemento, el.DS_ELEMENTO_DESPESA AS elemento,
+      SELECT TOP 200 nd.DS_SUB_ELEMENTO AS subelemento, el.DS_ELEMENTO_DESPESA AS elemento,
         SUM(f.${col}) AS v
       FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
       JOIN ${SCHEMA}.DIM_BIORC_NATUREZA_DESPESA nd ON f.SK_NATUREZA_DESPESA = nd.SK_NATUREZA_DESPESA
@@ -57,7 +59,7 @@ export async function GET(req: NextRequest) {
         AND el.DS_ELEMENTO_DESPESA IS NOT NULL
         ${filtroElemento}${we}
       GROUP BY nd.DS_SUB_ELEMENTO, el.DS_ELEMENTO_DESPESA
-      ORDER BY v DESC`, 10)
+      ORDER BY v DESC`, 200)
 
     const itens = itensR.rows.map(r => ({
       subelemento: String(r[0]),
