@@ -6,7 +6,7 @@ import LoadingOverlay from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Tip {
-  chart: 'report' | 'arrec' | 'categoria'
+  chart: 'report' | 'arrec' | 'categoria' | 'subelemento'
   left: string
   top: string
   title: string
@@ -106,13 +106,11 @@ const FALLBACK_DESPESA_MES: PorMes[] = _LIQ_ANT.map((ant, i) => {
 })
 
 interface SubElementoItem { subelemento: string; elemento: string; liquidado: number }
-interface SubElementoData { ano: number; elemento: string; elementos: string[]; itens: SubElementoItem[] }
+interface SubElementoData { ano: number; itens: SubElementoItem[] }
 
 // Liquidado por SubElemento — real (substituído pelo fetch de /api/despesa/liquidado-subelemento)
 const FALLBACK_SUBELEMENTO: SubElementoData = {
   ano: 2026,
-  elemento: 'TODOS',
-  elementos: [],
   itens: [
     { subelemento: 'VENCIMENTOS E SALÁRIOS', elemento: 'VENCIMENTOS E VANTAGENS FIXAS - PESSOAL CIVIL', liquidado: 67525017.60 },
     { subelemento: 'CONTRATO DE GESTÃO', elemento: 'CONTRATO DE GESTÃO', liquidado: 52626420.89 },
@@ -268,7 +266,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   const [catDrill, setCatDrill] = useState<string | null>(null) // categoria selecionada (drill p/ grupo)
   const [fornecedores, setFornecedores] = useState<FornecedoresData>(FALLBACK_FORNECEDORES)
   const [subElemento, setSubElemento] = useState<SubElementoData>(FALLBACK_SUBELEMENTO)
-  const [elementoSel, setElementoSel] = useState('TODOS')
+  const [subElemDrill, setSubElemDrill] = useState<string | null>(null) // elemento selecionado (drill p/ subelemento)
   const [carregando, setCarregando] = useState(false)
   const [top10, setTop10] = useState(false)        // filtra os 10 maiores fornecedores
   const [buscaForn, setBuscaForn] = useState('')   // busca de fornecedor
@@ -277,17 +275,10 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   const ind = filtros.indicador || 'Liquidado'     // indicador selecionado (reflete nos títulos)
   const qs = buildQS(filtros)
 
-  // Ao trocar filtros, volta o drill da rosca para a raiz
-  useEffect(() => { setCatDrill(null) }, [qs])
+  // Ao trocar filtros, volta os drills para a raiz
+  useEffect(() => { setCatDrill(null); setSubElemDrill(null) }, [qs])
 
-  useEffect(() => {
-    let vivo = true
-    const sep = qs ? '&' : '?'
-    fetchJsonRetry(`/api/despesa/liquidado-subelemento${qs}${sep}elemento=${encodeURIComponent(elementoSel)}`).then(d => { if (vivo && d) setSubElemento(d) })
-    return () => { vivo = false }
-  }, [elementoSel, qs])
-
-  // Busca gráficos + KPIs + fornecedores juntos e controla o overlay de carregamento
+  // Busca gráficos + KPIs + fornecedores + subelemento juntos e controla o overlay de carregamento
   useEffect(() => {
     let vivo = true
     setCarregando(true)
@@ -302,6 +293,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
       }),
       fetchJsonRetry(`/api/despesa/kpis${qs}`).then(d => { if (vivo && d?.kpis?.length) setKpis(d.kpis) }),
       fetchJsonRetry(`/api/despesa/fornecedores${qs}`).then(d => { if (vivo && d?.itens?.length) setFornecedores(d) }),
+      fetchJsonRetry(`/api/despesa/liquidado-subelemento${qs}`).then(d => { if (vivo && d?.itens?.length) setSubElemento(d) }),
     ]).finally(() => { if (vivo) { clearTimeout(safety); setCarregando(false) } })
     return () => { vivo = false; clearTimeout(safety) }
   }, [qs])
@@ -315,6 +307,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
   const tipReport = tip && tip.chart === 'report' ? tip : null
   const tipArrec = tip && tip.chart === 'arrec' ? tip : null
   const tipCategoria = tip && tip.chart === 'categoria' ? tip : null
+  const tipSub = tip && tip.chart === 'subelemento' ? tip : null
 
   const gl = geomLinha(despesaAno)
   const gb = geomBar(despesaMes)
@@ -455,42 +448,62 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>{ind} por SubElemento</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: '#9098a8' }}>Elemento:</span>
-              <select
-                value={elementoSel}
-                onChange={e => setElementoSel(e.target.value)}
-                style={{ fontSize: 11, fontWeight: 600, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 10, padding: '4px 8px', background: '#fff', fontFamily: 'inherit', cursor: 'pointer', maxWidth: 140 }}
-              >
-                <option value="TODOS">TODOS</option>
-                {subElemento.elementos.map(el => (
-                  <option key={el} value={el}>{el}</option>
-                ))}
-              </select>
-            </div>
+            {subElemDrill ? (
+              <button onClick={() => setSubElemDrill(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
+            ) : null}
           </div>
           {(() => {
-            const max = subElemento.itens[0]?.liquidado || 1
-            const linha = (it: typeof subElemento.itens[number], i: number) => {
-              const pct = Math.max(2, (it.liquidado / max) * 100)
+            const porElemento = new Map<string, number>()
+            for (const it of subElemento.itens) porElemento.set(it.elemento, (porElemento.get(it.elemento) ?? 0) + it.liquidado)
+            const nivel0 = [...porElemento.entries()].map(([label, v]) => ({ label, v })).sort((a, b) => b.v - a.v)
+            const nivel1 = subElemDrill
+              ? subElemento.itens.filter(it => it.elemento === subElemDrill).map(it => ({ label: it.subelemento, v: it.liquidado })).sort((a, b) => b.v - a.v)
+              : []
+            const itens = subElemDrill ? nivel1 : nivel0
+            const max = Math.max(1, ...itens.map(i => i.v))
+
+            const linha = (it: { label: string; v: number }, i: number) => {
+              const pct = Math.max(2, (it.v / max) * 100)
               return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={it.subelemento}>{it.subelemento}</span>
+                <div key={i} onClick={() => { if (!subElemDrill) setSubElemDrill(it.label) }}
+                  onMouseEnter={(e) => {
+                    const wrap = e.currentTarget.parentElement
+                    if (!wrap) return
+                    const wrapRect = wrap.getBoundingClientRect()
+                    const rowRect = e.currentTarget.getBoundingClientRect()
+                    const left = ((rowRect.left + rowRect.width * (pct / 100) - wrapRect.left) / wrapRect.width) * 100
+                    const top = ((rowRect.top - wrapRect.top) / wrapRect.height) * 100
+                    setTip({ chart: 'subelemento', title: it.label, l1: fmtReais(it.v), l1c: '#283e93', left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` })
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !subElemDrill ? 'pointer' : 'default' }}>
+                  <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={it.label}>{it.label}</span>
                   <div style={{ flex: 1, height: 14, background: '#eef1f7', borderRadius: 7, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${pct.toFixed(1)}%`, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', borderRadius: 7 }} />
                   </div>
-                  <span style={{ flex: 'none', fontSize: 11, fontWeight: 600, color: '#283e93', minWidth: 48, textAlign: 'right' }}>{fmtAbrev(it.liquidado)}</span>
+                  <span style={{ flex: 'none', fontSize: 11, fontWeight: 600, color: '#283e93', minWidth: 48, textAlign: 'right' }}>{fmtAbrev(it.v)}</span>
                 </div>
               )
             }
-            return subElemento.itens.length === 0 ? (
-              <div style={{ marginTop: 18 }}><span style={{ fontSize: 12, color: '#9098a8' }}>Sem dados para este elemento.</span></div>
-            ) : (
-              // maxHeight ~ altura de 10 linhas (o que era exibido por padrão antes) — os
-              // demais subelementos ficam disponíveis rolando dentro do mesmo bloco.
-              <div style={{ marginTop: 18, maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6 }}>
-                {subElemento.itens.map(linha)}
-              </div>
+            return (
+              <>
+                {subElemDrill ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 10, fontSize: 11 }}>
+                    <span style={{ color: '#283e93', fontWeight: 600 }}>Elemento:</span>
+                    <span title={subElemDrill} style={{ color: '#5b6477', fontWeight: 600, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subElemDrill}</span>
+                  </div>
+                ) : null}
+                {itens.length === 0 ? (
+                  <div style={{ marginTop: 18 }}><span style={{ fontSize: 12, color: '#9098a8' }}>Sem dados para este elemento.</span></div>
+                ) : (
+                  // maxHeight ~ altura de 10 linhas — os demais itens ficam disponíveis
+                  // rolando dentro do mesmo bloco.
+                  <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6 }}>
+                    {itens.map(linha)}
+                    {tipSub ? <Tooltip t={tipSub} /> : null}
+                  </div>
+                )}
+                {!subElemDrill && itens.length ? <div style={{ marginTop: 10, fontSize: 10.5, color: '#aeb6c6' }}>Clique numa barra para ver os subelementos</div> : null}
+              </>
             )
           })()}
         </div>
