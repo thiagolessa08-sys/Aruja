@@ -468,21 +468,14 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                 </div>
               )
             }
-            const top10 = subElemento.itens.slice(0, 10)
-            const resto = subElemento.itens.slice(10)
             return subElemento.itens.length === 0 ? (
               <div style={{ marginTop: 18 }}><span style={{ fontSize: 12, color: '#9098a8' }}>Sem dados para este elemento.</span></div>
             ) : (
-              <>
-                <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 11 }}>
-                  {top10.map(linha)}
-                </div>
-                {resto.length ? (
-                  <div style={{ marginTop: 11, maxHeight: 176, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6, borderTop: '1px solid #eef1f7', paddingTop: 11 }}>
-                    {resto.map(linha)}
-                  </div>
-                ) : null}
-              </>
+              // maxHeight ~ altura de 10 linhas (o que era exibido por padrão antes) — os
+              // demais subelementos ficam disponíveis rolando dentro do mesmo bloco.
+              <div style={{ marginTop: 18, maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6 }}>
+                {subElemento.itens.map(linha)}
+              </div>
             )
           })()}
         </div>
