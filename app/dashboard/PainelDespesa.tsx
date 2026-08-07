@@ -454,25 +454,37 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
               </select>
             </div>
           </div>
-          <div style={{ marginTop: 18, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6 }}>
-            {subElemento.itens.length === 0 ? (
-              <span style={{ fontSize: 12, color: '#9098a8' }}>Sem dados para este elemento.</span>
-            ) : (
-              subElemento.itens.map((it, i) => {
-                const max = subElemento.itens[0]?.liquidado || 1
-                const pct = Math.max(2, (it.liquidado / max) * 100)
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={it.subelemento}>{it.subelemento}</span>
-                    <div style={{ flex: 1, height: 14, background: '#eef1f7', borderRadius: 7, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct.toFixed(1)}%`, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', borderRadius: 7 }} />
-                    </div>
-                    <span style={{ flex: 'none', fontSize: 11, fontWeight: 600, color: '#283e93', minWidth: 48, textAlign: 'right' }}>{fmtAbrev(it.liquidado)}</span>
+          {(() => {
+            const max = subElemento.itens[0]?.liquidado || 1
+            const linha = (it: typeof subElemento.itens[number], i: number) => {
+              const pct = Math.max(2, (it.liquidado / max) * 100)
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={it.subelemento}>{it.subelemento}</span>
+                  <div style={{ flex: 1, height: 14, background: '#eef1f7', borderRadius: 7, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct.toFixed(1)}%`, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', borderRadius: 7 }} />
                   </div>
-                )
-              })
-            )}
-          </div>
+                  <span style={{ flex: 'none', fontSize: 11, fontWeight: 600, color: '#283e93', minWidth: 48, textAlign: 'right' }}>{fmtAbrev(it.liquidado)}</span>
+                </div>
+              )
+            }
+            const top10 = subElemento.itens.slice(0, 10)
+            const resto = subElemento.itens.slice(10)
+            return subElemento.itens.length === 0 ? (
+              <div style={{ marginTop: 18 }}><span style={{ fontSize: 12, color: '#9098a8' }}>Sem dados para este elemento.</span></div>
+            ) : (
+              <>
+                <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                  {top10.map(linha)}
+                </div>
+                {resto.length ? (
+                  <div style={{ marginTop: 11, maxHeight: 176, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6, borderTop: '1px solid #eef1f7', paddingTop: 11 }}>
+                    {resto.map(linha)}
+                  </div>
+                ) : null}
+              </>
+            )
+          })()}
         </div>
       </div>
 
