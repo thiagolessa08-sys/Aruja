@@ -141,7 +141,7 @@ export default function DashboardPage() {
                   <option value="">Mês: Todos</option>
                   {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
-                <select aria-label="Secretaria" value={fSec} onChange={e => setFSec(e.target.value)} style={selectPill}>
+                <select aria-label="Secretaria" value={fSec} onChange={e => setFSec(e.target.value)} style={{ ...selectPill, maxWidth: 'none', width: 'max-content' }}>
                   <option value="">Secretaria: Todas</option>
                   {opts.secretarias.map(s => <option key={s.uo} value={s.uo}>{s.nome}</option>)}
                 </select>
