@@ -18,7 +18,7 @@ export default function DashboardPage() {
   // Opções e estado dos filtros (painel de Despesa)
   const [opts, setOpts] = useState<{ anos: number[]; secretarias: { uo: string; nome: string }[] }>({ anos: [], secretarias: [] })
   const [fAno, setFAno] = useState<number | ''>('')
-  const [fMes, setFMes] = useState('')
+  const [fMes, setFMes] = useState(() => String(new Date().getMonth() + 1)) // mês corrente por padrão
   const [fSec, setFSec] = useState('')
   const [fInd, setFInd] = useState('Liquidado')
 
