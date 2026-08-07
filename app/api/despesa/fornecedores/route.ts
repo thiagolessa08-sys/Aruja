@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, whereExtra, indCol } from '@/lib/despesa-filtros'
+import { lerFiltros, whereExtra, whereUO, indCol } from '@/lib/despesa-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -12,15 +12,29 @@ export async function GET(req: NextRequest) {
   try {
     const filtros = lerFiltros(req.nextUrl.searchParams)
     const ordCol = indCol(filtros.indicador) // ordena pelo indicador escolhido
-    // mesExato=true: com mês selecionado, mostra só o valor DAQUELE mês (não o acumulado
-    // jan→mês) — o usuário quer ver quem foi pago/liquidado/empenhado naquele mês específico.
-    const we = whereExtra(filtros, true)
 
     const anoR = await agentQuery(`
       SELECT MAX(d.NO_ANO) AS ano
       FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
       JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO`, 1)
     const ano = filtros.ano || Number(anoR.rows[0]?.[0]) || new Date().getFullYear()
+
+    // Com mês selecionado: mostra só o valor DAQUELE mês (mesExato) — o usuário quer ver quem
+    // foi pago/liquidado/empenhado naquele mês específico.
+    // Com "Todos" (sem mês): acumula jan→último mês com dado do ano selecionado, em vez de
+    // somar o ano inteiro sem critério.
+    let mesFiltro = filtros.mes
+    let mesExato = true
+    if (!mesFiltro) {
+      const mesR = await agentQuery(`
+        SELECT MAX(d.NO_MES) AS mes
+        FROM ${SCHEMA}.FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO f
+        JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON f.SK_DATA_CALENDARIO_MES = d.SK_DATA_CALENDARIO
+        WHERE d.NO_ANO = ${ano}${whereUO('f.SK_INSTITUCIONAL', filtros.secretaria)}`, 1)
+      mesFiltro = Number(mesR.rows[0]?.[0]) || null
+      mesExato = false
+    }
+    const we = whereExtra({ ...filtros, mes: mesFiltro }, mesExato)
 
     const [itensR, totalR] = await Promise.all([
       agentQuery(`
