@@ -14,8 +14,13 @@ interface Kpi {
   dir: 'up' | 'down' | 'flat'
 }
 
+// bilhão -> "bi", milhão -> "mi", milhar -> "k" (mesma convenção dos gráficos).
 function fmtMi(v: number): string {
-  return (v / 1_000_000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
+  const av = Math.abs(v)
+  if (av >= 1e9) return (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
+  if (av >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
+  if (av >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' k'
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function variacao(atual: number, anterior: number): { pct: string; dir: 'up' | 'down' | 'flat' } {
