@@ -14,6 +14,7 @@ interface Tip {
   l1c: string
   l2?: string
   l2c?: string
+  fixed?: boolean // usa position:fixed com coordenadas de viewport (px) — escapa do overflow:auto de listas com rolagem
 }
 
 const TABELA: { mes: string; vals: string[] }[] = [
@@ -343,7 +344,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
 
   function Tooltip({ t }: { t: Tip }) {
     return (
-      <div style={{ position: 'absolute', left: t.left, top: t.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '9px 12px', boxShadow: '0 8px 18px rgba(20,40,90,0.25)', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
+      <div style={{ position: t.fixed ? 'fixed' : 'absolute', left: t.left, top: t.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '9px 12px', boxShadow: '0 8px 18px rgba(20,40,90,0.25)', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{t.title}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 5 }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l1c }}></span>{t.l1}
@@ -467,13 +468,11 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
               return (
                 <div key={i} onClick={() => { if (!subElemDrill) setSubElemDrill(it.label) }}
                   onMouseEnter={(e) => {
-                    const wrap = e.currentTarget.parentElement
-                    if (!wrap) return
-                    const wrapRect = wrap.getBoundingClientRect()
+                    // Lista tem rolagem própria (overflow:auto) — usa position:fixed com
+                    // coordenadas de viewport para o tooltip não ser cortado pelo clip do scroll.
                     const rowRect = e.currentTarget.getBoundingClientRect()
-                    const left = ((rowRect.left + rowRect.width * (pct / 100) - wrapRect.left) / wrapRect.width) * 100
-                    const top = ((rowRect.top - wrapRect.top) / wrapRect.height) * 100
-                    setTip({ chart: 'subelemento', title: it.label, l1: fmtReais(it.v), l1c: '#283e93', left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` })
+                    const left = rowRect.left + rowRect.width * (pct / 100)
+                    setTip({ chart: 'subelemento', title: it.label, l1: fmtReais(it.v), l1c: '#283e93', left: `${left.toFixed(0)}px`, top: `${rowRect.top.toFixed(0)}px`, fixed: true })
                   }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !subElemDrill ? 'pointer' : 'default' }}>
                   <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={it.label}>{it.label}</span>
@@ -497,7 +496,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                 ) : (
                   // maxHeight ~ altura de 10 linhas — os demais itens ficam disponíveis
                   // rolando dentro do mesmo bloco.
-                  <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6 }}>
+                  <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 18, maxHeight: 260, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 6 }}>
                     {itens.map(linha)}
                     {tipSub ? <Tooltip t={tipSub} /> : null}
                   </div>
