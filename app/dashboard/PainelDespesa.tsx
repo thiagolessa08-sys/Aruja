@@ -475,7 +475,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                     setTip({ chart: 'subelemento', title: it.label, l1: fmtReais(it.v), l1c: '#283e93', left: `${left.toFixed(0)}px`, top: `${rowRect.top.toFixed(0)}px`, fixed: true })
                   }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !subElemDrill ? 'pointer' : 'default' }}>
-                  <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={it.label}>{it.label}</span>
+                  <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.label}</span>
                   <div style={{ flex: 1, height: 14, background: '#eef1f7', borderRadius: 7, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${pct.toFixed(1)}%`, background: 'linear-gradient(90deg,#283e93 0%,#5870c4 100%)', borderRadius: 7 }} />
                   </div>
