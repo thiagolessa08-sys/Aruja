@@ -209,6 +209,28 @@ function geomGrupoBars(d: { grupo: string; label: string; lancado: number; debit
   return { bars, ticks, W, H, bottom, bw }
 }
 
+// ===== Velocímetro (gauge semicircular) do Score de Contribuinte — 5 faixas A-E =====
+const GAUGE_ZONAS: { banda: 'E' | 'D' | 'C' | 'B' | 'A'; lo: number; hi: number }[] = [
+  { banda: 'E', lo: 0, hi: 20 },
+  { banda: 'D', lo: 20, hi: 40 },
+  { banda: 'C', lo: 40, hi: 60 },
+  { banda: 'B', lo: 60, hi: 80 },
+  { banda: 'A', lo: 80, hi: 100 },
+]
+function geomGaugeScore(valor: number) {
+  const v = Math.max(0, Math.min(100, valor))
+  const cx = 100, cy = 108, r = 74
+  const angOf = (x: number) => Math.PI - (x / 100) * Math.PI
+  const pt = (x: number, raio = r) => ({ x: cx + raio * Math.cos(angOf(x)), y: cy - raio * Math.sin(angOf(x)) })
+  const zonas = GAUGE_ZONAS.map(z => {
+    const p1 = pt(z.lo), p2 = pt(z.hi)
+    const mid = pt((z.lo + z.hi) / 2, r + 15)
+    return { ...z, cor: BANDA_COR[z.banda], path: `M ${p1.x.toFixed(1)} ${p1.y.toFixed(1)} A ${r} ${r} 0 0 1 ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`, labelX: mid.x.toFixed(1), labelY: mid.y.toFixed(1) }
+  })
+  const agulha = pt(v, 56)
+  return { zonas, cx, cy, nx: agulha.x.toFixed(1), ny: agulha.y.toFixed(1), v }
+}
+
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   if (dir === 'up') return azul ? '#6ee0a0' : '#1fa463'
   if (dir === 'down') return azul ? '#ff9b8a' : '#d64545'
@@ -726,14 +748,25 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
           {(() => {
             const sc = g.score
             const tot = sc.total || 1
+            const gg = geomGaugeScore(sc.mediaGeral)
+            const bandaAtual = GAUGE_ZONAS.find(z => gg.v >= z.lo && gg.v <= z.hi)?.banda ?? 'E'
             return (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
-                <div style={{ display: 'flex', height: 32, borderRadius: 10, overflow: 'hidden', marginTop: 22, background: '#eef1f7' }}>
-                  {sc.bandas.map(b => (
-                    <div key={b.banda} title={`Faixa ${b.banda}: ${fmtInt(b.n)} (${fmtPct(b.n / tot * 100)})`} style={{ width: `${(b.n / tot * 100).toFixed(2)}%`, background: BANDA_COR[b.banda] }} />
-                  ))}
+                <div style={{ position: 'relative', marginTop: 4, maxWidth: 230, marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
+                  <svg viewBox="0 0 200 155" width="100%" style={{ display: 'block' }}>
+                    {gg.zonas.map(z => (
+                      <path key={z.banda} d={z.path} fill="none" stroke={z.cor} strokeWidth="18" />
+                    ))}
+                    {gg.zonas.map(z => (
+                      <text key={z.banda} x={z.labelX} y={z.labelY} fontSize="10" fontWeight="700" fill={z.cor} textAnchor="middle" style={axisFont}>{z.banda}</text>
+                    ))}
+                    <line x1={String(gg.cx)} y1={String(gg.cy)} x2={gg.nx} y2={gg.ny} stroke="#1f2a44" strokeWidth="2.5" strokeLinecap="round" />
+                    <circle cx={String(gg.cx)} cy={String(gg.cy)} r="5" fill="#1f2a44" />
+                    <text x={String(gg.cx)} y={String(gg.cy + 24)} fontSize="20" fontWeight="700" fill="#1f2a44" textAnchor="middle" style={axisFont}>{gg.v.toFixed(1)}</text>
+                    <text x={String(gg.cx)} y={String(gg.cy + 38)} fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>faixa {bandaAtual} · média geral</text>
+                  </svg>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
                   {sc.bandas.map(b => (
                     <div key={b.banda} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                       <span style={{ width: 11, height: 11, borderRadius: 3, background: BANDA_COR[b.banda], flex: 'none' }}></span>
