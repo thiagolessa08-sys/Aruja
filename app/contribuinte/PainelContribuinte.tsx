@@ -14,6 +14,7 @@ interface Setor { setor: string; label: string; n: number }
 interface SitItem { label: string; n: number; pct: number }
 interface Evol { ano: number; novos: number; pf: number; pj: number; pctPj: number }
 interface Vinculo { campo: string; label: string; n: number }
+interface ContribuinteItem { cd: number; nome: string; doc: string; email: string; telefone: string; endereco: string }
 interface Score { adimplente: number; emCobranca: number; total: number; pctAdimplente: number }
 interface Graficos {
   novosPorAno: NovoAno[]
@@ -224,13 +225,13 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   // Drill do gráfico "Vínculos do Contribuinte": clique num vínculo → lista de contribuintes
   const [vinculoSel, setVinculoSel] = useState<Vinculo | null>(null)
   const [buscaVinculo, setBuscaVinculo] = useState('')
-  const [contribuintesVinculo, setContribuintesVinculo] = useState<{ cd: number; nome: string; doc: string }[]>([])
+  const [contribuintesVinculo, setContribuintesVinculo] = useState<ContribuinteItem[]>([])
   const [carregandoVinculo, setCarregandoVinculo] = useState(false)
 
   // Drill do gráfico "Qualificação do Contribuinte": clique numa qualificação → lista de contribuintes
   const [qualifSel, setQualifSel] = useState<Vinculo | null>(null)
   const [buscaQualif, setBuscaQualif] = useState('')
-  const [contribuintesQualif, setContribuintesQualif] = useState<{ cd: number; nome: string; doc: string }[]>([])
+  const [contribuintesQualif, setContribuintesQualif] = useState<ContribuinteItem[]>([])
   const [carregandoQualif, setCarregandoQualif] = useState(false)
 
   const qs = buildQS(filtros)
@@ -340,6 +341,23 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
         {t.l2 ? <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.l2c }}></span>{t.l2}
         </div> : null}
+      </div>
+    )
+  }
+
+  // Linha de contribuinte nas listas de drill (Vínculos / Qualificação): dados cadastrais.
+  function ContribuinteRow({ c }: { c: ContribuinteItem }) {
+    return (
+      <div style={{ padding: '10px 6px', borderRadius: 8, borderBottom: '1px solid #f0f2f8' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{c.nome || '—'}</span>
+          <span style={{ fontSize: 10.5, color: '#5b6477', fontWeight: 600, flex: 'none' }}>{c.doc || '—'}</span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 4 }}>
+          <span style={{ fontSize: 10.5, color: '#9098a8' }}>{c.email || '—'}</span>
+          <span style={{ fontSize: 10.5, color: '#9098a8' }}>{c.telefone || '—'}</span>
+        </div>
+        <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 2 }}>{c.endereco || '—'}</div>
       </div>
     )
   }
@@ -658,10 +676,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
               </div>
               <div style={{ marginTop: 10, maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {contribuintesVinculo.length ? contribuintesVinculo.map(c => (
-                  <div key={c.cd} style={{ padding: '8px 6px', borderRadius: 8, borderBottom: '1px solid #f0f2f8' }}>
-                    <div style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{c.nome || '—'}</div>
-                    <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 1 }}>{c.doc || '—'}</div>
-                  </div>
+                  <ContribuinteRow key={c.cd} c={c} />
                 )) : !carregandoVinculo ? (
                   <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum contribuinte encontrado.</div>
                 ) : null}
@@ -754,10 +769,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
             </div>
             <div style={{ marginTop: 10, maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
               {contribuintesQualif.length ? contribuintesQualif.map(c => (
-                <div key={c.cd} style={{ padding: '8px 6px', borderRadius: 8, borderBottom: '1px solid #f0f2f8' }}>
-                  <div style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{c.nome || '—'}</div>
-                  <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 1 }}>{c.doc || '—'}</div>
-                </div>
+                <ContribuinteRow key={c.cd} c={c} />
               )) : !carregandoQualif ? (
                 <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum contribuinte encontrado.</div>
               ) : null}
