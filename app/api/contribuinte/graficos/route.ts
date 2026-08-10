@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
       agentQuery(`
         SELECT SUM(ic_pessoa_contribuinte_mobiliario) AS mob, SUM(ic_pessoa_proprietario) AS prop,
           SUM(ic_pessoa_itbi) AS itbi, SUM(ic_pessoa_socio) AS socio,
-          SUM(ic_tomador_servico) AS tomador, SUM(ic_pessoa_responsavel_tributario) AS resp
+          SUM(ic_tomador_servico) AS tomador, SUM(ic_pessoa_responsavel_tributario) AS resp,
+          SUM(ic_pessoa_compromissario) AS comp, SUM(ic_pessoa_posseiro) AS poss
         FROM ${SCHEMA}.tb_dsod_contribuinte_pessoa`, 10),
       dataAtualizacaoContribuinte(),
     ])
@@ -123,6 +124,15 @@ export async function GET(req: NextRequest) {
       { campo: 'ic_pessoa_responsavel_tributario', label: 'Responsável tributário', n: num(v[5]) },
     ].filter(x => x.n > 0).sort((a, b) => b.n - a.n)
 
+    // Qualificação do Contribuinte frente ao imóvel/tributo (mesma origem dos vínculos).
+    const qualificacoes = [
+      { campo: 'ic_pessoa_proprietario', label: 'Proprietários dos Imóveis', n: num(v[1]) },
+      { campo: 'ic_pessoa_compromissario', label: 'Compromissários', n: num(v[6]) },
+      { campo: 'ic_pessoa_posseiro', label: 'Posseiros', n: num(v[7]) },
+      { campo: 'ic_pessoa_responsavel_tributario', label: 'Responsáveis Tributários', n: num(v[5]) },
+      { campo: 'ic_pessoa_contribuinte_mobiliario', label: 'Empresários', n: num(v[0]) },
+    ].filter(x => x.n > 0).sort((a, b) => b.n - a.n)
+
     // Score de adimplência: em cobrança acumulada × adimplente
     const totalBase = pfTotal + pjTotal
     const emCobranca = devRows.rows
@@ -141,6 +151,7 @@ export async function GET(req: NextRequest) {
       situacao,
       devedores,
       vinculos,
+      qualificacoes,
       score,
       evolucao,
       pessoaFiltro: f.pessoa || null,

@@ -14,6 +14,8 @@ const CAMPOS_VALIDOS = new Set([
   'ic_pessoa_socio',
   'ic_tomador_servico',
   'ic_pessoa_responsavel_tributario',
+  'ic_pessoa_compromissario',
+  'ic_pessoa_posseiro',
 ])
 
 export async function GET(req: NextRequest) {
