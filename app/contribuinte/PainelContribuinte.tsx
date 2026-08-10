@@ -15,7 +15,8 @@ interface SitItem { label: string; n: number; pct: number }
 interface Evol { ano: number; novos: number; pf: number; pj: number; pctPj: number }
 interface Vinculo { campo: string; label: string; n: number }
 interface ContribuinteItem { cd: number; nome: string; doc: string; email: string; telefone: string; endereco: string }
-interface Score { adimplente: number; emCobranca: number; total: number; pctAdimplente: number }
+interface ScoreBanda { banda: 'A' | 'B' | 'C' | 'D' | 'E'; n: number; media: number }
+interface Score { bandas: ScoreBanda[]; mediaGeral: number; total: number }
 interface Graficos {
   novosPorAno: NovoAno[]
   pfpj: { f: number; j: number }
@@ -91,7 +92,17 @@ const FALLBACK_GRAF: Graficos = {
     { campo: 'ic_pessoa_posseiro', label: 'Posseiros', n: 2136 },
     { campo: 'ic_pessoa_responsavel_tributario', label: 'Responsáveis Tributários', n: 453 },
   ],
-  score: { adimplente: 116762, emCobranca: 64343, total: 181105, pctAdimplente: 64.5 },
+  score: {
+    total: 187835,
+    mediaGeral: 8.9,
+    bandas: [
+      { banda: 'A', n: 58, media: 87.6 },
+      { banda: 'B', n: 187, media: 68.1 },
+      { banda: 'C', n: 24126, media: 45.0 },
+      { banda: 'D', n: 9577, media: 30.7 },
+      { banda: 'E', n: 153887, media: 1.0 },
+    ],
+  },
   dataAtualizacao: null,
 }
 const INSIGHTS_FALLBACK = [
@@ -102,6 +113,8 @@ const INSIGHTS_FALLBACK = [
 
 const SETOR_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#e8962e']
 const SIT_CORES: Record<string, string> = { 'Ativo': '#1fa463', 'Em cadastramento': '#e8962e', 'Sem informação': '#c5ccdb' }
+const BANDA_COR: Record<string, string> = { A: '#1fa463', B: '#6ee0a0', C: '#e8962e', D: '#e0703e', E: '#d64545' }
+const BANDA_RANGE: Record<string, string> = { A: '80–100', B: '60–80', C: '40–60', D: '20–40', E: 'abaixo de 20' }
 
 // ===== Barras empilhadas: PF × PJ por ano =====
 function geomStacked(d: NovoAno[]) {
@@ -647,7 +660,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
         </div>
       </div>
 
-      {/* ===== ROW 3: Vínculos + Score de Adimplência ===== */}
+      {/* ===== ROW 3: Vínculos + Score de Contribuinte (CRC) ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
         {/* Vínculos — clique num vínculo faz drill para a lista de contribuintes */}
         <div style={card}>
@@ -701,40 +714,33 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
           )}
         </div>
 
-        {/* Score de Adimplência */}
+        {/* Score de Contribuinte (CRC) */}
         <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Score de Adimplência</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Score de Contribuinte (CRC)</span>
             <span style={dots}>···</span>
           </div>
-          <div style={{ fontSize: 12, color: '#9098a8', marginTop: 4 }}>contribuintes sem cobrança × em cobrança acumulada</div>
+          <div style={{ fontSize: 12, color: '#9098a8', marginTop: 4 }}>
+            cadastro completo (10) + vínculo CCM (45) + vínculo imóvel (45) − parcelas vencidas (1 cada) · média geral {g.score.mediaGeral.toFixed(1)} pts
+          </div>
           {(() => {
             const sc = g.score
-            const dc = 2 * Math.PI * 56
-            const lenAd = sc.total ? (sc.adimplente / sc.total) * dc : 0
+            const tot = sc.total || 1
             return (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-                  <svg viewBox="0 0 200 200" width="240" height="240" style={{ maxWidth: '100%' }}>
-                    <g transform="rotate(-90 100 100)">
-                      <circle cx="100" cy="100" r="56" fill="none" stroke="#e8962e" strokeWidth="30" strokeDasharray={`${dc.toFixed(1)} 0`} />
-                      <circle cx="100" cy="100" r="56" fill="none" stroke="#1fa463" strokeWidth="30" strokeDasharray={`${lenAd.toFixed(1)} ${(dc - lenAd).toFixed(1)}`} />
-                    </g>
-                    <text x="100" y="96" fontSize="24" fontWeight="700" fill="#1fa463" textAnchor="middle" style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>{fmtPct(sc.pctAdimplente)}</text>
-                    <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}>adimplentes</text>
-                  </svg>
+                <div style={{ display: 'flex', height: 32, borderRadius: 10, overflow: 'hidden', marginTop: 22, background: '#eef1f7' }}>
+                  {sc.bandas.map(b => (
+                    <div key={b.banda} title={`Faixa ${b.banda}: ${fmtInt(b.n)} (${fmtPct(b.n / tot * 100)})`} style={{ width: `${(b.n / tot * 100).toFixed(2)}%`, background: BANDA_COR[b.banda] }} />
+                  ))}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 18 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                    <span style={{ width: 11, height: 11, borderRadius: 3, background: '#1fa463', flex: 'none' }}></span>
-                    <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>Sem cobrança</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(sc.adimplente)}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                    <span style={{ width: 11, height: 11, borderRadius: 3, background: '#e8962e', flex: 'none' }}></span>
-                    <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>Em cobrança acumulada</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(sc.emCobranca)}</span>
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
+                  {sc.bandas.map(b => (
+                    <div key={b.banda} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: BANDA_COR[b.banda], flex: 'none' }}></span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>Faixa {b.banda} <span style={{ color: '#9098a8' }}>({BANDA_RANGE[b.banda]})</span></span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(b.n)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(b.n / tot * 100)})</span></span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )

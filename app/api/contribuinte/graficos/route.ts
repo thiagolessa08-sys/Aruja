@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, SETOR_LABEL, SETORES_OCULTOS, dataAtualizacaoContribuinte } from '@/lib/contribuinte-filtros'
+import { lerFiltros, SETOR_LABEL, SETORES_OCULTOS, dataAtualizacaoContribuinte, scoreContribuinte } from '@/lib/contribuinte-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    const [anoRows, sitRows, devRows, vincRows, dataAtualizacao] = await Promise.all([
+    const [anoRows, sitRows, devRows, vincRows, dataAtualizacao, score] = await Promise.all([
       agentQuery(`
         SELECT YEAR(dt_inscr) AS ano, ic_pessoa AS p, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
           SUM(ic_pessoa_compromissario) AS comp, SUM(ic_pessoa_posseiro) AS poss
         FROM ${SCHEMA}.tb_dsod_contribuinte_pessoa`, 10),
       dataAtualizacaoContribuinte(),
+      scoreContribuinte(),
     ])
 
     // Novos por ano (PF × PJ) — últimos anos
@@ -132,18 +133,6 @@ export async function GET(req: NextRequest) {
       { campo: 'ic_pessoa_responsavel_tributario', label: 'Responsáveis Tributários', n: num(v[5]) },
       { campo: 'ic_pessoa_contribuinte_mobiliario', label: 'Empresários', n: num(v[0]) },
     ].filter(x => x.n > 0).sort((a, b) => b.n - a.n)
-
-    // Score de adimplência: em cobrança acumulada × adimplente
-    const totalBase = pfTotal + pjTotal
-    const emCobranca = devRows.rows
-      .filter(r => String(r[0] ?? '').trim() === 'CobrancaAcumulada')
-      .reduce((a, r) => a + (Number(r[1]) || 0), 0)
-    const score = {
-      adimplente: Math.max(0, totalBase - emCobranca),
-      emCobranca,
-      total: totalBase,
-      pctAdimplente: totalBase ? ((totalBase - emCobranca) / totalBase) * 100 : 0,
-    }
 
     return NextResponse.json({
       novosPorAno,
