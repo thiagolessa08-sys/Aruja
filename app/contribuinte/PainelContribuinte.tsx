@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
+import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 
 export interface FiltrosContribuinteUI { ano: number | ''; pessoa: '' | 'F' | 'J'; mes?: number | '' }
 
@@ -207,6 +208,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   const [tributos, setTributos] = useState<{ grupo: string; label: string; lancado: number; debito: number }[] | null>(null)
   const [drillAnoNovos, setDrillAnoNovos] = useState<number | null>(null)
   const [serieMesNovos, setSerieMesNovos] = useState<{ mes: number; pf: number; pj: number }[] | null>(null)
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
   // Drill do gráfico "Vínculos do Contribuinte": clique num vínculo → lista de contribuintes
   const [vinculoSel, setVinculoSel] = useState<Vinculo | null>(null)
@@ -261,6 +263,29 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   const g = graf ?? FALLBACK_GRAF
   const gs = geomStacked(g.novosPorAno)
 
+  // Relatório (PDF/Excel): cards = KPIs da tela; tabela = Evolução da Base por Ano.
+  async function gerarRelatorio(tipo: 'pdf' | 'excel') {
+    if (!graf || gerandoRelatorio) return
+    setGerandoRelatorio(true)
+    try {
+      const pessoaLbl = filtros.pessoa === 'F' ? 'Pessoa Física' : filtros.pessoa === 'J' ? 'Pessoa Jurídica' : 'Pessoa Física e Jurídica'
+      const dados: DadosRelatorio = {
+        titulo: `Contribuintes${filtros.ano ? ` — Exercício ${filtros.ano}` : ''}`,
+        subtitulo: `${pessoaLbl}${filtros.mes ? ` · acumulado até o mês ${filtros.mes}` : ''}`,
+        cards: kpis.map(k => ({ rotulo: k.label, valor: k.value })),
+        colunas: ['Exercício', 'Novos Cadastros', 'Pessoa Física', 'Pessoa Jurídica', '% PJ'],
+        linhas: g.evolucao.map(row => [row.ano, fmtInt(row.novos), fmtInt(row.pf), fmtInt(row.pj), fmtPct(row.pctPj)]),
+        arquivo: `Contribuintes${filtros.ano ? '-' + filtros.ano : ''}`,
+      }
+      const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
+      await fn(dados)
+    } catch {
+      alert('Não foi possível gerar o relatório. Tente novamente.')
+    } finally {
+      setGerandoRelatorio(false)
+    }
+  }
+
   // Donut PF × PJ
   const totPfPj = (g.pfpj.f + g.pfpj.j) || 1
   const donutC = 2 * Math.PI * 56
@@ -300,6 +325,18 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   return (
     <div style={{ position: 'relative' }}>
       {!graf ? <LoadingOverlay label="Carregando…" /> : null}
+
+      {/* Barra de relatórios (Excel/PDF a partir dos KPIs + evolução da base) */}
+      {graf ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
+          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
+            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* ===== KPIs ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
