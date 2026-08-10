@@ -93,6 +93,12 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const filtroImovelQ = imovelFiltro ? `&imovel=${imovelFiltro}` : ''
   const filtroLabel = imovelFiltro ? `Imóvel ${imovelFiltro}${ruaFiltro ? ` — ${ruaFiltro}` : ''}` : bairroFiltro ? (ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro) : null
 
+  // Drill do gráfico "Imóveis por situação da guia": clique numa situação → lista de imóveis
+  const [situacaoSel, setSituacaoSel] = useState<string | null>(null)
+  const [buscaSituacao, setBuscaSituacao] = useState('')
+  const [imoveisSituacao, setImoveisSituacao] = useState<{ cd: number; nome: string; inscricao: string; numero: string }[]>([])
+  const [carregSituacao, setCarregSituacao] = useState(false)
+
   // Imóveis por situação da guia × status de pagamento
   useEffect(() => {
     if (!ano) return
@@ -100,6 +106,24 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
     fetchJson(`/api/tca/resumo?ano=${ano}${filtroBairroQ}${filtroRuaQ}${filtroImovelQ}`).then(d => { if (vivo && d && !d.error) setRes(d) })
     return () => { vivo = false }
   }, [ano, filtroBairroQ, filtroRuaQ, filtroImovelQ])
+
+  // Volta o drill de situação p/ raiz quando ano ou bairro/rua/imóvel filtrados mudam
+  useEffect(() => { setSituacaoSel(null); setBuscaSituacao('') }, [ano, filtroBairroQ, filtroRuaQ, filtroImovelQ])
+
+  useEffect(() => {
+    if (!situacaoSel || !ano) { setImoveisSituacao([]); return }
+    let vivo = true
+    setCarregSituacao(true)
+    const t = setTimeout(() => {
+      const p = new URLSearchParams({ ano: String(ano), situacao: situacaoSel })
+      if (bairroFiltro) p.set('bairro', bairroFiltro)
+      if (bairroFiltro && ruaFiltro) p.set('rua', ruaFiltro)
+      if (imovelFiltro) p.set('imovel', String(imovelFiltro))
+      fetchJson(`/api/tca/situacao-imoveis?${p}`).then(d => { if (vivo && d?.itens) setImoveisSituacao(d.itens) })
+        .finally(() => { if (vivo) setCarregSituacao(false) })
+    }, 250)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [situacaoSel, ano, bairroFiltro, ruaFiltro, imovelFiltro])
 
   useEffect(() => {
     let vivo = true
@@ -388,30 +412,87 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           ) : null}
           {res ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: filtroLabel ? 8 : 18 }}>
-              {[
-                { titulo: 'Imóveis por situação da guia', itens: res.situacao.map(s => ({ rot: s.situacao, qt: s.qt, cor: '#283e93' })) },
-                { titulo: 'Imóveis por status de pagamento', itens: res.pagamento.map(p => ({ rot: p.status, qt: p.qt, cor: p.cor })) },
-              ].map(bloco => {
-                const mx = Math.max(1, ...bloco.itens.map(i => i.qt))
-                return (
-                  <div key={bloco.titulo} style={card}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{bloco.titulo}</span>
-                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
-                      {bloco.itens.map((it, i) => (
-                        <div key={i}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                            <span style={{ color: '#3a4256', fontWeight: 600 }}>{it.rot}</span>
-                            <span style={{ color: it.cor, fontWeight: 700 }}>{it.qt.toLocaleString('pt-BR')}</span>
-                          </div>
-                          <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${Math.max(3, 100 * it.qt / mx).toFixed(1)}%`, borderRadius: 8, background: it.cor }} />
-                          </div>
-                        </div>
-                      ))}
+              {/* Imóveis por situação da guia — clique numa situação faz drill para os imóveis */}
+              <div style={card}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  {situacaoSel ? (
+                    <button onClick={() => { setSituacaoSel(null); setBuscaSituacao('') }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 15, fontWeight: 600 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+                      {situacaoSel}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis por situação da guia</span>
+                  )}
+                </div>
+                {situacaoSel ? (
+                  <div style={{ marginTop: 12, position: 'relative' }}>
+                    {carregSituacao ? <LoadingOverlay label="Carregando imóveis…" /> : null}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                      <input value={buscaSituacao} onChange={e => setBuscaSituacao(e.target.value)} placeholder="Buscar proprietário ou inscrição…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
                     </div>
+                    {(() => {
+                      const q = buscaSituacao.trim().toUpperCase()
+                      const lista = q ? imoveisSituacao.filter(im => im.nome.toUpperCase().includes(q) || im.inscricao.toUpperCase().includes(q)) : imoveisSituacao
+                      return (
+                        <div style={{ marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {lista.length ? lista.map(im => (
+                            <div key={im.cd} style={{ padding: '8px 6px', borderRadius: 8, borderBottom: '1px solid #f0f2f8' }}>
+                              <div style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{im.nome || '—'}</div>
+                              <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 1 }}>{[im.inscricao ? `Insc. ${im.inscricao}` : '', im.numero ? `Nº ${im.numero}` : ''].filter(Boolean).join(' · ') || '—'}</div>
+                            </div>
+                          )) : !carregSituacao ? (
+                            <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum imóvel encontrado.</div>
+                          ) : null}
+                          {imoveisSituacao.length >= 3000 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 3000 primeiros — refine a busca para ver mais.</div> : null}
+                        </div>
+                      )
+                    })()}
                   </div>
-                )
-              })}
+                ) : (() => {
+                  const mx = Math.max(1, ...res.situacao.map(s => s.qt))
+                  return (
+                    <>
+                      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                        {res.situacao.map(s => (
+                          <div key={s.situacao} onClick={() => setSituacaoSel(s.situacao)} style={{ cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                              <span style={{ color: '#3a4256', fontWeight: 600 }}>{s.situacao}</span>
+                              <span style={{ color: '#283e93', fontWeight: 700 }}>{s.qt.toLocaleString('pt-BR')}</span>
+                            </div>
+                            <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.max(3, 100 * s.qt / mx).toFixed(1)}%`, borderRadius: 8, background: '#283e93' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique numa situação para ver os imóveis</div>
+                    </>
+                  )
+                })()}
+              </div>
+
+              {/* Imóveis por status de pagamento */}
+              <div style={card}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis por status de pagamento</span>
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                  {(() => {
+                    const mx = Math.max(1, ...res.pagamento.map(p => p.qt))
+                    return res.pagamento.map(p => (
+                      <div key={p.status}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                          <span style={{ color: '#3a4256', fontWeight: 600 }}>{p.status}</span>
+                          <span style={{ color: p.cor, fontWeight: 700 }}>{p.qt.toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.max(3, 100 * p.qt / mx).toFixed(1)}%`, borderRadius: 8, background: p.cor }} />
+                        </div>
+                      </div>
+                    ))
+                  })()}
+                </div>
+              </div>
             </div>
           ) : null}
 

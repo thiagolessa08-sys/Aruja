@@ -3,6 +3,7 @@
 // Isento usa tb_extr_isencoes.ds_tipo_isencao = 'IsentoTaxas' (regra própria da TCA).
 import { agentQuery } from '@/lib/agent'
 import { cached, TTL_15MIN } from '@/lib/cache'
+import { detalhesImoveis } from '@/lib/iptu-agg'
 
 const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
@@ -287,5 +288,28 @@ export async function resumoTca(f: FiltrosResumoTca): Promise<ResumoTca> {
       { status: 'Em aberto', qt: fp.emAberto, cor: '#d64545' },
     ]
     return { situacao, pagamento }
+  })
+}
+
+// ===================== DRILL: imóveis de uma situação da guia (gráfico "Imóveis por
+// situação da guia") — mesma identificação (inscrição/número/proprietário) usada no drill
+// de bairro/rua/imóvel. =====================
+export interface ImovelSituacaoTca { cd: number; nome: string; inscricao: string; numero: string }
+
+export async function imoveisPorSituacaoTca(ano: number, situacao: string, f: FiltrosTca = {}): Promise<ImovelSituacaoTca[]> {
+  return cached(`tcaSitImoveis:${ano}:${situacao}:${chaveFiltro(f)}`, TTL_15MIN, async () => {
+    const { join: jb, where: jbw } = filtroImovelTca(f)
+    const semSituacao = situacao === '—'
+    const condSit = semSituacao ? `(g.ds_situacao IS NULL OR g.ds_situacao = '')` : `g.ds_situacao = '${situacao.replace(/'/g, "''")}'`
+    const r = await agentQuery(`
+      SELECT DISTINCT TOP 3000 g.cd_origem
+      FROM ${S}.tb_dsod_guias g ${jb}
+      WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} AND ${condSit}${jbw}`, 3000)
+    const cds = r.rows.map(row => String(row[0])).filter(c => c && c !== '0')
+    const det = await detalhesImoveis(cds)
+    return cds.map(cd => {
+      const d = det.get(cd)
+      return { cd: Number(cd), nome: d?.proprietario || `Imóvel ${cd}`, inscricao: d?.inscricao || '', numero: d?.numero || '' }
+    }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   })
 }
