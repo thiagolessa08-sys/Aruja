@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, SETOR_LABEL, SETORES_OCULTOS } from '@/lib/contribuinte-filtros'
+import { lerFiltros, SETOR_LABEL, SETORES_OCULTOS, dataAtualizacaoContribuinte } from '@/lib/contribuinte-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    const [anoRows, sitRows, devRows, vincRows] = await Promise.all([
+    const [anoRows, sitRows, devRows, vincRows, dataAtualizacao] = await Promise.all([
       agentQuery(`
         SELECT YEAR(dt_inscr) AS ano, ic_pessoa AS p, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
           SUM(ic_pessoa_itbi) AS itbi, SUM(ic_pessoa_socio) AS socio,
           SUM(ic_tomador_servico) AS tomador, SUM(ic_pessoa_responsavel_tributario) AS resp
         FROM ${SCHEMA}.tb_dsod_contribuinte_pessoa`, 10),
+      dataAtualizacaoContribuinte(),
     ])
 
     // Novos por ano (PF × PJ) — últimos anos
@@ -143,6 +144,7 @@ export async function GET(req: NextRequest) {
       score,
       evolucao,
       pessoaFiltro: f.pessoa || null,
+      dataAtualizacao,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

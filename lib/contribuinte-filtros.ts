@@ -1,6 +1,21 @@
 // Filtros da tela de Contribuinte (tabela flat tb_dsod_contribuinte)
 // Restrição IQ: nada de literal de texto no WHERE → GROUP BY + filtro em JS.
 
+import { agentQuery } from './agent'
+import { cached, TTL_15MIN } from './cache'
+
+const SCHEMA = 'pref_aruja_sp'
+
+// Data de atualização dos dados = MAX(dt_alter_ods) da base de contribuintes.
+export async function dataAtualizacaoContribuinte(): Promise<string | null> {
+  return cached('dataAtualizContribuinte', TTL_15MIN, async () => {
+    const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${SCHEMA}.tb_dsod_contribuinte`, 1)
+    const v = r.rows[0]?.[0]
+    if (!v) return null
+    return String(v).slice(0, 10) // 'YYYY-MM-DD'
+  })
+}
+
 export interface FiltrosContribuinte {
   ano: number | ''      // ano de inscrição (dt_inscr) em destaque / exercício de lançamento (guias)
   pessoa: '' | 'F' | 'J' // tipo de pessoa

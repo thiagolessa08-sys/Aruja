@@ -23,11 +23,13 @@ interface Graficos {
   vinculos: Vinculo[]
   score: Score
   evolucao: Evol[]
+  dataAtualizacao: string | null
 }
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
 
 const KPIS_FALLBACK: KpiCard[] = [
   { label: 'Total Contribuintes', value: '181.105', subLabel: 'Novos 2026', subValue: '13.076', pct: '-32,60%', dir: 'down' },
@@ -81,6 +83,7 @@ const FALLBACK_GRAF: Graficos = {
     { campo: 'ic_pessoa_responsavel_tributario', label: 'Responsável tributário', n: 452 },
   ],
   score: { adimplente: 116762, emCobranca: 64343, total: 181105, pctAdimplente: 64.5 },
+  dataAtualizacao: null,
 }
 const INSIGHTS_FALLBACK = [
   'A base reúne 181.105 contribuintes — 129.898 PF (71,7%) e 50.894 PJ (28,1%).',
@@ -328,12 +331,17 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
 
       {/* Barra de relatórios (Excel/PDF a partir dos KPIs + evolução da base) */}
       {graf ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
-          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
-            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
-            </button>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, margin: '0 4px' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
+              <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+            Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(graf.dataAtualizacao)}</b>
+          </span>
         </div>
       ) : null}
 
