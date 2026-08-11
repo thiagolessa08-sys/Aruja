@@ -27,6 +27,16 @@ export interface ResumoDivida {
 
 const num = (v: unknown) => Number(v) || 0
 
+// Data de atualização dos dados = MAX(dt_alter_ods) das guias (cross-tributo).
+export async function dataAtualizacaoDivida(): Promise<string | null> {
+  return cached('dataAtualizDivida', TTL_15MIN, async () => {
+    const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${SCHEMA}.tb_dsod_guias`, 1)
+    const v = r.rows[0]?.[0]
+    if (!v) return null
+    return String(v).slice(0, 10) // 'YYYY-MM-DD'
+  })
+}
+
 // `ano` (opcional): restringe TUDO ao exercício de origem da guia (no_exercicio_lancamento).
 // `mes` (opcional): restringe às parcelas com vencimento até o mês informado (acumulado).
 // Sem os dois, mostra o estoque acumulado de sempre (todos os exercícios/meses).

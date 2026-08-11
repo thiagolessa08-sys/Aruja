@@ -13,6 +13,7 @@ interface Resumo {
   debitosPassiveis?: { total: number; quantidade: number; porTributo: { nome: string; valor: number }[] }
   recuperacao?: { lancado: number; pago: number; taxa: number; porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[] }
   situacoes?: { situacao: string; quantidade: number; pct: number }[]
+  dataAtualizacao?: string | null
 }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
 
@@ -21,6 +22,7 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+const fmtData = (d: string | null | undefined) => d ? d.split('-').reverse().join('/') : '—'
 
 const FALLBACK: Resumo = {
   total: 148123000, administrativa: 76900000, judicial: 70900000, ajuizamento: 323000,
@@ -215,12 +217,17 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
 
       {/* Barra de relatórios (Excel/PDF a partir dos KPIs + Estoque por Tributo) */}
       {d ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
-          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
-            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
-            </button>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, margin: '0 4px' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
+              <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+            Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(g.dataAtualizacao)}</b>
+          </span>
         </div>
       ) : null}
 
