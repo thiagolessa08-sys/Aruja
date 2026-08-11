@@ -50,6 +50,23 @@ function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   return azul ? 'rgba(255,255,255,0.6)' : '#9098a8'
 }
 
+// Tendência (regressão linear simples) de uma série anual: inclinação normalizada pela
+// média da série, classificada em alta/baixa/estável (mesmo princípio da projeção usada
+// nas telas de tributo, só que aqui classifica a direção em vez de projetar o próximo ano).
+function tendenciaSerie(pts: { ano: number; v: number }[]): { dir: 'alta' | 'baixa' | 'estavel'; slopeAnual: number } {
+  const n = pts.length
+  if (n < 2) return { dir: 'estavel', slopeAnual: 0 }
+  const sx = pts.reduce((s, p) => s + p.ano, 0), sy = pts.reduce((s, p) => s + p.v, 0)
+  const sxx = pts.reduce((s, p) => s + p.ano * p.ano, 0), sxy = pts.reduce((s, p) => s + p.ano * p.v, 0)
+  const den = n * sxx - sx * sx
+  if (!den) return { dir: 'estavel', slopeAnual: 0 }
+  const slope = (n * sxy - sx * sy) / den
+  const media = sy / n
+  const rel = media ? slope / media : 0
+  const dir = rel > 0.03 ? 'alta' : rel < -0.03 ? 'baixa' : 'estavel'
+  return { dir, slopeAnual: slope }
+}
+
 // Barras pareadas (Lançado × Pago) — Taxa de Recuperação por exercício
 function geomBarsPar(d: { ano: number; lancado: number; pago: number }[]) {
   const W = 960, H = 300, top = 26, bottom = 250
@@ -118,6 +135,17 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const maxTrib = Math.max(1, ...g.porTributo.map(t => t.valor))
   const gb = geomBars(g.porExercicio)
   const gr = geomBarsPar(g.recuperacao?.porExercicio ?? [])
+
+  // Tendências: direção (regressão linear) das novas inscrições e da taxa de recuperação
+  // nos últimos exercícios, mais a variação do último exercício vs o anterior.
+  const recSerie = g.recuperacao?.porExercicio ?? []
+  const recUlt5 = recSerie.slice(-5)
+  const tendInscricoes = tendenciaSerie(recUlt5.map(r => ({ ano: r.ano, v: r.lancado })))
+  const tendTaxa = tendenciaSerie(recUlt5.map(r => ({ ano: r.ano, v: r.taxa })))
+  const atualRec = recSerie[recSerie.length - 1]
+  const antRec = recSerie[recSerie.length - 2]
+  const varInscricoes = atualRec && antRec && antRec.lancado ? ((atualRec.lancado - antRec.lancado) / antRec.lancado) * 100 : null
+  const varTaxaPP = atualRec && antRec ? atualRec.taxa - antRec.taxa : null
 
   // Donut composição
   const comp = [
@@ -309,6 +337,47 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                 <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 2 }}>Pago: {fmtAbrev(tipRec.pago)} ({fmtPct(tipRec.taxa)})</div>
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Tendências */}
+      {recSerie.length >= 2 ? (
+        <div style={{ ...card, marginTop: 18 }}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Tendências da Dívida Ativa</span>
+          <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Direção das novas inscrições e da taxa de recuperação nos últimos exercícios</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 16 }}>
+            <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Novas Inscrições ({atualRec?.ano})</div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: tendInscricoes.dir === 'alta' ? '#d64545' : tendInscricoes.dir === 'baixa' ? '#1fa463' : '#9098a8' }}>
+                  {tendInscricoes.dir === 'alta' ? '↑ Em alta' : tendInscricoes.dir === 'baixa' ? '↓ Em queda' : '→ Estável'}
+                </span>
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#283e93', marginTop: 6 }}>{atualRec ? fmtAbrev(atualRec.lancado) : '—'}</div>
+              {varInscricoes != null ? (
+                <div style={{ fontSize: 11, fontWeight: 600, color: varInscricoes > 0 ? '#d64545' : '#1fa463', marginTop: 4 }}>
+                  {varInscricoes > 0 ? '+' : ''}{varInscricoes.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% vs {antRec?.ano}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Taxa de Recuperação ({atualRec?.ano})</div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: tendTaxa.dir === 'alta' ? '#1fa463' : tendTaxa.dir === 'baixa' ? '#d64545' : '#9098a8' }}>
+                  {tendTaxa.dir === 'alta' ? '↑ Melhorando' : tendTaxa.dir === 'baixa' ? '↓ Piorando' : '→ Estável'}
+                </span>
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#1fa463', marginTop: 6 }}>{atualRec ? fmtPct(atualRec.taxa) : '—'}</div>
+              {varTaxaPP != null ? (
+                <div style={{ fontSize: 11, fontWeight: 600, color: varTaxaPP >= 0 ? '#1fa463' : '#d64545', marginTop: 4 }}>
+                  {varTaxaPP > 0 ? '+' : ''}{varTaxaPP.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} p.p. vs {antRec?.ano}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 12 }}>
+            Direção calculada por regressão linear sobre os últimos {recUlt5.length} exercícios; a variação compara o exercício mais recente ({atualRec?.ano}) com o anterior ({antRec?.ano}).
           </div>
         </div>
       ) : null}
