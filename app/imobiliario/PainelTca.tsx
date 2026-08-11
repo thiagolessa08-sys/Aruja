@@ -367,7 +367,10 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
                         const pl = st?.activePayload?.[0]?.payload
                         if (drillAno) {
                           // Já em visão mensal: clique num mês abre a Arrecadação Diária daquele mês.
-                          if (pl?.mes) setDrillMes(pl.mes)
+                          if (pl?.mes) { setDrillMes(pl.mes); return }
+                          // Fallback: clique na coluna mas fora da barra (mesmo caso do nível de ano).
+                          const idxMes = MESES_R.indexOf(st?.activeLabel ?? '')
+                          if (idxMes >= 0) setDrillMes(idxMes + 1)
                           return
                         }
                         // Clique caiu exatamente na barra → usa o payload (respeita previsto).
