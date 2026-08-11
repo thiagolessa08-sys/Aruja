@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
+import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 
 interface Resumo {
   total: number; administrativa: number; judicial: number; ajuizamento: number
@@ -111,6 +112,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
   // Os filtros de Exercício/Mês (ano/mes) ainda não restringem os dados desta tela —
   // ela sempre mostra o histórico completo acumulado, como antes de os filtros existirem.
@@ -172,6 +174,28 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
     { label: 'Maior Tributo', value: g.porTributo[0] ? fmtMoney(g.porTributo[0].valor) : '—', subLabel: g.porTributo[0]?.nome ?? '', subValue: '', pct: '', dir: 'flat' as const },
   ]
 
+  // Relatório (PDF/Excel): cards = KPIs da tela; tabela = Estoque por Tributo.
+  async function gerarRelatorio(tipo: 'pdf' | 'excel') {
+    if (!d || gerandoRelatorio) return
+    setGerandoRelatorio(true)
+    try {
+      const dados: DadosRelatorio = {
+        titulo: 'Dívida Ativa',
+        subtitulo: `Estoque total inscrito: ${fmtReais(g.total)}`,
+        cards: kpis.map(k => ({ rotulo: k.label, valor: k.value })),
+        colunas: ['Tributo', 'Dívida Ativa', '% do Estoque'],
+        linhas: g.porTributo.map(t => [t.nome, fmtReais(t.valor), fmtPct(g.total ? t.valor / g.total * 100 : 0)]),
+        arquivo: 'DividaAtiva',
+      }
+      const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
+      await fn(dados)
+    } catch {
+      alert('Não foi possível gerar o relatório. Tente novamente.')
+    } finally {
+      setGerandoRelatorio(false)
+    }
+  }
+
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
   const dots: React.CSSProperties = { color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14, flex: 'none' }
@@ -188,6 +212,18 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   return (
     <div style={{ position: 'relative' }}>
       {!d ? <LoadingOverlay label="Carregando…" /> : null}
+
+      {/* Barra de relatórios (Excel/PDF a partir dos KPIs + Estoque por Tributo) */}
+      {d ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
+          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
+            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
