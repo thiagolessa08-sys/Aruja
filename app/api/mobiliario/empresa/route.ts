@@ -83,6 +83,24 @@ function classificarAutonomo(tipoEmpresa: string, atividadeLivre: string): strin
   return RE_PROFISSAO_LIBERAL.test(atividadeLivre) ? 'Profissional Liberal' : 'Autônomo'
 }
 
+// Histórico de cadastros MEI da mesma pessoa (cd_contr) — cobre o caso de MEI que encerrou
+// e reabriu (cada ciclo vira uma linha nova em tb_dsod_contribuinte_mobiliario, com o mesmo
+// cd_contr mas cd_contr_mob diferente). Exclui o registro atual (idAtual) da lista, já que
+// ele já aparece no detalhe principal.
+interface CicloMei { cd: number; situacao: string; dtInicio: string; dtEnc: string }
+async function historicoMei(cdContr: number, idAtual: number): Promise<CicloMei[]> {
+  if (!cdContr) return []
+  const r = await agentQuery(`
+    SELECT m.cd_contr_mob, m.ds_situacao,
+      DATEFORMAT(m.dt_inicio_atividade,'yyyy-mm-dd') dt_ini, DATEFORMAT(m.dt_enc_atividade,'yyyy-mm-dd') dt_enc
+    FROM ${S}.tb_dsod_contribuinte_mobiliario m
+    WHERE m.cd_contr = ${cdContr} AND m.ds_tipo_empresa = 'MEI'
+    ORDER BY m.dt_inicio_atividade`, 50)
+  return r.rows
+    .map(x => ({ cd: num(x[0]), situacao: String(x[1] ?? '').trim(), dtInicio: String(x[2] ?? '').slice(0, 10), dtEnc: String(x[3] ?? '').slice(0, 10) }))
+    .filter(c => c.cd !== idAtual)
+}
+
 // Detalhe da empresa: identidade + atividade principal (ds_grupo — melhor cobertura do
 // que ds_atividade_livre, que é texto livre e fica nulo/vazio na maior parte da base).
 async function detalhe(id: number) {
@@ -91,7 +109,7 @@ async function detalhe(id: number) {
       m.ds_inscricao_municipal, m.vl_capital_social, m.qt_funcionarios,
       DATEFORMAT(m.dt_inicio_atividade,'yyyy-mm-dd') dt_ini, DATEFORMAT(m.dt_enc_atividade,'yyyy-mm-dd') dt_enc,
       c.ds_endereco, c.nm_bairro, c.no_cep, m.no_logr, m.ds_complemento, m.ds_tipo_empresa, cp.no_cnpj_raiz,
-      m.ic_autorizacao_nfe, DATEFORMAT(m.dt_autorizacao_nf,'yyyy-mm-dd') dt_nf
+      m.ic_autorizacao_nfe, DATEFORMAT(m.dt_autorizacao_nf,'yyyy-mm-dd') dt_nf, m.cd_contr
     FROM ${S}.tb_dsod_contribuinte_mobiliario m
     JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = m.cd_contr
     LEFT JOIN ${S}.tb_dsod_cep c ON c.cd_cep = m.cd_cep
@@ -103,7 +121,11 @@ async function detalhe(id: number) {
   const cnpjRaiz = String(x[22] ?? '').trim()
   const emiteNota = String(x[23] ?? '').trim().toUpperCase() === 'A'
   const dtAutorizacaoNf = String(x[24] ?? '').slice(0, 10)
-  const rf = await simplesMei(cnpjRaiz)
+  const cdContr = num(x[25])
+  const [rf, historico] = await Promise.all([
+    simplesMei(cnpjRaiz),
+    tipoEmpresa.toUpperCase() === 'MEI' ? historicoMei(cdContr, id) : Promise.resolve([]),
+  ])
   const atividadeLivre = String(x[7] ?? '').trim()
   return {
     cd: num(x[0]), nome: String(x[1] ?? '').trim(), fantasia: String(x[2] ?? '').trim(),
@@ -129,6 +151,8 @@ async function detalhe(id: number) {
     emiteNota, dtAutorizacaoNf,
     // Sub-tipo do autônomo — aproximado por palavras-chave, ver classificarAutonomo().
     subTipoAutonomo: classificarAutonomo(tipoEmpresa, atividadeLivre),
+    // Outros ciclos de abertura/encerramento do MEI (mesma pessoa, cd_contr_mob diferente).
+    historicoMei: historico,
   }
 }
 

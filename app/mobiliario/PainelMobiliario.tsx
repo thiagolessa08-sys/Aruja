@@ -33,6 +33,7 @@ interface EmpresaDet {
   dtOpcaoSimples: string; dtExclusaoSimples: string; dtOpcaoMei: string; dtExclusaoMei: string
   emiteNota: boolean; dtAutorizacaoNf: string
   subTipoAutonomo: string | null
+  historicoMei: { cd: number; situacao: string; dtInicio: string; dtEnc: string }[]
 }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
@@ -660,6 +661,24 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
                   </div>
                 ))}
               </div>
+              {d.mei && d.historicoMei.length > 0 ? (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>Histórico de Cadastro MEI</div>
+                  <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 2 }}>outros ciclos de abertura/encerramento deste MEI</div>
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {d.historicoMei.map(c => (
+                      <div key={c.cd} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '8px 12px' }}>
+                        <span style={{ fontSize: 12, color: '#3a4256' }}>
+                          {c.dtInicio ? c.dtInicio.split('-').reverse().join('/') : '—'} até {c.dtEnc ? c.dtEnc.split('-').reverse().join('/') : 'atual'}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: c.situacao === 'Ativo' ? '#1fa463' : '#9098a8', background: c.situacao === 'Ativo' ? '#e6f6ee' : '#f4f7fc', border: `1px solid ${c.situacao === 'Ativo' ? '#bfe6cd' : '#e3e9f5'}`, borderRadius: 12, padding: '3px 10px' }}>
+                          {c.situacao || '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )
         })() : null}
