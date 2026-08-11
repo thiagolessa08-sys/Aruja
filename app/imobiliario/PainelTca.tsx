@@ -46,9 +46,7 @@ const svg = (path: React.ReactNode) => (
 function EixoTick({ x, y, payload }: any) {
   return <text x={x} y={y + 14} textAnchor="middle" fontSize={11} fill="#8a93a6" fontWeight={600}>{payload.value}</text>
 }
-const MESES_R = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
-interface Mes { mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
 interface Resumo { situacao: { situacao: string; qt: number }[]; pagamento: { status: string; categoria: string; qt: number; cor: string }[] }
 
 // Insights da TCA — frases derivadas dos cards.
@@ -70,11 +68,9 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(false)
   const [recarregar, setRecarregar] = useState(0)
+  // Drill por dia ao clicar num exercício (ano) do gráfico "Evolução da TCA" — abre direto
+  // a "Arrecadação Diária" do ano inteiro (De 01/01 até 31/12), sem passo intermediário por mês.
   const [drillAno, setDrillAno] = useState<number | null>(null)
-  const [serieMes, setSerieMes] = useState<Mes[] | null>(null)
-  const [carregMes, setCarregMes] = useState(false)
-  // Drill por dia ao clicar num mês (dentro do drill de ano) — "Arrecadação Diária"
-  const [drillMes, setDrillMes] = useState<number | null>(null)
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   const [diario, setDiario] = useState<{ de: string; ate: string; dias: { dia: string; valor: number }[]; total: number } | null>(null)
@@ -158,36 +154,24 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
     return () => { vivo = false }
   }, [ano, mes, filtroBairroQ, filtroRuaQ, filtroImovelQ, recarregar])
 
-  // Drill por mês ao clicar num ano do gráfico
-  useEffect(() => {
-    if (!drillAno) { setSerieMes(null); return }
-    let vivo = true; setCarregMes(true)
-    fetchJson(`/api/tca/mensal?ano=${drillAno}`)
-      .then(d => { if (vivo) setSerieMes(d?.meses ?? null) })
-      .finally(() => { if (vivo) setCarregMes(false) })
-    return () => { vivo = false }
-  }, [drillAno])
   // volta para a visão anual quando o exercício selecionado muda
   useEffect(() => { setDrillAno(null) }, [ano])
-  // volta para a visão mensal quando o ano do drill muda
-  useEffect(() => { setDrillMes(null) }, [drillAno])
 
-  // Drill por dia ao clicar num mês (dentro do drill de ano) — "Arrecadação Diária".
-  // De/Até começam no período do mês clicado, mas ficam editáveis (mesmo padrão do IPTU).
+  // Drill por dia ao clicar num exercício — "Arrecadação Diária" do ano inteiro.
+  // De/Até começam em 01/01–31/12 do ano clicado, mas ficam editáveis (mesmo padrão do IPTU).
   useEffect(() => {
-    if (!drillAno || !drillMes) return
-    const ld = new Date(drillAno, drillMes, 0).getDate()
-    setDe(`${drillAno}-${String(drillMes).padStart(2, '0')}-01`)
-    setAte(`${drillAno}-${String(drillMes).padStart(2, '0')}-${String(ld).padStart(2, '0')}`)
-  }, [drillAno, drillMes])
+    if (!drillAno) { setDe(''); setAte(''); return }
+    setDe(`${drillAno}-01-01`)
+    setAte(`${drillAno}-12-31`)
+  }, [drillAno])
   useEffect(() => {
-    if (!drillMes || !de || !ate) { setDiario(null); return }
+    if (!drillAno || !de || !ate) { setDiario(null); return }
     let vivo = true; setCarregDiario(true); setDiarioErro(false)
     fetchJson(`/api/tca/diario?de=${de}&ate=${ate}`)
       .then(d => { if (!vivo) return; if (d) setDiario(d); else setDiarioErro(true) })
       .finally(() => { if (vivo) setCarregDiario(false) })
     return () => { vivo = false }
-  }, [drillMes, de, ate])
+  }, [drillAno, de, ate])
 
   // Relatório (PDF/Excel) a partir dos cards + evolução do exercício atual.
   async function gerarRelatorio(tipo: 'pdf' | 'excel') {
@@ -247,9 +231,6 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const serie = (v?.evolucao ?? []).map(e => ({ ...e, rot: e.previsto ? `${e.ano}*` : String(e.ano) }))
   const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano
   const insights = v ? insightsTca(v) : null
-  const chartData = drillAno && serieMes
-    ? serieMes.map(m => ({ rot: MESES_R[m.mes - 1], ano: 0, mes: m.mes, previsto: false, arrecPct: 0, inadPct: 0, lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia, isento: 0, suspenso: 0 }))
-    : serie
 
   if (erro && !v) {
     return (
@@ -302,13 +283,13 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           {/* Evolução + Insights */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
             <div style={{ ...card, minWidth: 0, position: 'relative' }}>
-              {carregMes || carregDiario ? <LoadingOverlay label={drillMes ? 'Carregando dias…' : 'Carregando meses…'} /> : null}
+              {carregDiario ? <LoadingOverlay label="Carregando dias…" /> : null}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
-                  {drillMes ? `Arrecadação Diária · ${MESES_LONGO[drillMes - 1]}/${drillAno}${diario ? ` · ${fmtAbrev(diario.total)}` : ''}` : drillAno ? `Evolução mensal · ${drillAno}` : 'Evolução da TCA (3 anos)'}{filtroLabel ? ` · ${filtroLabel}` : ''}
+                  {drillAno ? `Arrecadação Diária · ${drillAno}${diario ? ` · ${fmtAbrev(diario.total)}` : ''}` : 'Evolução da TCA (3 anos)'}{filtroLabel ? ` · ${filtroLabel}` : ''}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {drillMes ? (
+                  {drillAno ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5b6477' }}>
                       <span>De</span>
                       <input type="date" value={de} onChange={e => setDe(e.target.value)} style={{ border: '1.5px solid #e3e9f5', borderRadius: 10, padding: '5px 8px', fontSize: 12, color: '#283e93', fontFamily: 'inherit' }} />
@@ -322,11 +303,10 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
                       ))}
                     </div>
                   )}
-                  {drillMes ? <button onClick={() => setDrillMes(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar aos meses</button>
-                    : drillAno ? <button onClick={() => setDrillAno(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button> : null}
+                  {drillAno ? <button onClick={() => setDrillAno(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button> : null}
                 </div>
               </div>
-              {drillMes ? (
+              {drillAno ? (
                 diario && diario.dias.length ? (() => {
                   const data = diario.dias.map(x => ({ t: new Date(x.dia + 'T00:00:00').getTime(), valor: x.valor }))
                   const ticks: number[] = []
@@ -359,17 +339,12 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
                   <div style={{ fontSize: 12, color: '#9098a8', padding: '40px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>
                 ) : null
               ) : (
-                <div style={{ marginTop: 16, height: 300, cursor: !drillMes ? 'pointer' : 'default' }}>
+                <div style={{ marginTop: 16, height: 300, cursor: 'pointer' }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
+                    <BarChart data={serie} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
                       onClick={(e) => {
-                        const st = e as unknown as { activePayload?: { payload?: { ano?: number; mes?: number; previsto?: boolean } }[]; activeLabel?: string }
+                        const st = e as unknown as { activePayload?: { payload?: { ano?: number; previsto?: boolean } }[]; activeLabel?: string }
                         const pl = st?.activePayload?.[0]?.payload
-                        if (drillAno) {
-                          // Já em visão mensal: clique num mês abre a Arrecadação Diária daquele mês.
-                          if (pl?.mes) setDrillMes(pl.mes)
-                          return
-                        }
                         // Clique caiu exatamente na barra → usa o payload (respeita previsto).
                         if (pl?.ano) { if (!pl.previsto) setDrillAno(pl.ano); return }
                         // Fallback: clique na coluna mas fora da barra — activeLabel é "2027*" p/ previsão
@@ -384,7 +359,7 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
                         contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
                       {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso'] as const).map(dk => (
                         <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência', isento: 'Isento', suspenso: 'Suspenso' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={32} stroke="none">
-                          {chartData.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
+                          {serie.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
                           <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
                         </Bar>
                       ))}
@@ -393,9 +368,8 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
                 </div>
               )}
               <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>
-                {drillMes ? 'Arrecadado por dia de baixa — ajuste o período acima para ver outro intervalo.'
-                  : drillAno ? `Meses de ${drillAno} · lançado/em aberto por mês de vencimento, arrecadado por mês de baixa · clique num mês para detalhar por dia`
-                  : `Clique num ano para detalhar por mês · barras claras = previsão ${anoPrevisto ?? ''} (regressão linear dos últimos 5 anos)`}
+                {drillAno ? 'Arrecadado por dia de baixa — ajuste o período acima para ver outro intervalo.'
+                  : `Clique num ano para detalhar por dia · barras claras = previsão ${anoPrevisto ?? ''} (regressão linear dos últimos 5 anos)`}
               </div>
             </div>
 
