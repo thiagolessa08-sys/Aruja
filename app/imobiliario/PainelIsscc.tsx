@@ -209,8 +209,10 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           </div>
 
           {/* Data de atualização */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-            <span style={{ fontSize: 11, color: '#9098a8' }}>Dados atualizados em <span style={{ color: '#5b6477', fontWeight: 600 }}>{fmtData(v.dataAtualizacao)}</span>{mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+              Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(v.dataAtualizacao)}</b>{mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}
+            </span>
           </div>
 
           {/* 6 KPI cards */}
