@@ -3,6 +3,21 @@
 // então NÃO há helper de WHERE por situação — as queries sempre fazem
 // GROUP BY ds_situacao e o filtro é aplicado em JS.
 
+import { agentQuery } from './agent'
+import { cached, TTL_15MIN } from './cache'
+
+const SCHEMA = 'pref_aruja_sp'
+
+// Data de atualização dos dados = MAX(dt_alter_ods) da base de empresas do Mobiliário.
+export async function dataAtualizacaoMobiliario(): Promise<string | null> {
+  return cached('dataAtualizMobiliario', TTL_15MIN, async () => {
+    const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario`, 1)
+    const v = r.rows[0]?.[0]
+    if (!v) return null
+    return String(v).slice(0, 10) // 'YYYY-MM-DD'
+  })
+}
+
 export interface FiltrosMob {
   ano: number | ''
   situacao: string

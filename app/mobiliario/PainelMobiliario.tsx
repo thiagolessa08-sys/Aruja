@@ -19,6 +19,7 @@ interface Graficos {
   ativInat: { ativas: number; inativas: number }
   abVsEnc: AbEnc[]
   segmentos: Segmento[]
+  dataAtualizacao: string | null
 }
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
@@ -39,7 +40,7 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
-const fmtData = (d: string) => d ? d.split('-').reverse().join('/') : ''
+const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
 
 // Histórico de opção/exclusão do MEI ou Simples Nacional, a partir das datas da Receita
 // Federal (tb_aux_rf_simples) — null quando não há nenhuma data disponível.
@@ -93,6 +94,7 @@ const FALLBACK_GRAF: Graficos = {
     { nome: 'CONSERVATÓRIO MUSICAL', qt: 341, pct: 2.3 },
     { nome: 'INDUSTRIA', qt: 196, pct: 1.3 },
   ],
+  dataAtualizacao: null,
 }
 const INSIGHTS_CAD = [
   'O cadastro mobiliário tem 37.066 empresas, sendo 18.384 ativas (49,6% da base).',
@@ -322,12 +324,17 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
 
       {/* Barra de relatórios (Excel/PDF a partir dos KPIs + ISS Arrecadado por Ano) */}
       {graf ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
-          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
-            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
-            </button>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, margin: '0 4px' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
+              <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+            Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(graf.dataAtualizacao)}</b>
+          </span>
         </div>
       ) : null}
 

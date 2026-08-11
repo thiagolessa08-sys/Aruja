@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, SITUACOES_ATIVAS } from '@/lib/mobiliario-filtros'
+import { lerFiltros, SITUACOES_ATIVAS, dataAtualizacaoMobiliario } from '@/lib/mobiliario-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 const RE_ISS = /IMPOSTOS SOBRE SERVI/i
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     const filtroMesIni = f.mes ? ` AND MONTH(dt_inicio_atividade) <= ${f.mes}` : ''
     const filtroMesEnc = f.mes ? ` AND MONTH(dt_enc_atividade) <= ${f.mes}` : ''
 
-    const [porteRows, grupoRows, abRows, encRows, receita] = await Promise.all([
+    const [porteRows, grupoRows, abRows, encRows, receita, dataAtualizacao] = await Promise.all([
       agentQuery(`
         SELECT ds_situacao AS sit, ds_porte_empresa AS porte, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario
@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON r.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
         WHERE d.NO_ANO BETWEEN 2018 AND 2030
         GROUP BY d.NO_ANO, nr.DS_ALINEA_RECEITA`, 2000),
+      dataAtualizacaoMobiliario(),
     ])
 
     // ---- Composição Ativas × Inativas (base completa, ignora filtro de situação) ----
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest) {
       .slice(-8)
     const abVsEnc = anosFluxo.map(ano => ({ ano, aberturas: ab.get(ano) ?? 0, encerramentos: enc.get(ano) ?? 0 }))
 
-    return NextResponse.json({ porAno, portes, ativInat, abVsEnc, segmentos, referencia: { ano: anoAtual } })
+    return NextResponse.json({ porAno, portes, ativInat, abVsEnc, segmentos, referencia: { ano: anoAtual }, dataAtualizacao })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
