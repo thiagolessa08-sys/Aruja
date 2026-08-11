@@ -19,6 +19,7 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   : (v / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' mi'
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
 
 interface Tip { chart: 'bar' | 'area'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
 
@@ -132,6 +133,7 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
   const [drillAnoInad, setDrillAnoInad] = useState<number | null>(null)
   const [serieMesInad, setSerieMesInad] = useState<MesItem[] | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
   useEffect(() => {
     setSerie(null)
@@ -144,6 +146,7 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
           setSerie(d.serie)
           onAnos?.(d.serie.map((x: SerieItem) => x.ano))
         }
+        if (d && !d.error) setDataAtualizacao(d.dataAtualizacao ?? null)
       }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grupo, mes])
@@ -284,12 +287,17 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
   return (
     <>
       {/* Barra de relatórios (Excel/PDF a partir dos KPIs + série anual) */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
-        {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
-          <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
-          </button>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, margin: '0 4px' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
+            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+          Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(dataAtualizacao)}</b>
+        </span>
       </div>
 
       {/* ===== KPIs ===== */}

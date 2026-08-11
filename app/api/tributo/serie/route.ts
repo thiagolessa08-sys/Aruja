@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { serieTributo } from '@/lib/tributo-engine'
+import { serieTributo, dataAtualizacaoTributo } from '@/lib/tributo-engine'
 import { parseGrupo, LABEL_GRUPO } from '@/lib/tributos'
 
 export async function GET(req: NextRequest) {
@@ -12,8 +12,11 @@ export async function GET(req: NextRequest) {
   const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
 
   try {
-    const serie = await serieTributo(grupo, undefined, undefined, mes)
-    return NextResponse.json({ grupo, label: LABEL_GRUPO[grupo], serie })
+    const [serie, dataAtualizacao] = await Promise.all([
+      serieTributo(grupo, undefined, undefined, mes),
+      dataAtualizacaoTributo(),
+    ])
+    return NextResponse.json({ grupo, label: LABEL_GRUPO[grupo], serie, dataAtualizacao })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

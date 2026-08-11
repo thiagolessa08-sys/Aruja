@@ -453,6 +453,9 @@ export async function dataAtualizacaoIptu(): Promise<string | null> {
     return String(v).slice(0, 10) // 'YYYY-MM-DD'
   })
 }
+// Alias — o dado é o mesmo (data de carga das guias, cross-tributo), reaproveitado pelo
+// painel compartilhado ISS/TFE/TFHS/Outros Tributos (PainelTributo).
+export const dataAtualizacaoTributo = dataAtualizacaoIptu
 
 /**
  * ARRECADADO do IPTU acumulado até um MÊS DE REFERÊNCIA (YTD), por exercício — parcelas
