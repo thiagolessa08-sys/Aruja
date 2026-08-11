@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
+import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 
 export interface FiltrosMobiliario { ano: number | ''; situacao: string; mes?: number | '' }
 
@@ -202,6 +203,7 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
   const [buscaSegmento, setBuscaSegmento] = useState('')
   const [empresasSegmento, setEmpresasSegmento] = useState<EmpresaMatch[]>([])
   const [carregandoSegmento, setCarregandoSegmento] = useState(false)
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
   const qs = buildQS(filtros, foco)
 
@@ -252,6 +254,30 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
   }
 
   const g = graf ?? FALLBACK_GRAF
+
+  // Relatório (PDF/Excel): cards = KPIs da tela; tabela = ISS Arrecadado por Ano.
+  async function gerarRelatorio(tipo: 'pdf' | 'excel') {
+    if (!graf || gerandoRelatorio) return
+    setGerandoRelatorio(true)
+    try {
+      const situacaoLbl = filtros.situacao || 'Todas as situações'
+      const dados: DadosRelatorio = {
+        titulo: `Mobiliário${filtros.ano ? ` — Exercício ${filtros.ano}` : ''}`,
+        subtitulo: `${situacaoLbl}${filtros.mes ? ` · acumulado até o mês ${filtros.mes}` : ''}`,
+        cards: kpis.map(k => ({ rotulo: k.label, valor: k.value })),
+        colunas: ['Ano', 'ISS Arrecadado'],
+        linhas: g.porAno.map(p => [p.ano, fmtMoney(p.iss)]),
+        arquivo: `Mobiliario${filtros.ano ? '-' + filtros.ano : ''}`,
+      }
+      const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
+      await fn(dados)
+    } catch {
+      alert('Não foi possível gerar o relatório. Tente novamente.')
+    } finally {
+      setGerandoRelatorio(false)
+    }
+  }
+
   const gb = geomBarISS(g.porAno)
   const lp = geomLollipop(g.abVsEnc)
   const ai = g.ativInat
@@ -293,6 +319,18 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
   return (
     <div style={{ position: 'relative' }}>
       {!graf ? <LoadingOverlay label="Carregando…" /> : null}
+
+      {/* Barra de relatórios (Excel/PDF a partir dos KPIs + ISS Arrecadado por Ano) */}
+      {graf ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, margin: '0 4px' }}>
+          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
+            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* ===== KPIs ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
