@@ -236,7 +236,7 @@ export async function dataAtualizacaoTca(): Promise<string | null> {
 // Espelha os quadros equivalentes do IPTU (lib/iptu-agg.ts: resumoIptu), restrito ao exercício.
 export interface ResumoTca {
   situacao: { situacao: string; qt: number }[]
-  pagamento: { status: string; qt: number; cor: string }[]
+  pagamento: { status: string; categoria: string; qt: number; cor: string }[]
 }
 
 export interface FiltrosResumoTca extends FiltrosTca { ano: number }
@@ -282,10 +282,10 @@ export async function resumoTca(f: FiltrosResumoTca): Promise<ResumoTca> {
       else if (cat === 'EmAberto') fp.emAberto = qt
     }
     const pagamento = [
-      { status: 'Cota única', qt: fp.cotaUnica, cor: '#1fa463' },
-      { status: 'Pago todas as parcelas', qt: fp.parcelado, cor: '#283e93' },
-      { status: 'Pago parcelado', qt: fp.pagoParcial, cor: '#e8962e' },
-      { status: 'Em aberto', qt: fp.emAberto, cor: '#d64545' },
+      { status: 'Cota única', categoria: 'CotaUnica', qt: fp.cotaUnica, cor: '#1fa463' },
+      { status: 'Pago todas as parcelas', categoria: 'Parcelado', qt: fp.parcelado, cor: '#283e93' },
+      { status: 'Pago parcelado', categoria: 'PagoParcial', qt: fp.pagoParcial, cor: '#e8962e' },
+      { status: 'Em aberto', categoria: 'EmAberto', qt: fp.emAberto, cor: '#d64545' },
     ]
     return { situacao, pagamento }
   })
@@ -302,9 +302,43 @@ export async function imoveisPorSituacaoTca(ano: number, situacao: string, f: Fi
     const semSituacao = situacao === '—'
     const condSit = semSituacao ? `(g.ds_situacao IS NULL OR g.ds_situacao = '')` : `g.ds_situacao = '${situacao.replace(/'/g, "''")}'`
     const r = await agentQuery(`
-      SELECT DISTINCT TOP 3000 g.cd_origem
+      SELECT DISTINCT TOP 300 g.cd_origem
       FROM ${S}.tb_dsod_guias g ${jb}
-      WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} AND ${condSit}${jbw}`, 3000)
+      WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} AND ${condSit}${jbw}`, 300)
+    const cds = r.rows.map(row => String(row[0])).filter(c => c && c !== '0')
+    const det = await detalhesImoveis(cds)
+    return cds.map(cd => {
+      const d = det.get(cd)
+      return { cd: Number(cd), nome: d?.proprietario || `Imóvel ${cd}`, inscricao: d?.inscricao || '', numero: d?.numero || '' }
+    }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  })
+}
+
+// ===================== DRILL: imóveis de um status de pagamento (gráfico "Imóveis por
+// status de pagamento") — mesma categorização de resumoTca, com o imóvel (cd_origem) junto
+// no agrupamento para poder listar. =====================
+const CATEGORIAS_PAGTO = new Set(['CotaUnica', 'Parcelado', 'PagoParcial', 'EmAberto'])
+
+export async function imoveisPorPagamentoTca(ano: number, categoria: string, f: FiltrosTca = {}): Promise<ImovelSituacaoTca[]> {
+  if (!CATEGORIAS_PAGTO.has(categoria)) return []
+  return cached(`tcaPagImoveis:${ano}:${categoria}:${chaveFiltro(f)}`, TTL_15MIN, async () => {
+    const { join: jb, where: jbw } = filtroImovelTca(f)
+    const r = await agentQuery(`
+      SELECT DISTINCT TOP 300 t.cd_origem FROM (
+        SELECT g.cd_origem,
+          CASE
+            WHEN SUM(CASE WHEN p.no_parcela = 0 THEN pp.vl_pagto ELSE 0 END) > 0 THEN 'CotaUnica'
+            WHEN SUM(pp.vl_pagto) = 0 THEN 'EmAberto'
+            WHEN SUM(CASE WHEN p.no_parcela <> 0 THEN pp.vl_saldo ELSE 0 END) <= 0 THEN 'Parcelado'
+            ELSE 'PagoParcial'
+          END AS categoria
+        FROM ${S}.tb_dsod_guias g
+        ${jb}
+        JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo = ${TCA} AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}
+        GROUP BY g.cd_guia, g.cd_origem
+      ) t WHERE t.categoria = '${categoria}'`, 300)
     const cds = r.rows.map(row => String(row[0])).filter(c => c && c !== '0')
     const det = await detalhesImoveis(cds)
     return cds.map(cd => {

@@ -49,7 +49,7 @@ function EixoTick({ x, y, payload }: any) {
 const MESES_R = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 interface Mes { mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }
-interface Resumo { situacao: { situacao: string; qt: number }[]; pagamento: { status: string; qt: number; cor: string }[] }
+interface Resumo { situacao: { situacao: string; qt: number }[]; pagamento: { status: string; categoria: string; qt: number; cor: string }[] }
 
 // Insights da TCA — frases derivadas dos cards.
 function insightsTca(v: Visao): string[] {
@@ -99,6 +99,12 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const [imoveisSituacao, setImoveisSituacao] = useState<{ cd: number; nome: string; inscricao: string; numero: string }[]>([])
   const [carregSituacao, setCarregSituacao] = useState(false)
 
+  // Drill do gráfico "Imóveis por status de pagamento": clique num status → lista de imóveis
+  const [pagtoSel, setPagtoSel] = useState<{ status: string; categoria: string } | null>(null)
+  const [buscaPagto, setBuscaPagto] = useState('')
+  const [imoveisPagto, setImoveisPagto] = useState<{ cd: number; nome: string; inscricao: string; numero: string }[]>([])
+  const [carregPagto, setCarregPagto] = useState(false)
+
   // Imóveis por situação da guia × status de pagamento
   useEffect(() => {
     if (!ano) return
@@ -107,8 +113,8 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
     return () => { vivo = false }
   }, [ano, filtroBairroQ, filtroRuaQ, filtroImovelQ])
 
-  // Volta o drill de situação p/ raiz quando ano ou bairro/rua/imóvel filtrados mudam
-  useEffect(() => { setSituacaoSel(null); setBuscaSituacao('') }, [ano, filtroBairroQ, filtroRuaQ, filtroImovelQ])
+  // Volta os drills p/ raiz quando ano ou bairro/rua/imóvel filtrados mudam
+  useEffect(() => { setSituacaoSel(null); setBuscaSituacao(''); setPagtoSel(null); setBuscaPagto('') }, [ano, filtroBairroQ, filtroRuaQ, filtroImovelQ])
 
   useEffect(() => {
     if (!situacaoSel || !ano) { setImoveisSituacao([]); return }
@@ -124,6 +130,21 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
     }, 250)
     return () => { vivo = false; clearTimeout(t) }
   }, [situacaoSel, ano, bairroFiltro, ruaFiltro, imovelFiltro])
+
+  useEffect(() => {
+    if (!pagtoSel || !ano) { setImoveisPagto([]); return }
+    let vivo = true
+    setCarregPagto(true)
+    const t = setTimeout(() => {
+      const p = new URLSearchParams({ ano: String(ano), categoria: pagtoSel.categoria })
+      if (bairroFiltro) p.set('bairro', bairroFiltro)
+      if (bairroFiltro && ruaFiltro) p.set('rua', ruaFiltro)
+      if (imovelFiltro) p.set('imovel', String(imovelFiltro))
+      fetchJson(`/api/tca/pagamento-imoveis?${p}`).then(d => { if (vivo && d?.itens) setImoveisPagto(d.itens) })
+        .finally(() => { if (vivo) setCarregPagto(false) })
+    }, 250)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [pagtoSel, ano, bairroFiltro, ruaFiltro, imovelFiltro])
 
   useEffect(() => {
     let vivo = true
@@ -445,7 +466,7 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
                           )) : !carregSituacao ? (
                             <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum imóvel encontrado.</div>
                           ) : null}
-                          {imoveisSituacao.length >= 3000 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 3000 primeiros — refine a busca para ver mais.</div> : null}
+                          {imoveisSituacao.length >= 300 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 300 primeiros — refine a busca para ver mais.</div> : null}
                         </div>
                       )
                     })()}
@@ -473,25 +494,65 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
                 })()}
               </div>
 
-              {/* Imóveis por status de pagamento */}
+              {/* Imóveis por status de pagamento — clique num status faz drill para os imóveis */}
               <div style={card}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis por status de pagamento</span>
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
-                  {(() => {
-                    const mx = Math.max(1, ...res.pagamento.map(p => p.qt))
-                    return res.pagamento.map(p => (
-                      <div key={p.status}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                          <span style={{ color: '#3a4256', fontWeight: 600 }}>{p.status}</span>
-                          <span style={{ color: p.cor, fontWeight: 700 }}>{p.qt.toLocaleString('pt-BR')}</span>
-                        </div>
-                        <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.max(3, 100 * p.qt / mx).toFixed(1)}%`, borderRadius: 8, background: p.cor }} />
-                        </div>
-                      </div>
-                    ))
-                  })()}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  {pagtoSel ? (
+                    <button onClick={() => { setPagtoSel(null); setBuscaPagto('') }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 15, fontWeight: 600 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+                      {pagtoSel.status}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis por status de pagamento</span>
+                  )}
                 </div>
+                {pagtoSel ? (
+                  <div style={{ marginTop: 12, position: 'relative' }}>
+                    {carregPagto ? <LoadingOverlay label="Carregando imóveis…" /> : null}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                      <input value={buscaPagto} onChange={e => setBuscaPagto(e.target.value)} placeholder="Buscar proprietário ou inscrição…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+                    </div>
+                    {(() => {
+                      const q = buscaPagto.trim().toUpperCase()
+                      const lista = q ? imoveisPagto.filter(im => im.nome.toUpperCase().includes(q) || im.inscricao.toUpperCase().includes(q)) : imoveisPagto
+                      return (
+                        <div style={{ marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {lista.length ? lista.map(im => (
+                            <div key={im.cd} style={{ padding: '8px 6px', borderRadius: 8, borderBottom: '1px solid #f0f2f8' }}>
+                              <div style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600 }}>{im.nome || '—'}</div>
+                              <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 1 }}>{[im.inscricao ? `Insc. ${im.inscricao}` : '', im.numero ? `Nº ${im.numero}` : ''].filter(Boolean).join(' · ') || '—'}</div>
+                            </div>
+                          )) : !carregPagto ? (
+                            <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum imóvel encontrado.</div>
+                          ) : null}
+                          {imoveisPagto.length >= 300 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 300 primeiros — refine a busca para ver mais.</div> : null}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                ) : (() => {
+                  const mx = Math.max(1, ...res.pagamento.map(p => p.qt))
+                  return (
+                    <>
+                      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                        {res.pagamento.map(p => (
+                          <div key={p.status} onClick={() => setPagtoSel({ status: p.status, categoria: p.categoria })} style={{ cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                              <span style={{ color: '#3a4256', fontWeight: 600 }}>{p.status}</span>
+                              <span style={{ color: p.cor, fontWeight: 700 }}>{p.qt.toLocaleString('pt-BR')}</span>
+                            </div>
+                            <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.max(3, 100 * p.qt / mx).toFixed(1)}%`, borderRadius: 8, background: p.cor }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>Clique num status para ver os imóveis</div>
+                    </>
+                  )
+                })()}
               </div>
             </div>
           ) : null}
