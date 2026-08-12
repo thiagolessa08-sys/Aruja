@@ -31,7 +31,8 @@ Join obrigatório para aplicar o filtro:
   JOIN pref_aruja_sp.DIM_BIORC_TIPO_NATUREZA_RECEITA tn
     ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
 
-Query modelo CORRETA para receita com as três colunas:
+Query modelo CORRETA para receita com as três colunas (o ano abaixo é só ILUSTRATIVO —
+use o exercício mais recente com dados, informado na seção "REGRAS DE NEGÓCIO — ANO / EXERCÍCIO"):
   SELECT
     SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA = 1 THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS receita_bruta,
     SUM(CASE WHEN tn.CD_TIPO_NATUREZA_RECEITA = 2 THEN f.VL_ARRECADACAO_RECEITA ELSE 0 END) AS deducoes,
@@ -41,7 +42,7 @@ Query modelo CORRETA para receita com as três colunas:
     ON f.SK_TIPO_NATUREZA_RECEITA = tn.SK_TIPO_NATUREZA_RECEITA
   JOIN pref_aruja_sp.DIM_BIORC_DATA_CALENDARIO d
     ON f.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
-  WHERE d.NO_ANO = 2025
+  WHERE d.NO_ANO = <exercício mais recente com dados>
 
 NUNCA retorne apenas um valor total de receita sem mostrar bruta e líquida separadamente.
 

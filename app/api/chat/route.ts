@@ -5,7 +5,21 @@ import { agentQuery } from '@/lib/agent'
 import { getSchemaContext } from '@/lib/schema-cache'
 import { getCatalog, catalogToPromptContext } from '@/lib/catalog-cache'
 import { REGRAS_NEGOCIO } from '@/lib/regras-negocio'
+import { cached, TTL_15MIN } from '@/lib/cache'
 import type { Perfil } from '@/lib/perfil'
+
+// Exercício mais recente COM DADOS de execução orçamentária. Descoberto na base em vez de
+// hardcoded: a versão anterior fixava "2025" no prompt e, virado o ano, o chat passou a
+// responder "ano atual" com 2025 mesmo já existindo 2026 carregado.
+async function exercicioMaisRecente(): Promise<number> {
+  return cached('chat:exercicioMaisRecente', TTL_15MIN, async () => {
+    const r = await agentQuery(`
+      SELECT MAX(d.NO_ANO)
+      FROM pref_aruja_sp.FATO_BIORC_EXECUCAO_RECEITA r
+      JOIN pref_aruja_sp.DIM_BIORC_DATA_CALENDARIO d ON r.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO`, 1)
+    return Number(r.rows[0]?.[0]) || new Date().getFullYear()
+  })
+}
 
 // Restrição de tópicos conforme o perfil do usuário
 function restricaoChat(perfil: Perfil): string {
@@ -54,7 +68,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ]
 
-function buildSystemPrompt(schemaContext: string, catalogContext: string): string {
+function buildSystemPrompt(schemaContext: string, catalogContext: string, exercicio: number, hoje: string): string {
   return `Você é um analista de dados sênior da Prefeitura de Arujá (SP).
 Seu trabalho é RESPONDER PERGUNTAS DE NEGÓCIO com dados reais do banco Sybase IQ.
 
@@ -90,10 +104,14 @@ SINTAXE OBRIGATÓRIA — SYBASE IQ:
 ══════════════════════════════════════════
 REGRAS DE NEGÓCIO — ANO / EXERCÍCIO:
 ══════════════════════════════════════════
-• NUNCA use YEAR(NOW()) para filtrar dados orçamentários — o relógio retorna 2026 mas os dados são de 2025.
-• O exercício mais recente com dados é 2025. Use SEMPRE: WHERE d.NO_ANO = 2025
-• Se o usuário pedir "ano atual" ou "este ano" sem especificar, use 2025.
-• Se quiser confirmar o ano mais recente disponível, rode antes:
+• Hoje é ${hoje}. O exercício mais recente COM DADOS de execução é ${exercicio}.
+• Se o usuário pedir "ano atual", "este ano" ou "atualmente" sem especificar, use ${exercicio}:
+    WHERE d.NO_ANO = ${exercicio}
+• NUNCA use YEAR(NOW()) no filtro — o exercício com dados pode estar atrás do relógio
+  (a carga do ano corrente é parcial). Use o número ${exercicio} literalmente.
+• ⚠️ ${exercicio} é ano PARCIAL (carga em andamento). Ao comparar com ${exercicio - 1},
+  avise que a comparação é de ano incompleto vs ano fechado — nunca conclua "queda" sem esse aviso.
+• Se precisar confirmar o ano mais recente disponível, rode antes:
     SELECT MAX(NO_ANO) FROM pref_aruja_sp.DIM_BIORC_DATA_CALENDARIO
   e use esse valor no filtro.
 
@@ -194,7 +212,9 @@ export async function POST(req: NextRequest) {
       const schemaContext = await getSchemaContext(forceRefreshSchema ?? false)
       const catalog = getCatalog()
       const catalogContext = catalog ? catalogToPromptContext(catalog) : ''
-      const systemPrompt = buildSystemPrompt(schemaContext, catalogContext) + restricaoChat(session!.role)
+      const exercicio = await exercicioMaisRecente()
+      const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const systemPrompt = buildSystemPrompt(schemaContext, catalogContext, exercicio, hoje) + restricaoChat(session!.role)
 
       const msgs: Anthropic.MessageParam[] = [...messages]
       let queryCount = 0
