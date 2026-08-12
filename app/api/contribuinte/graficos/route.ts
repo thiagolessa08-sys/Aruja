@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { agentQuery } from '@/lib/agent'
-import { lerFiltros, SETOR_LABEL, SETORES_OCULTOS, dataAtualizacaoContribuinte, scoreContribuinte } from '@/lib/contribuinte-filtros'
+import { lerFiltros, SETOR_LABEL, SETORES_OCULTOS, dataAtualizacaoContribuinte, scoreContribuinte, contribuinteBase } from '@/lib/contribuinte-filtros'
 
 const SCHEMA = 'pref_aruja_sp'
 
@@ -12,11 +12,8 @@ export async function GET(req: NextRequest) {
   try {
     const f = lerFiltros(req.nextUrl.searchParams)
 
-    const [anoRows, sitRows, devRows, vincRows, dataAtualizacao, score] = await Promise.all([
-      agentQuery(`
-        SELECT YEAR(dt_inscr) AS ano, ic_pessoa AS p, COUNT(*) AS n
-        FROM ${SCHEMA}.tb_dsod_contribuinte
-        GROUP BY YEAR(dt_inscr), ic_pessoa`, 400),
+    const [base, sitRows, devRows, vincRows, dataAtualizacao, score] = await Promise.all([
+      contribuinteBase(),
       agentQuery(`
         SELECT ds_sit_cadast AS sit, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte
@@ -36,30 +33,18 @@ export async function GET(req: NextRequest) {
       scoreContribuinte(),
     ])
 
-    // Novos por ano (PF × PJ) — últimos anos
-    const porAno = new Map<number, { pf: number; pj: number }>()
-    let pfTotal = 0, pjTotal = 0
-    for (const r of anoRows.rows) {
-      const ano = Number(r[0])
-      const p = String(r[1] ?? '').trim()
-      const n = Number(r[2]) || 0
-      if (p === 'F') pfTotal += n
-      if (p === 'J') pjTotal += n
-      if (!(ano >= 2010 && ano <= 2030)) continue
-      const cur = porAno.get(ano) ?? { pf: 0, pj: 0 }
-      if (p === 'F') cur.pf += n
-      if (p === 'J') cur.pj += n
-      porAno.set(ano, cur)
-    }
-    const anosOrd = Array.from(porAno.keys()).sort((a, b) => a - b).slice(-9)
+    // Novos por ano (PF × PJ) — últimos anos. pfTotal/pjTotal vêm da mesma fonte
+    // compartilhada dos KPIs/Insights, para o total da base bater em toda a tela.
+    const { pfTot: pfTotal, pjTot: pjTotal, novosPorAno: porAnoMap } = base
+    const anosOrd = Array.from(porAnoMap.keys()).sort((a, b) => a - b).slice(-9)
     const novosPorAno = anosOrd.map(ano => {
-      const v = porAno.get(ano)!
-      return { ano, pf: v.pf, pj: v.pj }
+      const v = porAnoMap.get(ano)!
+      return { ano, pf: v.f, pj: v.j }
     })
     const evolucao = anosOrd.slice().reverse().map(ano => {
-      const v = porAno.get(ano)!
-      const tot = v.pf + v.pj
-      return { ano, novos: tot, pf: v.pf, pj: v.pj, pctPj: tot ? (v.pj / tot) * 100 : 0 }
+      const v = porAnoMap.get(ano)!
+      const tot = v.f + v.j
+      return { ano, novos: tot, pf: v.f, pj: v.j, pctPj: tot ? (v.j / tot) * 100 : 0 }
     })
 
     // Situação cadastral (consolidada)

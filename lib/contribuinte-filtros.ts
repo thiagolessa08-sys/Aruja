@@ -69,6 +69,74 @@ export async function scoreContribuinte(): Promise<ScoreContribuinte> {
   })
 }
 
+export interface ContribuinteBase {
+  totalAll: number; pfTot: number; pjTot: number
+  ativosAll: number; ativosF: number; ativosJ: number
+  novosPorAno: Map<number, { f: number; j: number; t: number }>
+  cobranca: number
+}
+
+// Contagens-base da tela de Contribuinte (total/PF/PJ/ativos/novos por ano/em cobrança).
+// Compartilhada por /api/contribuinte/kpis e /api/contribuinte/insights — antes cada rota
+// rodava sua própria query e podia divergir (cache/timing diferentes entre as duas
+// chamadas); com uma única função cacheada, os dois SEMPRE mostram o mesmo total.
+export async function contribuinteBase(): Promise<ContribuinteBase> {
+  return cached('contribuinteBase', TTL_15MIN, async () => {
+    const [sitRows, anoRows, devRows] = await Promise.all([
+      agentQuery(`
+        SELECT ds_sit_cadast AS sit, ic_pessoa AS p, COUNT(*) AS n
+        FROM ${SCHEMA}.tb_dsod_contribuinte
+        GROUP BY ds_sit_cadast, ic_pessoa`, 200),
+      agentQuery(`
+        SELECT YEAR(dt_inscr) AS ano, ic_pessoa AS p, COUNT(*) AS n
+        FROM ${SCHEMA}.tb_dsod_contribuinte
+        GROUP BY YEAR(dt_inscr), ic_pessoa`, 400),
+      agentQuery(`
+        SELECT ds_setor_devedor AS setor, COUNT(DISTINCT cd_contr) AS n
+        FROM ${SCHEMA}.tb_dsod_devedor_contribuinte
+        GROUP BY ds_setor_devedor`, 100),
+    ])
+
+    // ic_pessoa fora de F/J (branco/nulo) é ruído de cadastro e fica de fora.
+    let totalAll = 0, pfTot = 0, pjTot = 0
+    let ativosAll = 0, ativosF = 0, ativosJ = 0
+    for (const r of sitRows.rows) {
+      const sit = String(r[0] ?? '').trim()
+      const p = String(r[1] ?? '').trim()
+      const n = Number(r[2]) || 0
+      if (p !== 'F' && p !== 'J') continue
+      totalAll += n
+      if (p === 'F') pfTot += n
+      if (p === 'J') pjTot += n
+      if (sit === 'Ativo') {
+        ativosAll += n
+        if (p === 'F') ativosF += n
+        if (p === 'J') ativosJ += n
+      }
+    }
+
+    const novosPorAno = new Map<number, { f: number; j: number; t: number }>()
+    for (const r of anoRows.rows) {
+      const ano = Number(r[0])
+      if (!(ano >= 2010 && ano <= 2030)) continue
+      const p = String(r[1] ?? '').trim()
+      const n = Number(r[2]) || 0
+      const cur = novosPorAno.get(ano) ?? { f: 0, j: 0, t: 0 }
+      if (p === 'F') cur.f += n
+      if (p === 'J') cur.j += n
+      cur.t += n
+      novosPorAno.set(ano, cur)
+    }
+
+    let cobranca = 0
+    for (const r of devRows.rows) {
+      if (String(r[0] ?? '').trim() === 'CobrancaAcumulada') cobranca = Number(r[1]) || 0
+    }
+
+    return { totalAll, pfTot, pjTot, ativosAll, ativosF, ativosJ, novosPorAno, cobranca }
+  })
+}
+
 export interface FiltrosContribuinte {
   ano: number | ''      // ano de inscrição (dt_inscr) em destaque / exercício de lançamento (guias)
   pessoa: '' | 'F' | 'J' // tipo de pessoa
