@@ -148,10 +148,14 @@ export interface FiltrosContribuinte {
 
 // Condição SQL (numérica, sem literal de texto) de "estoque acumulado até o corte":
 // dt_inscr <= fim do ano/mês informado. Sem ano, não filtra (estoque atual = base toda).
+// dt_inscr NULL (52,6% da base — ~98,8 mil contribuintes sem data de cadastro registrada)
+// SEMPRE conta, em qualquer corte: não dá pra provar que foram cadastrados depois do corte
+// só porque a data é desconhecida, e excluí-los faz o total "sumir" pela metade assim que
+// qualquer Ano é selecionado (bug real, já aconteceu: 187.706 → 88.933).
 function condEstoqueDtInscr(f: Pick<FiltrosContribuinte, 'ano' | 'mes'>, coluna = 'dt_inscr'): string {
   if (!f.ano) return ''
-  if (f.mes) return ` AND (YEAR(${coluna}) < ${f.ano} OR (YEAR(${coluna}) = ${f.ano} AND MONTH(${coluna}) <= ${f.mes}))`
-  return ` AND YEAR(${coluna}) <= ${f.ano}`
+  if (f.mes) return ` AND (${coluna} IS NULL OR YEAR(${coluna}) < ${f.ano} OR (YEAR(${coluna}) = ${f.ano} AND MONTH(${coluna}) <= ${f.mes}))`
+  return ` AND (${coluna} IS NULL OR YEAR(${coluna}) <= ${f.ano})`
 }
 
 export interface ContribuinteEstoque {
