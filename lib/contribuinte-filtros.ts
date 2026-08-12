@@ -26,9 +26,11 @@ export interface ScoreContribuinte { bandas: ScoreBanda[]; mediaGeral: number; t
 //  · vínculo com imóvel (proprietário, compromissário ou posseiro)             = 45 pts
 //  · cada parcela vencida (tb_dsod_parcela_posicao.vl_saldo > 0 e vencida)      = -1 pt
 // Total sempre entre 0 e 100. Faixas: A 80-100, B 60-80, C 40-60, D 20-40, E abaixo de 20.
-// Não depende dos filtros da tela (base inteira) — cache de 24h (dado só muda na carga diária).
-export async function scoreContribuinte(): Promise<ScoreContribuinte> {
-  return cached('scoreContribuinte', TTL_15MIN, async () => {
+// Respeita o filtro de Pessoa (F/J) quando informado — Ano/Mês NÃO se aplicam aqui: o
+// score reflete o estado ATUAL do contribuinte (parcelas vencidas até hoje), não uma
+// posição histórica num exercício passado. Cache de 24h (dado só muda na carga diária).
+export async function scoreContribuinte(pessoa: '' | 'F' | 'J' = ''): Promise<ScoreContribuinte> {
+  return cached(`scoreContribuinte:${pessoa || 'all'}`, TTL_15MIN, async () => {
     const r = await agentQuery(`
       SELECT banda, COUNT(*) n, AVG(score) media FROM (
         SELECT CASE WHEN score >= 80 THEN 'A' WHEN score >= 60 THEN 'B' WHEN score >= 40 THEN 'C' WHEN score >= 20 THEN 'D' ELSE 'E' END AS banda, score
@@ -55,6 +57,7 @@ export async function scoreContribuinte(): Promise<ScoreContribuinte> {
               WHERE pp.vl_saldo > 0 AND p.dt_vencimento < getdate() AND g.cd_contr > 0
               GROUP BY g.cd_contr
             ) pv ON pv.cd_contr = c.cd_contr
+            ${pessoa ? `WHERE c.ic_pessoa = '${pessoa}'` : ''}
           ) s1
         ) s2
       ) s3
@@ -141,6 +144,139 @@ export interface FiltrosContribuinte {
   ano: number | ''      // ano de inscrição (dt_inscr) em destaque / exercício de lançamento (guias)
   pessoa: '' | 'F' | 'J' // tipo de pessoa
   mes: number | ''       // mês (acumulado) — parcelas com vencimento até o mês informado
+}
+
+// Condição SQL (numérica, sem literal de texto) de "estoque acumulado até o corte":
+// dt_inscr <= fim do ano/mês informado. Sem ano, não filtra (estoque atual = base toda).
+function condEstoqueDtInscr(f: Pick<FiltrosContribuinte, 'ano' | 'mes'>, coluna = 'dt_inscr'): string {
+  if (!f.ano) return ''
+  if (f.mes) return ` AND (YEAR(${coluna}) < ${f.ano} OR (YEAR(${coluna}) = ${f.ano} AND MONTH(${coluna}) <= ${f.mes}))`
+  return ` AND YEAR(${coluna}) <= ${f.ano}`
+}
+
+export interface ContribuinteEstoque {
+  totalAll: number; pfTot: number; pjTot: number
+  porSituacao: Map<string, { f: number; j: number }>
+}
+
+// Estoque da base (total/PF/PJ/situação) num corte de tempo: contribuintes com dt_inscr
+// até o ano/mês informado. Sem ano, é o estoque atual (equivalente a contribuinteBase(),
+// só que também traz a quebra por situação × pessoa). Usada por KPIs e pelos gráficos
+// "PF × PJ" e "Situação Cadastral" para que o filtro de Exercício/Mês realmente restrinja
+// os números (antes esses três sempre mostravam a base inteira, ignorando o filtro).
+export async function contribuinteEstoque(ano: number | '', mes: number | ''): Promise<ContribuinteEstoque> {
+  const key = `contribuinteEstoque:${ano || 'all'}:${mes || ''}`
+  return cached(key, TTL_15MIN, async () => {
+    const where = condEstoqueDtInscr({ ano, mes })
+    const r = await agentQuery(`
+      SELECT ds_sit_cadast AS sit, ic_pessoa AS p, COUNT(*) AS n
+      FROM ${SCHEMA}.tb_dsod_contribuinte
+      WHERE 1=1${where}
+      GROUP BY ds_sit_cadast, ic_pessoa`, 200)
+
+    let totalAll = 0, pfTot = 0, pjTot = 0
+    const porSituacao = new Map<string, { f: number; j: number }>()
+    for (const row of r.rows) {
+      const sit = String(row[0] ?? '').trim()
+      const p = String(row[1] ?? '').trim()
+      const n = Number(row[2]) || 0
+      if (p !== 'F' && p !== 'J') continue
+      totalAll += n
+      if (p === 'F') pfTot += n
+      if (p === 'J') pjTot += n
+      const cur = porSituacao.get(sit) ?? { f: 0, j: 0 }
+      if (p === 'F') cur.f += n
+      if (p === 'J') cur.j += n
+      porSituacao.set(sit, cur)
+    }
+    return { totalAll, pfTot, pjTot, porSituacao }
+  })
+}
+
+export interface DevedorSetor { setor: string; n: number }
+
+// Devedores por setor (distinct contribuintes), respeitando ano/mês/pessoa quando
+// informados. Compartilhada entre o KPI "Em Cobrança" e o gráfico "Contribuintes com
+// Pendência por Setor" — mesma lógica, uma só fonte.
+export async function devedoresPorSetor(f: FiltrosContribuinte): Promise<DevedorSetor[]> {
+  const key = `contribuinteDevedores:${f.ano || 'all'}:${f.mes || ''}:${f.pessoa || ''}`
+  return cached(key, TTL_15MIN, async () => {
+    if (!f.ano && !f.mes && !f.pessoa) {
+      const r = await agentQuery(`
+        SELECT ds_setor_devedor AS setor, COUNT(DISTINCT cd_contr) AS n
+        FROM ${SCHEMA}.tb_dsod_devedor_contribuinte
+        GROUP BY ds_setor_devedor`, 100)
+      return r.rows.map(row => ({ setor: String(row[0] ?? '').trim(), n: Number(row[1]) || 0 }))
+    }
+    const cond: string[] = []
+    let joins = ''
+    if (f.pessoa) {
+      joins += ` JOIN ${SCHEMA}.tb_dsod_contribuinte c ON c.cd_contr = dc.cd_contr`
+      cond.push(`c.ic_pessoa = '${f.pessoa}'`)
+    }
+    if (f.ano || f.mes) {
+      joins += ` JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_devedor = dc.cd_devedor`
+      if (f.ano) cond.push(`g.no_exercicio_lancamento = ${f.ano}`)
+      if (f.mes) {
+        joins += ` JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia`
+        cond.push(`MONTH(p.dt_vencimento) <= ${f.mes}`)
+      }
+    }
+    const r = await agentQuery(`
+      SELECT dc.ds_setor_devedor AS setor, COUNT(DISTINCT dc.cd_contr) AS n
+      FROM ${SCHEMA}.tb_dsod_devedor_contribuinte dc
+      ${joins}
+      WHERE ${cond.join(' AND ')}
+      GROUP BY dc.ds_setor_devedor`, 100)
+    return r.rows.map(row => ({ setor: String(row[0] ?? '').trim(), n: Number(row[1]) || 0 }))
+  })
+}
+
+export interface VinculosContribuinte {
+  mob: number; prop: number; itbi: number; socio: number; tomador: number; resp: number; comp: number; poss: number
+}
+
+// Vínculos/Qualificação do contribuinte (flags 0/1 em tb_dsod_contribuinte_pessoa),
+// respeitando ano/mês (estoque até o corte, via dt_inscr) e pessoa quando informados.
+export async function vinculosContribuinte(f: FiltrosContribuinte): Promise<VinculosContribuinte> {
+  const key = `contribuinteVinculos:${f.ano || 'all'}:${f.mes || ''}:${f.pessoa || ''}`
+  return cached(key, TTL_15MIN, async () => {
+    const semFiltro = !f.ano && !f.mes && !f.pessoa
+    if (semFiltro) {
+      const r = await agentQuery(`
+        SELECT SUM(ic_pessoa_contribuinte_mobiliario) AS mob, SUM(ic_pessoa_proprietario) AS prop,
+          SUM(ic_pessoa_itbi) AS itbi, SUM(ic_pessoa_socio) AS socio,
+          SUM(ic_tomador_servico) AS tomador, SUM(ic_pessoa_responsavel_tributario) AS resp,
+          SUM(ic_pessoa_compromissario) AS comp, SUM(ic_pessoa_posseiro) AS poss
+        FROM ${SCHEMA}.tb_dsod_contribuinte_pessoa`, 10)
+      const v = r.rows[0] ?? []
+      const num = (x: unknown) => Number(x) || 0
+      return { mob: num(v[0]), prop: num(v[1]), itbi: num(v[2]), socio: num(v[3]), tomador: num(v[4]), resp: num(v[5]), comp: num(v[6]), poss: num(v[7]) }
+    }
+    // Com filtro: agrupa por pessoa (numérico, sem WHERE de texto) e soma em JS só a(s)
+    // pessoa(s) pedida(s) — mesma convenção de contribuinteBase/contribuinteEstoque.
+    const where = condEstoqueDtInscr({ ano: f.ano, mes: f.mes }, 'c.dt_inscr')
+    const r = await agentQuery(`
+      SELECT c.ic_pessoa AS p,
+        SUM(cp.ic_pessoa_contribuinte_mobiliario) AS mob, SUM(cp.ic_pessoa_proprietario) AS prop,
+        SUM(cp.ic_pessoa_itbi) AS itbi, SUM(cp.ic_pessoa_socio) AS socio,
+        SUM(cp.ic_tomador_servico) AS tomador, SUM(cp.ic_pessoa_responsavel_tributario) AS resp,
+        SUM(cp.ic_pessoa_compromissario) AS comp, SUM(cp.ic_pessoa_posseiro) AS poss
+      FROM ${SCHEMA}.tb_dsod_contribuinte_pessoa cp
+      JOIN ${SCHEMA}.tb_dsod_contribuinte c ON c.cd_contr = cp.cd_contr
+      WHERE 1=1${where}
+      GROUP BY c.ic_pessoa`, 10)
+    const num = (x: unknown) => Number(x) || 0
+    const acc = { mob: 0, prop: 0, itbi: 0, socio: 0, tomador: 0, resp: 0, comp: 0, poss: 0 }
+    for (const row of r.rows) {
+      const p = String(row[0] ?? '').trim()
+      if (p !== 'F' && p !== 'J') continue
+      if (f.pessoa && p !== f.pessoa) continue
+      acc.mob += num(row[1]); acc.prop += num(row[2]); acc.itbi += num(row[3]); acc.socio += num(row[4])
+      acc.tomador += num(row[5]); acc.resp += num(row[6]); acc.comp += num(row[7]); acc.poss += num(row[8])
+    }
+    return acc
+  })
 }
 
 export interface PessoaOpt { id: 'F' | 'J'; label: string }

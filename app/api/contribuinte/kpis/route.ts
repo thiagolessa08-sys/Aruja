@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { lerFiltros, contribuinteBase } from '@/lib/contribuinte-filtros'
+import { lerFiltros, contribuinteBase, contribuinteEstoque, devedoresPorSetor } from '@/lib/contribuinte-filtros'
 
 interface Kpi {
   label: string
@@ -29,7 +29,19 @@ export async function GET(req: NextRequest) {
     const f = lerFiltros(req.nextUrl.searchParams)
     const semP = !f.pessoa
 
-    const { totalAll, pfTot, pjTot, ativosAll, ativosF, ativosJ, novosPorAno, cobranca } = await contribuinteBase()
+    // "Novos {ano}" continua vindo da base inteira (contribuinteBase): é sempre a
+    // contagem EXATA daquele ano, independente do corte cumulativo do estoque.
+    // total/PF/PJ/ativos e Em Cobrança já respeitam Ano/Mês/Pessoa quando filtrados.
+    const [base, estoque, setores] = await Promise.all([
+      contribuinteBase(),
+      contribuinteEstoque(f.ano, f.mes),
+      devedoresPorSetor(f),
+    ])
+    const { novosPorAno } = base
+    const { totalAll, pfTot, pjTot, porSituacao } = estoque
+    const ativoRow = porSituacao.get('Ativo') ?? { f: 0, j: 0 }
+    const ativosAll = ativoRow.f + ativoRow.j
+    const cobranca = setores.find(s => s.setor === 'CobrancaAcumulada')?.n ?? 0
 
     const anoMax = Math.max(...Array.from(novosPorAno.keys()), 0)
     const anoAtual = f.ano || anoMax
@@ -40,22 +52,21 @@ export async function GET(req: NextRequest) {
     const novPrev = f.pessoa === 'F' ? novP.f : f.pessoa === 'J' ? novP.j : novP.t
 
     const totalKpi = semP ? totalAll : f.pessoa === 'F' ? pfTot : pjTot
-    const ativosKpi = semP ? ativosAll : f.pessoa === 'F' ? ativosF : ativosJ
+    const ativosKpi = semP ? ativosAll : f.pessoa === 'F' ? ativoRow.f : ativoRow.j
     const pctAtivos = totalKpi ? (ativosKpi / totalKpi) * 100 : 0
     const pctPf = totalAll ? (pfTot / totalAll) * 100 : 0
     const pctPj = totalAll ? (pjTot / totalAll) * 100 : 0
-    const pctCobr = totalAll ? (cobranca / totalAll) * 100 : 0
+    const pctCobr = totalKpi ? (cobranca / totalKpi) * 100 : 0
 
     const labelTotal = semP ? 'Total Contribuintes' : f.pessoa === 'F' ? 'Total Pessoa Física' : 'Total Pessoa Jurídica'
+    const subLabelEstoque = f.ano ? `até ${f.mes ? `${String(f.mes).padStart(2, '0')}/` : ''}${f.ano}` : 'da base'
 
     const kpis: Kpi[] = [
       { label: labelTotal, value: fmtInt(totalKpi), subLabel: `Novos ${anoAtual}`, subValue: fmtInt(novAtual), ...variacao(novAtual, novPrev) },
-      { label: 'Pessoa Física', value: fmtInt(pfTot), subLabel: 'da base', subValue: fmtPct1(pctPf), pct: fmtPct1(pctPf), dir: pctPf >= 50 ? 'up' : 'down' },
-      { label: 'Pessoa Jurídica', value: fmtInt(pjTot), subLabel: 'da base', subValue: fmtPct1(pctPj), pct: fmtPct1(pctPj), dir: 'flat' },
+      { label: 'Pessoa Física', value: fmtInt(pfTot), subLabel: subLabelEstoque, subValue: fmtPct1(pctPf), pct: fmtPct1(pctPf), dir: pctPf >= 50 ? 'up' : 'down' },
+      { label: 'Pessoa Jurídica', value: fmtInt(pjTot), subLabel: subLabelEstoque, subValue: fmtPct1(pctPj), pct: fmtPct1(pctPj), dir: 'flat' },
       { label: 'Cadastros Ativos', value: fmtInt(ativosKpi), subLabel: 'do total', subValue: fmtPct1(pctAtivos), pct: fmtPct1(pctAtivos), dir: pctAtivos >= 90 ? 'up' : 'down' },
-      semP
-        ? { label: 'Em Cobrança', value: fmtInt(cobranca), subLabel: 'da base', subValue: fmtPct1(pctCobr), pct: fmtPct1(pctCobr), dir: 'down' }
-        : { label: 'Em Cobrança', value: '—', subLabel: 'não filtrável por pessoa', subValue: '—', pct: '', dir: 'flat' },
+      { label: 'Em Cobrança', value: fmtInt(cobranca), subLabel: 'do total', subValue: fmtPct1(pctCobr), pct: fmtPct1(pctCobr), dir: 'down' },
     ]
 
     return NextResponse.json({ kpis, referencia: { ano: anoAtual } })
