@@ -9,6 +9,7 @@ import TopNav from '../_components/TopNav'
 import PainelTributo from '../tributo/PainelTributo'
 import TfePorSegmento from '../_components/TfePorSegmento'
 import IssPorSegmento from '../_components/IssPorSegmento'
+import IssTopPrestadores from '../_components/IssTopPrestadores'
 import MeiEnquadramentoLancamento from '../_components/MeiEnquadramentoLancamento'
 import { SITUACOES, type SituacaoOpt } from '@/lib/mobiliario-filtros'
 
@@ -155,6 +156,7 @@ export default function MobiliarioPage() {
         {/* ===== PAINEL ===== */}
         {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'iss' && <IssPorSegmento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
+        {aba === 'iss' && <IssTopPrestadores ano={anoTrib || undefined} mes={mesTrib || undefined} />}
         {aba === 'iss' && (
           <div style={{ background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Limite Anual de Faturamento</span>
