@@ -241,6 +241,45 @@ Sanidade 2026: Dotação Inicial 724 mi · Atualizada 802,25 mi · Empenho 545,8
 
 ---
 
+## 12. 🚫 ESCOPO — Câmara Municipal de Arujá FORA do painel (regra restritiva)
+
+**Contexto:** o dashboard é do **poder Executivo** (Prefeitura). A **Câmara Municipal de Arujá**
+é poder **Legislativo**, órgão autônomo com orçamento e prestação de contas próprios — misturar
+os dois infla totais e induz a leitura errada em comunicação oficial.
+
+**Regra (ABSOLUTA, vale em todas as superfícies — painéis, insights, relatórios e chat):**
+
+- **NUNCA** exibir valores, totais, análises, rankings ou comparações da Câmara Municipal.
+- **NUNCA** citar a Câmara nem como linha de tabela, nem como observação/parêntese.
+- No **chat**: se a pergunta for sobre a Câmara ("quanto a Câmara gastou?", "orçamento do
+  Legislativo", "repasse para a Câmara"), **não executar a query** — responder que o painel
+  cobre somente o Executivo e indicar o Portal da Transparência da Câmara.
+- Em perguntas gerais (total do orçamento, despesa por órgão, maiores fornecedores), o filtro
+  é **obrigatório** — sem ele o total sai somado com o Legislativo.
+- Se a consulta não permitir amarrar o institucional, **dizer que não é possível garantir a
+  exclusão** em vez de devolver o número.
+
+**Identificação (validado na base):** `DIM_BIORC_INSTITUCIONAL.CD_ORGAO` — `'1'` = PREFEITURA
+MUNICIPAL DE ARUJÁ (79 UOs), `'2'` = CÂMARA MUNICIPAL DE ARUJÁ (16 UOs). `CD_ORGAO` é
+**VARCHAR** → sempre com aspas simples.
+
+```sql
+JOIN pref_aruja_sp.DIM_BIORC_INSTITUCIONAL i ON f.SK_INSTITUCIONAL = i.SK_INSTITUCIONAL
+WHERE i.CD_ORGAO = '1'   -- só Executivo; NUNCA '2'
+```
+
+Vale para `FATO_BIORC_EXECUCAO_RECEITA` e `FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO` (ambas têm
+`SK_INSTITUCIONAL`); em `FATO_BIORC_ELABORACAO_ORCAMENTO` a coluna é `SK_INSTITUCIONAL_EXECUCAO`.
+
+> ℹ️ Os painéis de **Despesa** já excluem o Legislativo por outro caminho (faixa de `CD_UO`
+> `02.01.00`–`02.19.99`, ver Regra 11) — esta regra 12 cobre o **chat** e qualquer consulta
+> nova que não passe por `whereUO()`.
+
+**Implementação:** `lib/regras-negocio.ts` (REGRA 0 — prioridade máxima no system prompt),
+`app/api/chat/route.ts` (seção DIM_BIORC_INSTITUCIONAL), `lib/despesa-filtros.ts` (`whereUO`).
+
+---
+
 ## Restrições técnicas do agente IQ (transversais)
 
 - ✅ **MITO DERRUBADO (2026-07):** o agente NÃO rejeita literal de texto, `<`, `>`, `<=`, `<>`, `HAVING`,

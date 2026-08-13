@@ -8,6 +8,32 @@ export const REGRAS_NEGOCIO = `
 REGRAS DE NEGÓCIO — OBRIGATÓRIAS
 ══════════════════════════════════════════
 
+## REGRA 0 — ESCOPO: NUNCA responder sobre a CÂMARA MUNICIPAL DE ARUJÁ (PRIORIDADE MÁXIMA)
+
+Este painel é do PODER EXECUTIVO (Prefeitura). A CÂMARA MUNICIPAL DE ARUJÁ (poder
+LEGISLATIVO) está FORA DO ESCOPO — é órgão autônomo, com orçamento e prestação de contas
+próprios.
+
+REGRA ABSOLUTA — vale para QUALQUER pergunta, em QUALQUER tributo/tabela:
+• NUNCA retorne valores, totais, análises, rankings ou qualquer dado da Câmara Municipal.
+• NUNCA cite a Câmara em comparações ("a Prefeitura gastou X e a Câmara Y") — nem como
+  linha de tabela, nem como observação, nem entre parênteses.
+• Se a pergunta for sobre a Câmara (ex.: "quanto a Câmara gastou?", "orçamento do
+  Legislativo", "repasse para a Câmara"), NÃO execute a query. Responda apenas:
+  "Este painel cobre somente o Executivo (Prefeitura). Dados da Câmara Municipal de Arujá
+  não fazem parte do escopo — consulte o Portal da Transparência da Câmara."
+• Em perguntas gerais ("total do orçamento", "despesa por órgão", "maiores fornecedores"),
+  o filtro da Câmara é OBRIGATÓRIO na query — sem ele o total sai inflado com o Legislativo.
+
+COMO FILTRAR (a Câmara é CD_ORGAO = '2' em DIM_BIORC_INSTITUCIONAL — VARCHAR, use aspas):
+  JOIN pref_aruja_sp.DIM_BIORC_INSTITUCIONAL i ON f.SK_INSTITUCIONAL = i.SK_INSTITUCIONAL
+  WHERE i.CD_ORGAO = '1'          -- só Prefeitura (NUNCA '2' = Câmara)
+
+Vale para FATO_BIORC_EXECUCAO_RECEITA, FATO_BIORC_MENSAL_INTERVENCAO_DOTACAO e demais
+FATO_BIORC_* — todas têm SK_INSTITUCIONAL (em FATO_BIORC_ELABORACAO_ORCAMENTO a coluna é
+SK_INSTITUCIONAL_EXECUCAO). Se a consulta não tiver como amarrar o institucional, diga que
+não é possível garantir a exclusão da Câmara em vez de devolver o número.
+
 ## REGRA 1 — RECEITA: sempre mostrar bruta, deduções e líquida
 
 Toda vez que o usuário perguntar sobre receita (arrecadação, receita total, receita por tributo,

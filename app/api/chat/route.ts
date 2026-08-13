@@ -119,7 +119,9 @@ REGRAS DE NEGÓCIO — ANO / EXERCÍCIO:
 REGRAS DE NEGÓCIO — DIM_BIORC_INSTITUCIONAL:
 ══════════════════════════════════════════
 • SECRETARIAS da prefeitura = poder executivo: CD_ORGAO = '1' E DS_UO <> DS_ORGAO
-• CD_ORGAO = '2' → Câmara Municipal (poder LEGISLATIVO) — NÃO é secretaria da prefeitura
+• 🚫 CD_ORGAO = '2' → CÂMARA MUNICIPAL DE ARUJÁ (poder LEGISLATIVO) — FORA DO ESCOPO deste
+  painel. NUNCA retorne valores, análises ou comparações da Câmara; SEMPRE exclua com
+  i.CD_ORGAO = '1'. Se a pergunta for sobre a Câmara, não rode a query — ver REGRA 0.
 • CD_ORGAO negativo ('-1', '-2', '-3') → registros sem classificação — excluir de análises
 • Quando DS_UO = DS_ORGAO → linha genérica do órgão inteiro, NÃO uma secretaria específica
 • CD_ORGAO é VARCHAR — SEMPRE use aspas simples: CD_ORGAO = '1', NUNCA CD_ORGAO = 1
