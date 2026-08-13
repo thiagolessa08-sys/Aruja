@@ -7,7 +7,7 @@ import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '.
 
 export interface FiltrosMobiliario { ano: number | ''; situacao: string; mes?: number | '' }
 
-interface Tip { chart: 'bar' | 'lollipop'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
+interface Tip { chart: 'bar' | 'lollipop' | 'encerradas'; left: string; top: string; title: string; l1: string; l1c: string; l2?: string; l2c?: string }
 
 interface PorAno { ano: number; iss: number }
 interface AbEnc { ano: number; aberturas: number; encerramentos: number }
@@ -171,6 +171,38 @@ function geomLollipop(d: AbEnc[]) {
   return { pts, W, H, mid }
 }
 
+// ===== Evolução das empresas encerradas oficialmente (barras + variação ano a ano) =====
+// "Encerrada oficialmente" = tem data de encerramento de atividade registrada
+// (dt_enc_atividade). Variação = % de encerramentos vs o ano anterior — MENOS
+// encerramentos é resultado bom (verde), MAIS é ruim (vermelho).
+function geomEncerradas(d: AbEnc[]) {
+  const W = 900, H = 320, top = 46, bottom = 268
+  const span = bottom - top
+  const max = Math.max(1, ...d.map(x => x.encerramentos))
+  const n = Math.max(1, d.length)
+  const gw = W / n
+  const bw = Math.min(52, gw * 0.46)
+  const bars = d.map((x, i) => {
+    const cx = i * gw + gw / 2
+    const h = (x.encerramentos / max) * span
+    const ant = i > 0 ? d[i - 1].encerramentos : null
+    const varPct = ant ? ((x.encerramentos - ant) / ant) * 100 : null
+    return {
+      cx, x: cx - bw / 2, y: bottom - h, h,
+      ano: x.ano, enc: x.encerramentos, varPct,
+      tip: {
+        chart: 'encerradas' as const, title: String(x.ano),
+        l1: `Encerradas: ${fmtInt(x.encerramentos)}`, l1c: '#d64545',
+        l2: varPct == null ? undefined : `Variação: ${varPct >= 0 ? '+' : ''}${varPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% vs ${x.ano - 1}`,
+        l2c: varPct != null && varPct > 0 ? '#d64545' : '#1fa463',
+        left: `${(cx / W * 100).toFixed(1)}%`, top: `${((bottom - h) / H * 100).toFixed(1)}%`,
+      },
+    }
+  })
+  const ticks = [max, max / 2, 0].map(v => ({ v: Math.round(v), y: bottom - (v / max) * span }))
+  return { bars, ticks, W, H, bottom, bw }
+}
+
 function pctColor(dir: 'up' | 'down' | 'flat', azul: boolean): string {
   if (dir === 'up') return azul ? '#6ee0a0' : '#1fa463'
   if (dir === 'down') return azul ? '#ff9b8a' : '#d64545'
@@ -283,6 +315,14 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
 
   const gb = geomBarISS(g.porAno)
   const lp = geomLollipop(g.abVsEnc)
+  const ge = geomEncerradas(g.abVsEnc)
+  // Resumo da evolução: total encerrado no período e variação do último ano vs o anterior.
+  const encTotalPeriodo = g.abVsEnc.reduce((s, x) => s + x.encerramentos, 0)
+  const encUlt = g.abVsEnc[g.abVsEnc.length - 1]
+  const encAnt = g.abVsEnc[g.abVsEnc.length - 2]
+  const encVarUlt = encUlt && encAnt && encAnt.encerramentos
+    ? ((encUlt.encerramentos - encAnt.encerramentos) / encAnt.encerramentos) * 100
+    : null
   const ai = g.ativInat
   const totAI = (ai.ativas + ai.inativas) || 1
   const pctAtivas = (ai.ativas / totAI) * 100
@@ -562,6 +602,76 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
               <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 2 }}>Clique num segmento para ver as empresas</div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ===== Evolução das Empresas Encerradas (com variação ano a ano) ===== */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Evolução das Empresas Encerradas</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+              Empresas que fecharam oficialmente (com data de encerramento de atividade registrada), por ano · variação vs o ano anterior
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#1fa463' }}></span>Caiu vs ano anterior</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#d64545' }}></span>Subiu vs ano anterior</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginTop: 16 }}>
+          <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Encerradas no período</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>{fmtInt(encTotalPeriodo)}</div>
+          </div>
+          <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Encerradas em {encUlt?.ano ?? '—'}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#d64545', marginTop: 6 }}>{fmtInt(encUlt?.encerramentos ?? 0)}</div>
+          </div>
+          <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Variação vs {encAnt?.ano ?? '—'}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, color: encVarUlt == null ? '#9098a8' : encVarUlt > 0 ? '#d64545' : '#1fa463' }}>
+              {encVarUlt == null ? '—' : `${encVarUlt >= 0 ? '+' : ''}${encVarUlt.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}
+            </div>
+          </div>
+        </div>
+
+        <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 16, cursor: 'pointer' }}>
+          <svg viewBox={`0 0 ${ge.W} ${ge.H}`} width="100%" height="300" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
+            <defs>
+              <linearGradient id="mobEncBar" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#d64545" /><stop offset="100%" stopColor="#f2b3b3" />
+              </linearGradient>
+            </defs>
+            {ge.ticks.map((t, i) => (
+              <g key={i}>
+                <line x1="0" y1={t.y.toFixed(1)} x2={String(ge.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" />
+                <text x="2" y={(t.y - 4).toFixed(1)} fontSize="12" fill="#aeb6c6" style={axisFont}>{fmtInt(t.v)}</text>
+              </g>
+            ))}
+            <line x1="0" y1={ge.bottom} x2={String(ge.W)} y2={ge.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+            {ge.bars.map((b, i) => (
+              <g key={i}>
+                <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={ge.bw.toFixed(1)} height={b.h.toFixed(1)} rx="5" fill="url(#mobEncBar)" />
+                {/* Quantidade acima da barra */}
+                <text x={b.cx.toFixed(1)} y={(b.y - 20).toFixed(1)} fontSize="14" fill="#1f2a44" fontWeight="700" textAnchor="middle" style={axisFont}>{fmtInt(b.enc)}</text>
+                {/* Variação vs ano anterior */}
+                {b.varPct != null ? (
+                  <text x={b.cx.toFixed(1)} y={(b.y - 6).toFixed(1)} fontSize="12" fontWeight="700" textAnchor="middle"
+                    fill={b.varPct > 0 ? '#d64545' : '#1fa463'} style={axisFont}>
+                    {b.varPct >= 0 ? '▲ +' : '▼ '}{b.varPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+                  </text>
+                ) : null}
+                <text x={b.cx.toFixed(1)} y={String(ge.H - 8)} fontSize="14" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
+              </g>
+            ))}
+            {ge.bars.map((b, i) => (
+              <rect key={i} onMouseEnter={() => setTip(b.tip)} x={(b.cx - ge.bw).toFixed(1)} y="0"
+                width={(ge.bw * 2).toFixed(1)} height={String(ge.H - 22)} fill="transparent" pointerEvents="all" />
+            ))}
+          </svg>
+          {tip?.chart === 'encerradas' ? <Tooltip t={tip} /> : null}
         </div>
       </div>
 
