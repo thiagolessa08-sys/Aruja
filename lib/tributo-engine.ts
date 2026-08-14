@@ -168,12 +168,13 @@ export interface RankTributo {
   saldo: number
 }
 
-export async function rankingTributos(somenteOutros = true, ano?: number): Promise<RankTributo[]> {
-  return cached(`rank:${somenteOutros}:${ano ?? 'all'}`, TTL_15MIN, () => rankingTributosRaw(somenteOutros, ano))
+export async function rankingTributos(somenteOutros = true, ano?: number, mes?: number): Promise<RankTributo[]> {
+  return cached(`rank:${somenteOutros}:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => rankingTributosRaw(somenteOutros, ano, mes))
 }
 
-async function rankingTributosRaw(somenteOutros: boolean, ano?: number): Promise<RankTributo[]> {
+async function rankingTributosRaw(somenteOutros: boolean, ano?: number, mes?: number): Promise<RankTributo[]> {
   const filtroAno = ano ? `AND g.no_exercicio_lancamento = ${ano}` : ''
+  const filtroMes = mes ? `AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const filtroGrupo = somenteOutros
     ? `g.cd_tributo NOT IN (${EXCL})`
     : `g.cd_tributo NOT IN (${CODIGOS_EXCLUIDOS.join(',')})`
@@ -187,7 +188,7 @@ async function rankingTributosRaw(somenteOutros: boolean, ano?: number): Promise
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
-    WHERE ${filtroGrupo} ${filtroAno}
+    WHERE ${filtroGrupo} ${filtroAno} ${filtroMes}
     GROUP BY g.cd_tributo, t.ds_tributo`, 200)
 
   return r.rows

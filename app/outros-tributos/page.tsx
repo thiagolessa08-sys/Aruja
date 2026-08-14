@@ -5,6 +5,7 @@ import { useSaudacaoNome } from '../_components/useSaudacao'
 import TopNav from '../_components/TopNav'
 import PainelTributo from '../tributo/PainelTributo'
 import DividaAtivaPorTributo from '../_components/DividaAtivaPorTributo'
+import OutrosTributosPorTipo from '../_components/OutrosTributosPorTipo'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
@@ -55,6 +56,7 @@ export default function OutrosTributosPage() {
           </select>
         </div>
         <PainelTributo grupo="outros" titulo="Outros Tributos" ano={ano || undefined} mes={mes || undefined} onAnos={handleAnos} />
+        <OutrosTributosPorTipo ano={ano || undefined} mes={mes || undefined} />
         <DividaAtivaPorTributo />
       </div>
     </div>
