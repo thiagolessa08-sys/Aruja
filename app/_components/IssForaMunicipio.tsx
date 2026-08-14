@@ -40,8 +40,9 @@ const voltarBtn: React.CSSProperties = { border: 'none', background: '#eef1fb', 
 // Drill: clique em qualquer barra (Arujá ou um município de fora) mostra o ranking dos
 // prestadores daquele local (fonte /api/mobiliario/iss-fora-prestadores — trata "Arujá"
 // como caso especial, já que não há uma grafia única de nm_mun pra filtrar por igualdade),
-// mesmo padrão de drill do card IssSegmentoPrestador (segmento→prestador). Nesse nível o
-// painel de simulação fica oculto (é uma projeção do total, não faz sentido por prestador).
+// mesmo padrão de drill do card IssSegmentoPrestador (segmento→prestador). O painel de
+// Simulação · Previsão fica sempre visível abaixo, em qualquer nível — é uma projeção do
+// total do card, não do item aberto no drill.
 export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: number }) {
   const [dados, setDados] = useState<Resp | null>(null)
   const [previsao, setPrevisao] = useState<PrevisaoResp | null>(null)
@@ -214,56 +215,58 @@ export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: num
               )
             })}
           </div>
-
-          {/* Painel de simulação — previsão para o próximo exercício, 3 níveis */}
-          <div style={{ marginTop: 20, borderTop: '1px solid #eef1f7', paddingTop: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Simulação · Previsão {previsao ? previsao.anoPrevisao : ''}</span>
-              <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
-                {CENARIOS.map(c => (
-                  <button key={c.key} onClick={() => setCenario(c.key)}
-                    style={{
-                      border: 'none', borderRadius: 9, padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                      background: cenario === c.key ? '#283e93' : 'transparent',
-                      color: cenario === c.key ? '#fff' : '#5b6477',
-                      transition: 'background .15s, color .15s',
-                    }}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {!previsao ? (
-              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[0, 1].map(i => <div key={i} style={{ height: 34, borderRadius: 8, background: '#eef1f7' }} />)}
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>
-                  Regressão linear sobre {previsao.historico.length} exercícios completos ({previsao.historico[0].ano}–{previsao.anoBase}), projetando {previsao.anoPrevisao}. Cenários aplicam 50% (conservador) e 150% (agressivo) do crescimento projetado sobre a base de {previsao.anoBase} — não é uma garantia, é uma estimativa para planejamento.
-                </div>
-                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ height: 30, width: `${Math.max(10, 86 * localPrev / maxGrupoPrev).toFixed(1)}%`, borderRadius: 8, background: 'linear-gradient(90deg,#5870c4 0%,#8094d6 100%)', flex: 'none' }} />
-                    <div>
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#283e93' }}>{fmtAbrev(localPrev)}</div>
-                      <div style={{ fontSize: 9.5, color: '#aeb6c6' }}>Prestadores de Arujá (projetado)</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ height: 30, width: `${Math.max(10, 86 * foraPrev / maxGrupoPrev).toFixed(1)}%`, borderRadius: 8, background: 'linear-gradient(90deg,#e8962e 0%,#f3c07c 100%)', flex: 'none' }} />
-                    <div>
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#c07a2e' }}>{fmtAbrev(foraPrev)}</div>
-                      <div style={{ fontSize: 9.5, color: '#aeb6c6' }}>Prestadores de fora do município (projetado) · {pctForaPrev.toFixed(1).replace('.', ',')}% do total · {cresForaPct >= 0 ? '+' : ''}{cresForaPct.toFixed(1).replace('.', ',')}% vs {previsao.anoBase}</div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
         </>
       )}
+
+      {/* Painel de simulação — previsão para o próximo exercício, 3 níveis. Fica sempre
+          visível (não é substituído pelo drill de prestadores), já que é uma projeção do
+          total do card, independente do nível de detalhe aberto acima. */}
+      <div style={{ marginTop: 20, borderTop: '1px solid #eef1f7', paddingTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Simulação · Previsão {previsao ? previsao.anoPrevisao : ''}</span>
+          <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
+            {CENARIOS.map(c => (
+              <button key={c.key} onClick={() => setCenario(c.key)}
+                style={{
+                  border: 'none', borderRadius: 9, padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  background: cenario === c.key ? '#283e93' : 'transparent',
+                  color: cenario === c.key ? '#fff' : '#5b6477',
+                  transition: 'background .15s, color .15s',
+                }}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!previsao ? (
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[0, 1].map(i => <div key={i} style={{ height: 34, borderRadius: 8, background: '#eef1f7' }} />)}
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>
+              Regressão linear sobre {previsao.historico.length} exercícios completos ({previsao.historico[0].ano}–{previsao.anoBase}), projetando {previsao.anoPrevisao}. Cenários aplicam 50% (conservador) e 150% (agressivo) do crescimento projetado sobre a base de {previsao.anoBase} — não é uma garantia, é uma estimativa para planejamento.
+            </div>
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ height: 30, width: `${Math.max(10, 86 * localPrev / maxGrupoPrev).toFixed(1)}%`, borderRadius: 8, background: 'linear-gradient(90deg,#5870c4 0%,#8094d6 100%)', flex: 'none' }} />
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#283e93' }}>{fmtAbrev(localPrev)}</div>
+                  <div style={{ fontSize: 9.5, color: '#aeb6c6' }}>Prestadores de Arujá (projetado)</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ height: 30, width: `${Math.max(10, 86 * foraPrev / maxGrupoPrev).toFixed(1)}%`, borderRadius: 8, background: 'linear-gradient(90deg,#e8962e 0%,#f3c07c 100%)', flex: 'none' }} />
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#c07a2e' }}>{fmtAbrev(foraPrev)}</div>
+                  <div style={{ fontSize: 9.5, color: '#aeb6c6' }}>Prestadores de fora do município (projetado) · {pctForaPrev.toFixed(1).replace('.', ',')}% do total · {cresForaPct >= 0 ? '+' : ''}{cresForaPct.toFixed(1).replace('.', ',')}% vs {previsao.anoBase}</div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
