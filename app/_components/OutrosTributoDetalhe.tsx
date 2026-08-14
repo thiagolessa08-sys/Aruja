@@ -1,23 +1,30 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 import type { TipoSelecionado } from './OutrosTributosPorTipo'
 
 interface SerieItem { ano: number; lancado: number; arrecadado: number; saldo: number }
+interface CenariosTributo { conservador: number; moderado: number; agressivo: number }
+interface PrevisaoTributo { anoBase: number; anoPrevisao: number; base: number; cenarios: CenariosTributo }
 
 const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+const CENARIO_CORES = ['#b9c4e8', '#5870c4', '#283e93'] // conservador → moderado → agressivo
 
 // Painel companion do card "Outros Tributos por Tipo" (OutrosTributosPorTipo): ao selecionar
 // um item lá (via callback onTipoChange, prop `item` aqui), mostra a evolução anual
 // (lançado × arrecadado por exercício) daquele(s) código(s) de tributo específico(s) — fonte
-// /api/tributo/serie-codigo (lib/tributo-engine.ts serieTributoPorCodigos). Mesmo padrão do
-// painel companion "Análise de Enquadramento" em Mobiliário (IssSegmentoEnquadramento).
+// /api/tributo/serie-codigo (lib/tributo-engine.ts serieTributoPorCodigos) — e a previsão de
+// lançado pra 2 exercícios à frente em 3 níveis (conservador/moderado/agressivo) — fonte
+// /api/tributo/previsao-codigo (previsaoTributoCodigos), mesma técnica de regressão linear
+// de previsaoIssFora. Mesmo padrão do painel companion "Análise de Enquadramento" em
+// Mobiliário (IssSegmentoEnquadramento).
 export default function OutrosTributoDetalhe({ item, mes }: { item: TipoSelecionado | null; mes?: number }) {
   const [serie, setSerie] = useState<SerieItem[] | null>(null)
+  const [previsao, setPrevisao] = useState<PrevisaoTributo | null>(null)
 
   useEffect(() => {
     setSerie(null)
@@ -27,6 +34,14 @@ export default function OutrosTributoDetalhe({ item, mes }: { item: TipoSelecion
     fetch(`/api/tributo/serie-codigo?${qs}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error && Array.isArray(d.serie)) setSerie(d.serie) }).catch(() => {})
   }, [item, mes])
+
+  useEffect(() => {
+    setPrevisao(null)
+    if (!item) return
+    const qs = new URLSearchParams({ codigos: item.codigos.join(',') })
+    fetch(`/api/tributo/previsao-codigo?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error) setPrevisao(d) }).catch(() => {})
+  }, [item])
 
   if (!item) {
     return (
@@ -101,6 +116,57 @@ export default function OutrosTributoDetalhe({ item, mes }: { item: TipoSelecion
                 <Bar dataKey="arrecadado" name="Arrecadado" fill="#e8962e" radius={[4, 4, 0, 0]} maxBarSize={26} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+
+          {/* Previsão — mesma técnica de regressão linear de previsaoIssFora, sempre em
+              base anual (independe do filtro de mês da tela). Fica visível assim que o
+              item é selecionado, junto do histórico. */}
+          <div style={{ marginTop: 20, borderTop: '1px solid #eef1f7', paddingTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Previsão · Lançado {previsao ? previsao.anoPrevisao : ''}</span>
+              <span style={reportBadge}>3 níveis</span>
+            </div>
+
+            {!previsao ? (
+              <div style={{ marginTop: 14, height: 120, borderRadius: 12, background: '#eef1f7' }} />
+            ) : (
+              <>
+                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>
+                  Regressão linear sobre os exercícios completos até {previsao.anoBase}, projetando {previsao.anoPrevisao}. Conservador = 50% do crescimento projetado, Moderado = regressão cheia, Agressivo = 150% do crescimento — todos ancorados no lançado real de {previsao.anoBase} ({fmtAbrev(previsao.base)}). Estimativa para planejamento, não uma garantia.
+                </div>
+                <div style={{ height: 130, marginTop: 12 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[
+                        { nome: 'Conservador', valor: previsao.cenarios.conservador },
+                        { nome: 'Moderado', valor: previsao.cenarios.moderado },
+                        { nome: 'Agressivo', valor: previsao.cenarios.agressivo },
+                      ]}
+                      layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }} barCategoryGap="28%">
+                      <XAxis type="number" tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="nome" width={82} tick={{ fontSize: 11.5, fill: '#3a4256', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
+                        formatter={(val) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'Lançado projetado'] as [string, string]}
+                        contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                      <Bar dataKey="valor" radius={[0, 6, 6, 0]} maxBarSize={26} label={{ position: 'right', formatter: (val: unknown) => fmtAbrev(Number(val) || 0), fontSize: 11, fill: '#1f2a44', fontWeight: 700 }}>
+                        {CENARIO_CORES.map((cor, i) => <Cell key={i} fill={cor} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 4, gap: 8, flexWrap: 'wrap' }}>
+                  {(['conservador', 'moderado', 'agressivo'] as const).map((k, i) => {
+                    const v = previsao.cenarios[k]
+                    const pct = previsao.base ? ((v - previsao.base) / previsao.base) * 100 : 0
+                    return (
+                      <span key={k} style={{ fontSize: 10.5, color: CENARIO_CORES[i], fontWeight: 700 }}>
+                        {pct >= 0 ? '+' : ''}{fmtPct(pct)} vs {previsao.anoBase}
+                      </span>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

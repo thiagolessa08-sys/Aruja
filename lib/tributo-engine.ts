@@ -48,6 +48,71 @@ export async function serieTributoPorCodigos(codigos: number[], anoMin = 2018, a
   return cached(`serieCod:${chave}:${anoMin}:${anoMax}:${mes ?? ''}`, TTL_15MIN, () => serieTributoWhereRaw(`g.cd_tributo IN (${codigos.join(',')})`, anoMin, anoMax, mes))
 }
 
+export interface CenariosTributo { conservador: number; moderado: number; agressivo: number }
+export interface PrevisaoTributoResp {
+  anoBase: number       // último exercício completo usado como âncora
+  anoPrevisao: number   // exercício projetado (anoBase + 2, ex.: 2025 → 2027)
+  base: number           // lançado real do anoBase (mesma base dos 3 cenários)
+  cenarios: CenariosTributo
+}
+
+const JANELA_PREV = 5 // nº de exercícios completos usados na regressão
+
+// Regressão linear simples (mínimos quadrados) — mesma técnica de previsaoIssFora
+// (lib/iss-fora-previsao.ts) e previsaoMensalIptu, aplicada aqui ao lançado anual de um
+// código (ou conjunto de códigos) de tributo específico.
+function regressaoLinearSimples(pontos: { x: number; y: number }[]): (x: number) => number {
+  const n = pontos.length
+  const sx = pontos.reduce((s, p) => s + p.x, 0)
+  const sy = pontos.reduce((s, p) => s + p.y, 0)
+  const sxx = pontos.reduce((s, p) => s + p.x * p.x, 0)
+  const sxy = pontos.reduce((s, p) => s + p.x * p.y, 0)
+  const den = n * sxx - sx * sx
+  if (!den) return () => sy / n
+  const b = (n * sxy - sx * sy) / den
+  const a0 = (sy - b * sx) / n
+  return (x: number) => a0 + b * x
+}
+
+/**
+ * Previsão do LANÇADO (2 exercícios à frente, ex.: base 2025 → previsão 2027) de um
+ * conjunto de códigos de tributo, pro drill "detalhe" do ranking de Outros Tributos.
+ * Âncora no último exercício COMPLETO (ano corrente é parcial) e projeta por regressão
+ * linear sobre os últimos JANELA_PREV exercícios completos — mesma técnica e mesma
+ * convenção de 3 níveis de previsaoIssFora (conservador = metade do crescimento projetado,
+ * moderado = regressão cheia, agressivo = 1,5× o crescimento — todos ancorados no valor real
+ * do último exercício). Sempre em base ANUAL, independente do filtro de mês da tela.
+ */
+export async function previsaoTributoCodigos(codigos: number[]): Promise<PrevisaoTributoResp> {
+  const chave = [...codigos].sort((a, b) => a - b).join('.')
+  return cached(`previsaoTributoCod:${chave}`, TTL_15MIN, async () => {
+    const anoAtual = new Date().getFullYear()
+    const anoBase = anoAtual - 1
+    const anoPrevisao = anoBase + 2
+    const serie = await serieTributoPorCodigos(codigos, anoBase - JANELA_PREV + 1, anoBase)
+
+    const pontos = serie.map(s => ({ x: s.ano, y: s.lancado }))
+    const moderado = pontos.length ? Math.max(0, regressaoLinearSimples(pontos)(anoPrevisao)) : 0
+    // Busca o exercício-âncora especificamente (não o último ponto da série): se o
+    // código não teve lançamento em anoBase (ex.: tributo descontinuado), serieTributoPorCodigos
+    // já descarta esse ano por ser "vazio" — usar serie[length-1] pegaria silenciosamente um
+    // ano anterior e rotularia o valor errado como sendo de anoBase.
+    const base = serie.find(s => s.ano === anoBase)?.lancado ?? 0
+    const crescimento = moderado - base
+
+    return {
+      anoBase,
+      anoPrevisao,
+      base,
+      cenarios: {
+        conservador: Math.max(0, base + crescimento * 0.5),
+        moderado,
+        agressivo: Math.max(0, base + crescimento * 1.5),
+      },
+    }
+  })
+}
+
 async function serieTributoWhereRaw(where: string, anoMin: number, anoMax: number, mes?: number): Promise<SerieExercicio[]> {
   const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const [principal, anual] = await Promise.all([
