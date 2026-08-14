@@ -3,11 +3,16 @@
 import { useState, useEffect } from 'react'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 import type { PrevisaoForaResp as PrevisaoResp, Cenario } from '@/lib/iss-fora-previsao'
+import type { DetalheEmpresa } from '@/lib/mobiliario-empresa'
 
 interface GrupoMun { qt: number; base: number; iss: number }
 interface MunItem { nome: string; qt: number; iss: number }
 interface Resp { local: GrupoMun; fora: GrupoMun; naoInformado: GrupoMun; topFora: MunItem[] }
 interface PrestadorForaItem { cnpj: string; nome: string; qt: number; iss: number }
+interface CadastroResp { encontrado: boolean; detalhe: DetalheEmpresa | null }
+
+const situacaoCor = (s: string) => /ativ/i.test(s) ? '#1fa463' : /baix|cancel|encerr/i.test(s) ? '#d64545' : '#9098a8'
+const fmtData = (d: string) => d ? d.split('-').reverse().join('/') : '—'
 
 const FORA_CORES = ['#e8962e', '#eba846', '#efb95f', '#f2c977', '#f5d790', '#f8e4a9', '#facfc2']
 const LOCAL_LABEL = 'Arujá'
@@ -28,12 +33,16 @@ const voltarBtn: React.CSSProperties = { border: 'none', background: '#eef1fb', 
 // guias usado no resto da aba ISS; não somar com "ISS lançado" do topo da tela). nm_mun é
 // texto livre digitado na nota, então a classificação Arujá × fora é aproximada
 // (normalizada) — ver aviso no card. `ano`/`mes` seguem a mesma convenção do PainelTributo.
-// Drill: clique em qualquer barra (Arujá ou um município de fora) mostra o ranking dos
-// prestadores daquele local (fonte /api/mobiliario/iss-fora-prestadores — trata "Arujá"
-// como caso especial, já que não há uma grafia única de nm_mun pra filtrar por igualdade),
-// mesmo padrão de drill do card IssSegmentoPrestador (segmento→prestador). O painel de
-// Simulação · Previsão fica sempre visível abaixo, em qualquer nível — é uma projeção do
-// total do card, não do item aberto no drill.
+// Drill em 2 passos: 1) clique em qualquer barra (Arujá ou um município de fora) mostra o
+// ranking dos prestadores daquele local (fonte /api/mobiliario/iss-fora-prestadores — trata
+// "Arujá" como caso especial, já que não há uma grafia única de nm_mun pra filtrar por
+// igualdade); 2) clique num prestador expande os dados cadastrais dele (fonte
+// /api/mobiliario/iss-fora-cadastro), ligando o CNPJ da NFS-e ao cadastro mobiliário de
+// Arujá por CNPJ normalizado — cd_contr_mob_prestador da NFS-e NÃO é confiável (validado:
+// aponta pra empresa errada), por isso a ligação é feita à parte. Prestadores de fora do
+// município sem estabelecimento em Arujá legitimamente não têm cadastro — "sem vínculo" é
+// uma resposta esperada, não um erro. O painel de Simulação · Previsão fica sempre visível
+// abaixo, em qualquer nível — é uma projeção do total do card, não do item aberto no drill.
 // `previsao`/`cenario`/`onCenarioChange` vêm de app/mobiliario/page.tsx (componente
 // controlado) — o cenário escolhido aqui também alimenta ISS por Segmento e Limite Anual
 // de Faturamento (via crescimentoTotalPct), então o estado mora no pai da aba ISS.
@@ -48,12 +57,16 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
   const [municipioSel, setMunicipioSel] = useState<string | null>(null)
   const [prestadoresFora, setPrestadoresFora] = useState<PrestadorForaItem[] | null>(null)
   const [buscaPrestador, setBuscaPrestador] = useState('')
+  const [cadastroAberto, setCadastroAberto] = useState<string | null>(null) // cnpj do prestador expandido
+  const [cadastroDados, setCadastroDados] = useState<CadastroResp | null>(null)
 
   useEffect(() => {
     setDados(null)
     setMunicipioSel(null)
     setPrestadoresFora(null)
     setBuscaPrestador('')
+    setCadastroAberto(null)
+    setCadastroDados(null)
     const qs = new URLSearchParams()
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
@@ -66,6 +79,8 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setMunicipioSel(nome)
     setPrestadoresFora(null)
     setBuscaPrestador('')
+    setCadastroAberto(null)
+    setCadastroDados(null)
     const qs = new URLSearchParams({ top: '20', municipio: nome })
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
@@ -77,6 +92,19 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setMunicipioSel(null)
     setPrestadoresFora(null)
     setBuscaPrestador('')
+    setCadastroAberto(null)
+    setCadastroDados(null)
+  }
+
+  // Nível 3 — dados cadastrais do prestador (drill dentro do drill): liga o CNPJ da NFS-e
+  // ao cadastro mobiliário de Arujá (fonte /api/mobiliario/iss-fora-cadastro). Prestadores
+  // de fora do município podem não ter vínculo nenhum — resposta válida, não um erro.
+  function alternarCadastro(cnpj: string) {
+    if (cadastroAberto === cnpj) { setCadastroAberto(null); setCadastroDados(null); return }
+    setCadastroAberto(cnpj)
+    setCadastroDados(null)
+    fetch(`/api/mobiliario/iss-fora-cadastro?cnpj=${encodeURIComponent(cnpj)}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error) setCadastroDados(d) }).catch(() => {})
   }
 
   if (!dados) {
@@ -139,7 +167,7 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
       {municipioSel ? (
         <>
           <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-            Empresas de &quot;{municipioSel}&quot; que mais indicaram ISS nas NFS-e{mes ? ` até o mês ${mes}` : ''}.
+            Empresas de &quot;{municipioSel}&quot; que mais indicaram ISS nas NFS-e{mes ? ` até o mês ${mes}` : ''} · clique num prestador para ver os dados cadastrais.
           </div>
 
           {!prestadoresFora ? (
@@ -160,23 +188,55 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
                   <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtAbrev(total)}</span>
                 </div>
 
-                <div style={{ marginTop: 14, maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
+                <div style={{ marginTop: 14, maxHeight: 440, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
                   {!filtrados.length ? (
                     <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Nenhum prestador encontrado para a busca.</div>
-                  ) : filtrados.map((t, i) => (
-                    <div key={t.cnpj}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 2 }}>
-                        <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {i + 1}. {t.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>{t.cnpj ? `· ${t.cnpj}` : ''}</span>
-                        </span>
-                        <span style={{ color: '#c07a2e', fontWeight: 700, flex: 'none' }}>{fmtAbrev(t.iss)}</span>
+                  ) : filtrados.map((t, i) => {
+                    const aberto = cadastroAberto === t.cnpj
+                    return (
+                      <div key={t.cnpj}>
+                        <div onClick={() => t.cnpj && alternarCadastro(t.cnpj)} style={{ cursor: t.cnpj ? 'pointer' : 'default' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 2 }}>
+                            <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                              {t.cnpj ? <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="3" style={{ flex: 'none', transform: aberto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}><path d="M9 6l6 6-6 6" /></svg> : null}
+                              {i + 1}. {t.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>{t.cnpj ? `· ${t.cnpj}` : ''}</span>
+                            </span>
+                            <span style={{ color: '#c07a2e', fontWeight: 700, flex: 'none' }}>{fmtAbrev(t.iss)}</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: '#aeb6c6', marginBottom: 4 }}>{t.qt.toLocaleString('pt-BR')} nota{t.qt === 1 ? '' : 's'}</div>
+                          <div style={{ height: 12, borderRadius: 6, background: '#eef1f7', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.max(3, 100 * t.iss / maxVal).toFixed(1)}%`, borderRadius: 6, background: aberto ? '#c0612a' : '#e8962e' }} />
+                          </div>
+                        </div>
+                        {aberto ? (
+                          <div style={{ marginTop: 8, background: '#f7f9fd', borderRadius: 10, padding: '10px 12px' }}>
+                            {!cadastroDados ? (
+                              <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Carregando dados cadastrais…</div>
+                            ) : !cadastroDados.encontrado || !cadastroDados.detalhe ? (
+                              <div style={{ fontSize: 11.5, color: '#9098a8', padding: '4px 0' }}>Sem vínculo com o cadastro mobiliário de Arujá — comum pra prestadores de fora do município sem estabelecimento local.</div>
+                            ) : (() => {
+                              const d = cadastroDados.detalhe
+                              return (
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: situacaoCor(d.situacao), borderRadius: 6, padding: '2px 8px' }}>{d.situacao || 'Situação não informada'}</span>
+                                    <span style={{ fontSize: 10.5, color: '#5b6477' }}>{d.atividadePrincipal}</span>
+                                    {d.mei ? <span style={{ fontSize: 9.5, fontWeight: 700, color: '#283e93', background: '#dde3f8', borderRadius: 6, padding: '2px 7px' }}>MEI</span> : null}
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 6, marginTop: 8, fontSize: 10.5, color: '#5b6477' }}>
+                                    <div><span style={{ color: '#9098a8' }}>Endereço: </span>{d.endereco || '—'}{d.bairro ? ` — ${d.bairro}` : ''}</div>
+                                    <div><span style={{ color: '#9098a8' }}>Início de atividade: </span>{fmtData(d.dataInicioAtividade)}</div>
+                                    <div><span style={{ color: '#9098a8' }}>Porte: </span>{d.porte || '—'}</div>
+                                    <div><span style={{ color: '#9098a8' }}>Natureza jurídica: </span>{d.naturezaJuridica || '—'}</div>
+                                  </div>
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        ) : null}
                       </div>
-                      <div style={{ fontSize: 10, color: '#aeb6c6', marginBottom: 4 }}>{t.qt.toLocaleString('pt-BR')} nota{t.qt === 1 ? '' : 's'}</div>
-                      <div style={{ height: 12, borderRadius: 6, background: '#eef1f7', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${Math.max(3, 100 * t.iss / maxVal).toFixed(1)}%`, borderRadius: 6, background: '#e8962e' }} />
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </>
             )
