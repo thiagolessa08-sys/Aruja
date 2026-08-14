@@ -5,7 +5,8 @@ import { useSaudacaoNome } from '../_components/useSaudacao'
 import TopNav from '../_components/TopNav'
 import PainelTributo from '../tributo/PainelTributo'
 import DividaAtivaPorTributo from '../_components/DividaAtivaPorTributo'
-import OutrosTributosPorTipo from '../_components/OutrosTributosPorTipo'
+import OutrosTributosPorTipo, { type TipoSelecionado } from '../_components/OutrosTributosPorTipo'
+import OutrosTributoDetalhe from '../_components/OutrosTributoDetalhe'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
@@ -15,6 +16,7 @@ export default function OutrosTributosPage() {
   const [anos, setAnos] = useState<number[]>([])
   const [ano, setAno] = useState<number | ''>('')
   const [mes, setMes] = useState<number | ''>('') // mês selecionado (acumulado); '' = ano todo
+  const [tipoSel, setTipoSel] = useState<TipoSelecionado | null>(null)
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -56,7 +58,10 @@ export default function OutrosTributosPage() {
           </select>
         </div>
         <PainelTributo grupo="outros" titulo="Outros Tributos" ano={ano || undefined} mes={mes || undefined} onAnos={handleAnos} />
-        <OutrosTributosPorTipo ano={ano || undefined} mes={mes || undefined} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, alignItems: 'start' }}>
+          <OutrosTributosPorTipo ano={ano || undefined} mes={mes || undefined} onTipoChange={setTipoSel} />
+          <OutrosTributoDetalhe item={tipoSel} mes={mes || undefined} />
+        </div>
         <DividaAtivaPorTributo />
       </div>
     </div>

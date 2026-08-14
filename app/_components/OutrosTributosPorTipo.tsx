@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface RankTributo { cd: number; nome: string; lancado: number; arrecadado: number; saldo: number }
+export interface TipoSelecionado { chave: string; nome: string; codigos: number[] }
 
 const CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e', '#eaa957', '#f0bb7c']
 const TOP_N = 10
@@ -18,18 +19,33 @@ const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits:
 // /api/tributo/ranking (lib/tributo-engine.ts rankingTributos), já usada internamente pelo
 // warmup/cobrança — aqui exposta como visualização própria. Mostra os TOP_N por lançado +
 // uma linha agregada "Demais tributos" com o restante, pra não poluir com 30+ códigos.
-export default function OutrosTributosPorTipo({ ano, mes }: { ano?: number; mes?: number }) {
+// `onTipoChange` (opcional) avisa o pai qual item está selecionado (ou null) — usado por
+// app/outros-tributos/page.tsx pra alimentar o painel companion OutrosTributoDetalhe,
+// renderizado ao lado deste card (mesmo padrão do ISS por Segmento/Análise de Enquadramento
+// em Mobiliário). Clicar na linha "Demais tributos" seleciona todos os códigos agregados
+// nela, mostrando o detalhe combinado — não é um tipo único, mas o drill funciona igual.
+export default function OutrosTributosPorTipo({ ano, mes, onTipoChange }: { ano?: number; mes?: number; onTipoChange?: (item: TipoSelecionado | null) => void }) {
   const [itens, setItens] = useState<RankTributo[] | null>(null)
+  const [selecionado, setSelecionado] = useState<string | null>(null)
 
   useEffect(() => {
     setItens(null)
+    setSelecionado(null)
+    onTipoChange?.(null)
     const qs = new URLSearchParams()
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
     const q = qs.toString()
     fetch(`/api/tributo/ranking${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error && Array.isArray(d.itens)) setItens(d.itens) }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ano, mes])
+
+  function selecionar(chave: string, nome: string, codigos: number[]) {
+    if (selecionado === chave) { setSelecionado(null); onTipoChange?.(null); return }
+    setSelecionado(chave)
+    onTipoChange?.({ chave, nome, codigos })
+  }
 
   if (!itens) {
     return (
@@ -70,7 +86,7 @@ export default function OutrosTributosPorTipo({ ano, mes }: { ano?: number; mes?
         <span style={reportBadge}>Lançado</span>
       </div>
       <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-        Composição do grupo &quot;Outros Tributos&quot; por tipo (taxas, contribuições, multas e demais códigos fora de IPTU/ITBI/ISS/TFE/TFHS){mes ? ` até o mês ${mes}` : ''} — {ordenado.length} tipo{ordenado.length === 1 ? '' : 's'} no total, exibindo os {Math.min(TOP_N, ordenado.length)} maiores.
+        Composição do grupo &quot;Outros Tributos&quot; por tipo (taxas, contribuições, multas e demais códigos fora de IPTU/ITBI/ISS/TFE/TFHS){mes ? ` até o mês ${mes}` : ''} — {ordenado.length} tipo{ordenado.length === 1 ? '' : 's'} no total, exibindo os {Math.min(TOP_N, ordenado.length)} maiores. Clique num item para ver o detalhe.
       </div>
 
       {!ordenado.length ? (
@@ -89,10 +105,17 @@ export default function OutrosTributosPorTipo({ ano, mes }: { ano?: number; mes?
               const cor = t.cd === -1 ? '#aab8e3' : CORES[i % CORES.length]
               const w = Math.max(3, 100 * t.lancado / maxVal)
               const pctArr = t.lancado ? (t.arrecadado / t.lancado) * 100 : 0
+              const chave = t.cd === -1 ? 'demais' : String(t.cd)
+              const codigos = t.cd === -1 ? resto.map(x => x.cd) : [t.cd]
+              const ativo = selecionado === chave
               return (
-                <div key={t.cd}>
+                <div key={t.cd} onClick={() => selecionar(chave, t.nome, codigos)}
+                  style={{ cursor: 'pointer', borderRadius: 8, padding: '4px 6px', margin: '-4px -6px', background: ativo ? '#eef1fb' : 'transparent', border: ativo ? '1px solid #cdd5ef' : '1px solid transparent' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
-                    <span style={{ fontSize: 11.5, color: '#3a4256', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                    <span style={{ fontSize: 11.5, color: ativo ? '#283e93' : '#3a4256', fontWeight: ativo ? 700 : 400, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="3" style={{ flex: 'none', transform: ativo ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}><path d="M9 6l6 6-6 6" /></svg>
+                      {t.nome}
+                    </span>
                     <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none', textAlign: 'right' }}>
                       {fmtAbrev(t.lancado)}
                       <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>{fmtAbrev(t.arrecadado)} arrec. ({fmtPct(pctArr)})</span>

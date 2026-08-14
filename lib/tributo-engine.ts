@@ -34,10 +34,21 @@ function whereTributo(grupo: GrupoTributo): string {
  * (bucketsIptuAteMes/bucketsItbiAteMes). Isenção/suspenso continuam anuais (não acumulam por mês).
  */
 export async function serieTributo(grupo: GrupoTributo, anoMin = 2018, anoMax = new Date().getFullYear(), mes?: number): Promise<SerieExercicio[]> {
-  return cached(`serie:${grupo}:${anoMin}:${anoMax}:${mes ?? ''}`, TTL_15MIN, () => serieTributoRaw(grupo, anoMin, anoMax, mes))
+  return cached(`serie:${grupo}:${anoMin}:${anoMax}:${mes ?? ''}`, TTL_15MIN, () => serieTributoWhereRaw(whereTributo(grupo), anoMin, anoMax, mes))
 }
 
-async function serieTributoRaw(grupo: GrupoTributo, anoMin: number, anoMax: number, mes?: number): Promise<SerieExercicio[]> {
+/**
+ * Série anual para um conjunto arbitrário de códigos de tributo (cd_tributo), em vez de um
+ * grupo pré-definido. Usada pelo drill "detalhe de um tipo" do ranking de Outros Tributos
+ * (rankingTributos) — ao selecionar um item do ranking, mostra a evolução anual daquele(s)
+ * código(s) específico(s) (um único código, ou vários no caso da linha agregada "Demais").
+ */
+export async function serieTributoPorCodigos(codigos: number[], anoMin = 2018, anoMax = new Date().getFullYear(), mes?: number): Promise<SerieExercicio[]> {
+  const chave = [...codigos].sort((a, b) => a - b).join('.')
+  return cached(`serieCod:${chave}:${anoMin}:${anoMax}:${mes ?? ''}`, TTL_15MIN, () => serieTributoWhereRaw(`g.cd_tributo IN (${codigos.join(',')})`, anoMin, anoMax, mes))
+}
+
+async function serieTributoWhereRaw(where: string, anoMin: number, anoMax: number, mes?: number): Promise<SerieExercicio[]> {
   const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const [principal, anual] = await Promise.all([
     agentQuery(`
@@ -48,7 +59,7 @@ async function serieTributoRaw(grupo: GrupoTributo, anoMin: number, anoMax: numb
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE ${whereTributo(grupo)}${filtroMes}
+      WHERE ${where}${filtroMes}
       GROUP BY g.no_exercicio_lancamento`, 200),
     agentQuery(`
       SELECT g.no_exercicio_lancamento AS ex,
@@ -57,7 +68,7 @@ async function serieTributoRaw(grupo: GrupoTributo, anoMin: number, anoMax: numb
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE ${whereTributo(grupo)}
+      WHERE ${where}
       GROUP BY g.no_exercicio_lancamento`, 200),
   ])
 
