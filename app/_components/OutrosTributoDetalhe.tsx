@@ -141,12 +141,19 @@ export default function OutrosTributoDetalhe({ item, mes }: { item: TipoSelecion
               <div style={{ marginTop: 14, height: 110, borderRadius: 12, background: '#eef1f7' }} />
             ) : (() => {
               const crescimento = previsao.cenarios.moderado - previsao.base
+              // Sem crescimento projetado (ex.: código de tributo com só 1 exercício completo
+              // de histórico na janela da regressão, caso de tributos novos como a TCA) os 3
+              // cenários coincidem com o valor-base — arrastar o slider não muda nada, e isso
+              // precisa ficar explícito (slider desabilitado + aviso), senão parece travado.
+              const semVariacao = crescimento === 0
               const valorSimulado = Math.max(0, previsao.base + crescimento * nivel)
               const pctSimulado = previsao.base ? ((valorSimulado - previsao.base) / previsao.base) * 100 : 0
               return (
                 <>
                   <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>
-                    Regressão linear sobre os exercícios completos até {previsao.anoBase}, projetando {previsao.anoPrevisao}, ancorada no lançado real de {previsao.anoBase} ({fmtAbrev(previsao.base)}). Arraste entre o cenário conservador (50% do crescimento projetado) e o agressivo (150%) — estimativa para planejamento, não uma garantia.
+                    {semVariacao
+                      ? `Histórico insuficiente até ${previsao.anoBase} para projetar uma tendência de crescimento — os 3 cenários coincidem com o lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Estimativa para planejamento, não uma garantia.`
+                      : `Regressão linear sobre os exercícios completos até ${previsao.anoBase}, projetando ${previsao.anoPrevisao}, ancorada no lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Arraste entre o cenário conservador (50% do crescimento projetado) e o agressivo (150%) — estimativa para planejamento, não uma garantia.`}
                   </div>
 
                   <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -154,7 +161,8 @@ export default function OutrosTributoDetalhe({ item, mes }: { item: TipoSelecion
                     <span style={{ fontSize: 17, fontWeight: 700, color: '#283e93' }}>{pctSimulado >= 0 ? '+' : ''}{fmtPct(pctSimulado)}</span>
                   </div>
                   <input type="range" min={NIVEL_MIN} max={NIVEL_MAX} step={0.01} value={nivel} onChange={e => setNivel(Number(e.target.value))}
-                    style={{ width: '100%', accentColor: '#283e93', cursor: 'pointer', marginTop: 8 }} />
+                    disabled={semVariacao}
+                    style={{ width: '100%', accentColor: '#283e93', cursor: semVariacao ? 'not-allowed' : 'pointer', opacity: semVariacao ? 0.4 : 1, marginTop: 8 }} />
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, fontWeight: 600, marginTop: 2 }}>
                     <span style={{ color: '#7d8fce' }}>Conservador</span>
                     <span style={{ color: '#283e93' }}>Moderado</span>
