@@ -11,6 +11,7 @@ import TfePorSegmento from '../_components/TfePorSegmento'
 import IssSegmentoPrestador from '../_components/IssSegmentoPrestador'
 import IssSegmentoEnquadramento from '../_components/IssSegmentoEnquadramento'
 import IssForaMunicipio from '../_components/IssForaMunicipio'
+import VolumeNfseEmitidasTomadas from '../_components/VolumeNfseEmitidasTomadas'
 import LimiteFaturamento from '../_components/LimiteFaturamento'
 import MeiEnquadramentoLancamento from '../_components/MeiEnquadramentoLancamento'
 import { SITUACOES, type SituacaoOpt } from '@/lib/mobiliario-filtros'
@@ -188,6 +189,7 @@ export default function MobiliarioPage() {
           </div>
         )}
         {aba === 'iss' && <IssForaMunicipio ano={anoTrib || undefined} mes={mesTrib || undefined} previsao={previsaoIss} cenario={cenarioIss} onCenarioChange={setCenarioIss} />}
+        {aba === 'iss' && <VolumeNfseEmitidasTomadas mes={mesTrib || undefined} />}
         {aba === 'iss' && <LimiteFaturamento cenario={cenarioIss} />}
         {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'tfe' && <TfePorSegmento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
