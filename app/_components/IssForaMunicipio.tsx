@@ -18,7 +18,8 @@ interface PrevisaoResp {
 }
 type Cenario = 'conservador' | 'provavel' | 'agressivo'
 
-const SEG_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
+const FORA_CORES = ['#e8962e', '#eba846', '#efb95f', '#f2c977', '#f5d790', '#f8e4a9', '#facfc2']
+const LOCAL_LABEL = 'Arujá'
 const CENARIOS: { key: Cenario; label: string }[] = [
   { key: 'conservador', label: 'Conservador' },
   { key: 'provavel', label: 'Provável' },
@@ -29,16 +30,18 @@ const card: React.CSSProperties = { background: '#fff', borderRadius: 22, paddin
 const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
 const voltarBtn: React.CSSProperties = { border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, flex: 'none' }
 
-// "ISS Prestador de Fora do Município" — separa as NFS-e por município do prestador
-// (fonte: /api/mobiliario/iss-fora-municipio, tabela tb_dsod_nfse — INDEPENDENTE do motor
-// de lançado/arrecadado de guias usado no resto da aba ISS; não somar com "ISS lançado" do
-// topo da tela). nm_mun é texto livre digitado na nota, então a classificação Arujá × fora
-// é aproximada (normalizada) — ver aviso no card. `ano`/`mes` seguem a mesma convenção do
-// PainelTributo.
-// Drill: clique num item de "Top municípios de fora" mostra o ranking dos prestadores
-// daquele município (fonte /api/mobiliario/iss-fora-prestadores), mesmo padrão de drill do
-// card IssSegmentoPrestador (segmento→prestador). Nesse nível o painel de simulação fica
-// oculto (é uma projeção do total do município, não faz sentido por prestador individual).
+// "ISS Prestador de Fora do Município" — gráfico único por município do prestador: Arujá
+// (local) e cada município "de fora" aparecem como barras de uma mesma lista ranqueada,
+// combinando `dados.local` + `dados.topFora` em `combinado` (fonte: /api/mobiliario/iss-
+// fora-municipio, tabela tb_dsod_nfse — INDEPENDENTE do motor de lançado/arrecadado de
+// guias usado no resto da aba ISS; não somar com "ISS lançado" do topo da tela). nm_mun é
+// texto livre digitado na nota, então a classificação Arujá × fora é aproximada
+// (normalizada) — ver aviso no card. `ano`/`mes` seguem a mesma convenção do PainelTributo.
+// Drill: clique em qualquer barra (Arujá ou um município de fora) mostra o ranking dos
+// prestadores daquele local (fonte /api/mobiliario/iss-fora-prestadores — trata "Arujá"
+// como caso especial, já que não há uma grafia única de nm_mun pra filtrar por igualdade),
+// mesmo padrão de drill do card IssSegmentoPrestador (segmento→prestador). Nesse nível o
+// painel de simulação fica oculto (é uma projeção do total, não faz sentido por prestador).
 export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: number }) {
   const [dados, setDados] = useState<Resp | null>(null)
   const [previsao, setPrevisao] = useState<PrevisaoResp | null>(null)
@@ -99,10 +102,14 @@ export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: num
   }
 
   const { local, fora, topFora } = dados
-  const maxGrupo = Math.max(1, local.iss, fora.iss)
   const totalGrupos = local.iss + fora.iss
   const pctFora = totalGrupos ? (100 * fora.iss / totalGrupos) : 0
-  const maxFora = Math.max(1, ...topFora.map(m => m.iss))
+  const combinado = [
+    { nome: LOCAL_LABEL, valor: local.iss, qt: local.qt, isLocal: true },
+    ...topFora.map(m => ({ nome: m.nome, valor: m.iss, qt: m.qt, isLocal: false })),
+  ].sort((a, b) => b.valor - a.valor)
+  const maxCombo = Math.max(1, ...combinado.map(c => c.valor))
+  let corForaIdx = 0
 
   const localPrev = previsao?.local[cenario] ?? 0
   const foraPrev = previsao?.fora[cenario] ?? 0
@@ -138,7 +145,7 @@ export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: num
       {municipioSel ? (
         <>
           <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-            Empresas de &quot;{municipioSel}&quot; que mais indicaram ISS nas NFS-e emitidas para Arujá{mes ? ` até o mês ${mes}` : ''}.
+            Empresas de &quot;{municipioSel}&quot; que mais indicaram ISS nas NFS-e{mes ? ` até o mês ${mes}` : ''}.
           </div>
 
           {!prestadoresFora ? (
@@ -184,57 +191,29 @@ export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: num
       ) : (
         <>
           <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-            Imposto indicado nas NFS-e por município do prestador{mes ? ` até o mês ${mes}` : ''} — fonte independente do ISS lançado (guias) do topo da tela, não some com ele.
+            Imposto indicado nas NFS-e por município do prestador{mes ? ` até o mês ${mes}` : ''} — fonte independente do ISS lançado (guias) do topo da tela, não some com ele. {pctFora.toFixed(1).replace('.', ',')}% vem de prestadores de fora do município. Clique numa barra para ver os prestadores daquele município.
           </div>
           <div style={{ fontSize: 10, color: '#c07a2e', background: '#fdf1e2', borderRadius: 8, padding: '6px 10px', marginTop: 8, lineHeight: 1.4 }}>
             Município do prestador é texto livre na nota fiscal (sujeito a grafia/digitação). A classificação Arujá × fora é aproximada (normalizada); um pequeno resíduo de erros de digitação de &quot;Arujá&quot; pode aparecer como fora do município.
           </div>
 
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#283e93' }}>PRESTADORES DE ARUJÁ</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                <div style={{ height: 40, width: `${Math.max(10, 86 * local.iss / maxGrupo).toFixed(1)}%`, borderRadius: 10, background: 'linear-gradient(90deg,#5870c4 0%,#8094d6 100%)', flex: 'none' }} />
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#283e93' }}>{fmtAbrev(local.iss)}</div>
-                  <div style={{ fontSize: 10, color: '#aeb6c6' }}>{local.qt.toLocaleString('pt-BR')} notas</div>
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {combinado.map(c => {
+              const w = (c.valor / maxCombo) * 100
+              const cor = c.isLocal ? '#283e93' : FORA_CORES[corForaIdx++ % FORA_CORES.length]
+              return (
+                <div key={c.nome} onClick={() => abrirMunicipio(c.nome)} style={{ cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11.5, color: '#3a4256', fontWeight: c.isLocal ? 700 : 400 }}>{c.nome}{c.isLocal ? ' (local)' : ''}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(c.valor)}</span>
+                  </div>
+                  <div style={{ height: 13, borderRadius: 6, background: '#eef1f7', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.max(3, w).toFixed(1)}%`, background: cor, borderRadius: 6 }} />
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.4px', color: '#e8962e' }}>PRESTADORES DE FORA DO MUNICÍPIO</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                <div style={{ height: 40, width: `${Math.max(10, 86 * fora.iss / maxGrupo).toFixed(1)}%`, borderRadius: 10, background: 'linear-gradient(90deg,#e8962e 0%,#f3c07c 100%)', flex: 'none' }} />
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#c07a2e' }}>{fmtAbrev(fora.iss)}</div>
-                  <div style={{ fontSize: 10, color: '#aeb6c6' }}>{fora.qt.toLocaleString('pt-BR')} notas · {pctFora.toFixed(1).replace('.', ',')}% do total</div>
-                </div>
-              </div>
-            </div>
+              )
+            })}
           </div>
-
-          {topFora.length ? (
-            <div style={{ marginTop: 20, borderTop: '1px solid #eef1f7', paddingTop: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 10 }}>Top municípios de fora</div>
-              <div style={{ fontSize: 10.5, color: '#aeb6c6', marginBottom: 10 }}>Clique num município para ver os prestadores</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {topFora.map((m, i) => {
-                  const w = (m.iss / maxFora) * 100
-                  return (
-                    <div key={m.nome} onClick={() => abrirMunicipio(m.nome)} style={{ cursor: 'pointer' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontSize: 11.5, color: '#3a4256' }}>{m.nome}</span>
-                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(m.iss)}</span>
-                      </div>
-                      <div style={{ height: 11, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${Math.max(3, w).toFixed(1)}%`, background: SEG_CORES[i % SEG_CORES.length], borderRadius: 5 }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ) : null}
 
           {/* Painel de simulação — previsão para o próximo exercício, 3 níveis */}
           <div style={{ marginTop: 20, borderTop: '1px solid #eef1f7', paddingTop: 16 }}>
