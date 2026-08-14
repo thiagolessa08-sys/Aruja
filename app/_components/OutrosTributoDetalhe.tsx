@@ -141,10 +141,10 @@ export default function OutrosTributoDetalhe({ item, mes }: { item: TipoSelecion
               <div style={{ marginTop: 14, height: 110, borderRadius: 12, background: '#eef1f7' }} />
             ) : (() => {
               const crescimento = previsao.cenarios.moderado - previsao.base
-              // Sem crescimento projetado (ex.: código de tributo com só 1 exercício completo
-              // de histórico na janela da regressão, caso de tributos novos como a TCA) os 3
-              // cenários coincidem com o valor-base — arrastar o slider não muda nada, e isso
-              // precisa ficar explícito (slider desabilitado + aviso), senão parece travado.
+              // Sem crescimento projetado (ex.: código de tributo com só 1 exercício com
+              // lançamento na janela da regressão) os 3 cenários coincidem com o valor-base —
+              // arrastar o slider não muda nada, e isso precisa ficar explícito (slider
+              // desabilitado + aviso), senão parece travado.
               const semVariacao = crescimento === 0
               const valorSimulado = Math.max(0, previsao.base + crescimento * nivel)
               const pctSimulado = previsao.base ? ((valorSimulado - previsao.base) / previsao.base) * 100 : 0
@@ -152,8 +152,8 @@ export default function OutrosTributoDetalhe({ item, mes }: { item: TipoSelecion
                 <>
                   <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>
                     {semVariacao
-                      ? `Histórico insuficiente até ${previsao.anoBase} para projetar uma tendência de crescimento — os 3 cenários coincidem com o lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Estimativa para planejamento, não uma garantia.`
-                      : `Regressão linear sobre os exercícios completos até ${previsao.anoBase}, projetando ${previsao.anoPrevisao}, ancorada no lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Arraste entre o cenário conservador (50% do crescimento projetado) e o agressivo (150%) — estimativa para planejamento, não uma garantia.`}
+                      ? `Histórico insuficiente (só ${previsao.anoBase}) para projetar uma tendência de crescimento — os 3 cenários coincidem com o lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Estimativa para planejamento, não uma garantia.`
+                      : `Regressão linear sobre os exercícios com lançamento até ${previsao.anoBase} (inclui o ano corrente, se já houver dado), projetando ${previsao.anoPrevisao}, ancorada no lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Arraste entre o cenário conservador (50% do crescimento projetado) e o agressivo (150%) — estimativa para planejamento, não uma garantia.`}
                   </div>
 
                   <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>

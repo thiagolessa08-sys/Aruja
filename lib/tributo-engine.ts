@@ -50,8 +50,8 @@ export async function serieTributoPorCodigos(codigos: number[], anoMin = 2018, a
 
 export interface CenariosTributo { conservador: number; moderado: number; agressivo: number }
 export interface PrevisaoTributoResp {
-  anoBase: number       // último exercício completo usado como âncora
-  anoPrevisao: number   // exercício projetado (anoBase + 2, ex.: 2025 → 2027)
+  anoBase: number       // exercício-âncora (o mais recente com lançamento real, pode ser o corrente)
+  anoPrevisao: number   // exercício projetado (sempre anoAtual + 1, ex.: 2026 → 2027)
   base: number           // lançado real do anoBase (mesma base dos 3 cenários)
   cenarios: CenariosTributo
 }
@@ -75,29 +75,35 @@ function regressaoLinearSimples(pontos: { x: number; y: number }[]): (x: number)
 }
 
 /**
- * Previsão do LANÇADO (2 exercícios à frente, ex.: base 2025 → previsão 2027) de um
- * conjunto de códigos de tributo, pro drill "detalhe" do ranking de Outros Tributos.
- * Âncora no último exercício COMPLETO (ano corrente é parcial) e projeta por regressão
- * linear sobre os últimos JANELA_PREV exercícios completos — mesma técnica e mesma
- * convenção de 3 níveis de previsaoIssFora (conservador = metade do crescimento projetado,
- * moderado = regressão cheia, agressivo = 1,5× o crescimento — todos ancorados no valor real
- * do último exercício). Sempre em base ANUAL, independente do filtro de mês da tela.
+ * Previsão do LANÇADO pro próximo exercício fechado (sempre anoAtual + 1, ex.: em 2026 →
+ * previsão 2027) de um conjunto de códigos de tributo, pro drill "detalhe" do ranking de
+ * Outros Tributos. Ao contrário de previsaoIssFora (que exclui o ano corrente por ser
+ * parcial), aqui o ano corrente ENTRA na regressão sempre que já houver lançamento — um
+ * código novo como a TCA (só 2025 e 2026) já tem 2 pontos reais, o suficiente pra estimar
+ * uma tendência, em vez de descartar o único dado mais recente e ficar sem crescimento
+ * nenhum pra projetar. A âncora (anoBase/base) é o exercício mais recente que de fato tem
+ * lançamento pro(s) código(s) — não necessariamente anoAtual, pois códigos descontinuados
+ * (sem lançamento neste nem no ano anterior) caem num ano mais antigo. Regressão linear
+ * sobre os últimos JANELA_PREV exercícios com lançamento — mesma técnica e mesma convenção
+ * de 3 níveis de previsaoIssFora (conservador = metade do crescimento projetado, moderado =
+ * regressão cheia, agressivo = 1,5× o crescimento — todos ancorados no valor real da âncora).
+ * Sempre em base ANUAL, independente do filtro de mês da tela.
  */
 export async function previsaoTributoCodigos(codigos: number[]): Promise<PrevisaoTributoResp> {
   const chave = [...codigos].sort((a, b) => a - b).join('.')
   return cached(`previsaoTributoCod:${chave}`, TTL_15MIN, async () => {
     const anoAtual = new Date().getFullYear()
-    const anoBase = anoAtual - 1
-    const anoPrevisao = anoBase + 2
-    const serie = await serieTributoPorCodigos(codigos, anoBase - JANELA_PREV + 1, anoBase)
+    const anoPrevisao = anoAtual + 1
+    const serie = await serieTributoPorCodigos(codigos, anoAtual - JANELA_PREV + 1, anoAtual)
 
     const pontos = serie.map(s => ({ x: s.ano, y: s.lancado }))
     const moderado = pontos.length ? Math.max(0, regressaoLinearSimples(pontos)(anoPrevisao)) : 0
-    // Busca o exercício-âncora especificamente (não o último ponto da série): se o
-    // código não teve lançamento em anoBase (ex.: tributo descontinuado), serieTributoPorCodigos
-    // já descarta esse ano por ser "vazio" — usar serie[length-1] pegaria silenciosamente um
-    // ano anterior e rotularia o valor errado como sendo de anoBase.
-    const base = serie.find(s => s.ano === anoBase)?.lancado ?? 0
+    // Âncora = exercício mais recente com lançamento real (pode ser o ano corrente, se já
+    // houver dado). serie vem ordenada por ano crescente e sem anos vazios (serieTributoWhereRaw
+    // descarta lancado=arrecadado=saldo=0), então o último item é sempre a âncora correta.
+    const ultimo = serie[serie.length - 1]
+    const anoBase = ultimo?.ano ?? anoAtual - 1
+    const base = ultimo?.lancado ?? 0
     const crescimento = moderado - base
 
     return {
