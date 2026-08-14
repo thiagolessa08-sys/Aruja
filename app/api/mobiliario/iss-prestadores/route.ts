@@ -6,6 +6,7 @@ import { cached, TTL_15MIN } from '@/lib/cache'
 const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 const COD_ISS = [3, 7, 8, 33, 70, 301, 302, 303, 304, 572] // CODIGOS.iss em lib/tributos.ts
+const esc = (s: string) => s.replace(/'/g, "''")
 
 export interface PrestadorItem { cd: number; nome: string; cnpjCpf: string; qt: number; valor: number }
 
@@ -16,8 +17,19 @@ export interface PrestadorItem { cd: number; nome: string; cnpjCpf: string; qt: 
 // Ao contrário de iss-segmento, aqui o JOIN com o cadastro é intencionalmente obrigatório
 // (INNER): só faz sentido rankear um prestador identificado — guias sem vínculo com o
 // cadastro (mesmo gap de cobertura descrito em iss-segmento) ficam de fora do ranking.
-async function topPrestadores(top: number, ano?: number, mes?: number): Promise<PrestadorItem[]> {
-  return cached(`iss:topPrestadores:${top}:${ano ?? ''}:${mes ?? ''}`, TTL_15MIN, async () => {
+// `segmento` (opcional) drilla o ranking para dentro de um ds_grupo específico — usado pelo
+// drill "ISS por Segmento → Top Prestadores" do card IssSegmentoPrestador. O valor especial
+// "Não classificado" (mesmo rótulo usado em iss-segmento) cai para ds_grupo em branco/nulo
+// dos prestadores que TÊM vínculo cadastral (a parcela sem vínculo nenhum, que também compõe
+// "Não classificado" em iss-segmento, não é rankeável aqui — não há prestador identificado).
+function filtroSegmento(segmento?: string): string {
+  if (!segmento) return ''
+  if (segmento === 'Não classificado') return ` AND (m.ds_grupo IS NULL OR LTRIM(RTRIM(m.ds_grupo)) = '')`
+  return ` AND LTRIM(RTRIM(m.ds_grupo)) = '${esc(segmento)}'`
+}
+
+async function topPrestadores(top: number, ano?: number, mes?: number, segmento?: string): Promise<PrestadorItem[]> {
+  return cached(`iss:topPrestadores:${top}:${ano ?? ''}:${mes ?? ''}:${segmento ?? ''}`, TTL_15MIN, async () => {
     const filtroAno = ano ? ` AND g.no_exercicio_lancamento = ${ano}` : ''
     const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
     const r = await agentQuery(`
@@ -29,7 +41,7 @@ async function topPrestadores(top: number, ano?: number, mes?: number): Promise<
       JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
       WHERE g.cd_tributo IN (${COD_ISS.join(',')}) AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela <> 0
-        AND g.ds_situacao NOT IN ('Recalculo','Validacao')${filtroAno}${filtroMes}
+        AND g.ds_situacao NOT IN ('Recalculo','Validacao')${filtroAno}${filtroMes}${filtroSegmento(segmento)}
       GROUP BY m.cd_contr_mob, cp.nm_rsocial, cp.no_cpf_cnpj
       ORDER BY vl DESC`, top + 10)
     return r.rows
@@ -53,7 +65,8 @@ export async function GET(req: NextRequest) {
     const top = Math.min(50, Math.max(5, Number(sp.get('top')) || 20))
     const ano = Number(sp.get('ano')) || undefined
     const mes = Number(sp.get('mes')) || undefined
-    return NextResponse.json({ itens: await topPrestadores(top, ano, mes) })
+    const segmento = sp.get('segmento') || undefined
+    return NextResponse.json({ itens: await topPrestadores(top, ano, mes, segmento) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
