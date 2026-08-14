@@ -2,21 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { fmtAbrev } from '@/lib/fmt-grafico'
+import type { PrevisaoForaResp as PrevisaoResp, Cenario } from '@/lib/iss-fora-previsao'
 
 interface GrupoMun { qt: number; base: number; iss: number }
 interface MunItem { nome: string; qt: number; iss: number }
 interface Resp { local: GrupoMun; fora: GrupoMun; naoInformado: GrupoMun; topFora: MunItem[] }
 interface PrestadorForaItem { cnpj: string; nome: string; qt: number; iss: number }
-
-interface CenariosValor { conservador: number; provavel: number; agressivo: number }
-interface PrevisaoResp {
-  anoBase: number
-  anoPrevisao: number
-  historico: { ano: number; local: number; fora: number }[]
-  local: CenariosValor
-  fora: CenariosValor
-}
-type Cenario = 'conservador' | 'provavel' | 'agressivo'
 
 const FORA_CORES = ['#e8962e', '#eba846', '#efb95f', '#f2c977', '#f5d790', '#f8e4a9', '#facfc2']
 const LOCAL_LABEL = 'Arujá'
@@ -43,10 +34,17 @@ const voltarBtn: React.CSSProperties = { border: 'none', background: '#eef1fb', 
 // mesmo padrão de drill do card IssSegmentoPrestador (segmento→prestador). O painel de
 // Simulação · Previsão fica sempre visível abaixo, em qualquer nível — é uma projeção do
 // total do card, não do item aberto no drill.
-export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: number }) {
+// `previsao`/`cenario`/`onCenarioChange` vêm de app/mobiliario/page.tsx (componente
+// controlado) — o cenário escolhido aqui também alimenta ISS por Segmento e Limite Anual
+// de Faturamento (via crescimentoTotalPct), então o estado mora no pai da aba ISS.
+export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenarioChange }: {
+  ano?: number
+  mes?: number
+  previsao: PrevisaoResp | null
+  cenario: Cenario
+  onCenarioChange: (c: Cenario) => void
+}) {
   const [dados, setDados] = useState<Resp | null>(null)
-  const [previsao, setPrevisao] = useState<PrevisaoResp | null>(null)
-  const [cenario, setCenario] = useState<Cenario>('provavel')
   const [municipioSel, setMunicipioSel] = useState<string | null>(null)
   const [prestadoresFora, setPrestadoresFora] = useState<PrestadorForaItem[] | null>(null)
   const [buscaPrestador, setBuscaPrestador] = useState('')
@@ -63,11 +61,6 @@ export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: num
     fetch(`/api/mobiliario/iss-fora-municipio${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setDados(d) }).catch(() => {})
   }, [ano, mes])
-
-  useEffect(() => {
-    fetch('/api/mobiliario/iss-fora-previsao').then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setPrevisao(d) }).catch(() => {})
-  }, [])
 
   function abrirMunicipio(nome: string) {
     setMunicipioSel(nome)
@@ -226,7 +219,7 @@ export default function IssForaMunicipio({ ano, mes }: { ano?: number; mes?: num
           <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Simulação · Previsão {previsao ? previsao.anoPrevisao : ''}</span>
           <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
             {CENARIOS.map(c => (
-              <button key={c.key} onClick={() => setCenario(c.key)}
+              <button key={c.key} onClick={() => onCenarioChange(c.key)}
                 style={{
                   border: 'none', borderRadius: 9, padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                   background: cenario === c.key ? '#283e93' : 'transparent',

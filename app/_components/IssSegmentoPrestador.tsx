@@ -23,7 +23,11 @@ const voltarBtn: React.CSSProperties = { border: 'none', background: '#eef1fb', 
 // Dentro do nível 2, clique num prestador expande inline a evolução do ISS lançado por
 // exercício (mesmo drill que já existia em IssTopPrestadores) — fonte
 // /api/mobiliario/iss-prestador-serie. `ano`/`mes` seguem a convenção do PainelTributo.
-export default function IssSegmentoPrestador({ ano, mes }: { ano?: number; mes?: number }) {
+// `crescimentoPct` (opcional) vem do cenário selecionado na Simulação · Previsão do card
+// ISS Prestador de Fora do Município (crescimentoTotalPct, lib/iss-fora-previsao) — quando
+// presente, cada barra de segmento (nível 1) ganha uma extensão tracejada mostrando o valor
+// projetado para o próximo exercício com aquela % de crescimento.
+export default function IssSegmentoPrestador({ ano, mes, crescimentoPct }: { ano?: number; mes?: number; crescimentoPct?: number | null }) {
   const [segmentos, setSegmentos] = useState<Segmento[] | null>(null)
   const [segmentoSel, setSegmentoSel] = useState<string | null>(null)
   const [prestadores, setPrestadores] = useState<Prestador[] | null>(null)
@@ -121,21 +125,34 @@ export default function IssSegmentoPrestador({ ano, mes }: { ano?: number; mes?:
         <>
           <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
             ISS/ISSQN lançado por segmento da empresa (ds_grupo do cadastro mobiliário){mes ? ` até o mês ${mes}` : ''} · clique num segmento para ver os prestadores. &quot;Não classificado&quot; inclui guias sem vínculo com o cadastro mobiliário (ex.: retenções e exercícios mais antigos).
+            {crescimentoPct != null ? ` A faixa tracejada mostra o valor projetado (${crescimentoPct >= 0 ? '+' : ''}${(crescimentoPct * 100).toFixed(1).replace('.', ',')}%, cenário da Simulação · Previsão do card ISS Prestador de Fora do Município).` : ''}
           </div>
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
             {(() => {
-              const maxSeg = Math.max(1, ...segmentos.map(t => t.valor))
-              return segmentos.map((t, i) => (
-                <div key={t.nome} onClick={() => abrirSegmento(t.nome)} style={{ cursor: 'pointer' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11.5, color: '#3a4256', lineHeight: 1.2, paddingRight: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(t.valor)}</span>
+              const fator = 1 + (crescimentoPct ?? 0)
+              const maxSeg = Math.max(1, ...segmentos.map(t => Math.max(t.valor, t.valor * fator)))
+              return segmentos.map((t, i) => {
+                const cor = SEG_CORES[i % SEG_CORES.length]
+                const wAtual = Math.max(3, 100 * t.valor / maxSeg)
+                const wProjetado = crescimentoPct != null ? Math.max(0, 100 * (t.valor * fator - t.valor) / maxSeg) : 0
+                return (
+                  <div key={t.nome} onClick={() => abrirSegmento(t.nome)} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11.5, color: '#3a4256', lineHeight: 1.2, paddingRight: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>
+                        {fmtAbrev(t.valor)}
+                        {crescimentoPct != null ? <span style={{ color: '#9098a8', fontWeight: 500 }}> → {fmtAbrev(t.valor * fator)}</span> : null}
+                      </span>
+                    </div>
+                    <div style={{ position: 'relative', height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${wAtual.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
+                      {wProjetado > 0 ? (
+                        <div style={{ position: 'absolute', left: `${wAtual.toFixed(1)}%`, top: 0, height: '100%', width: `${wProjetado.toFixed(1)}%`, background: cor, opacity: 0.35, borderLeft: '1.5px dashed #fff' }} />
+                      ) : null}
+                    </div>
                   </div>
-                  <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.max(3, 100 * t.valor / maxSeg).toFixed(1)}%`, background: SEG_CORES[i % SEG_CORES.length], borderRadius: 5 }} />
-                  </div>
-                </div>
-              ))
+                )
+              })
             })()}
           </div>
         </>

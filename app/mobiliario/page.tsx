@@ -10,8 +10,10 @@ import PainelTributo from '../tributo/PainelTributo'
 import TfePorSegmento from '../_components/TfePorSegmento'
 import IssSegmentoPrestador from '../_components/IssSegmentoPrestador'
 import IssForaMunicipio from '../_components/IssForaMunicipio'
+import LimiteFaturamento from '../_components/LimiteFaturamento'
 import MeiEnquadramentoLancamento from '../_components/MeiEnquadramentoLancamento'
 import { SITUACOES, type SituacaoOpt } from '@/lib/mobiliario-filtros'
+import type { PrevisaoForaResp, Cenario } from '@/lib/iss-fora-previsao'
 
 type SubAba = 'iss' | 'tfe' | 'tfhs' | 'mob'
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -39,6 +41,24 @@ export default function MobiliarioPage() {
     setAnosTrib(prev => (prev.length === lista.length && prev.every((v, i) => v === lista[i]) ? prev : lista))
     setAnoTrib(prev => (prev && lista.includes(prev)) ? prev : (lista[0] ?? ''))
   }
+
+  // Simulação · Previsão 2027 (aba ISS) — mora aqui, e não em IssForaMunicipio, porque o
+  // cenário escolhido (Conservador/Provável/Agressivo) também alimenta ISS por Segmento e
+  // Limite Anual de Faturamento (crescimentoPct abaixo), não só o card onde o seletor fica.
+  const [previsaoIss, setPrevisaoIss] = useState<PrevisaoForaResp | null>(null)
+  const [cenarioIss, setCenarioIss] = useState<Cenario>('provavel')
+  useEffect(() => {
+    fetch('/api/mobiliario/iss-fora-previsao').then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error) setPrevisaoIss(d) }).catch(() => {})
+  }, [])
+  const crescimentoPctIss = (() => {
+    if (!previsaoIss) return null
+    const base = previsaoIss.historico[previsaoIss.historico.length - 1]
+    const baseTotal = base ? base.local + base.fora : 0
+    if (!baseTotal) return null
+    const prevTotal = previsaoIss.local[cenarioIss] + previsaoIss.fora[cenarioIss]
+    return (prevTotal - baseTotal) / baseTotal
+  })()
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -155,27 +175,9 @@ export default function MobiliarioPage() {
 
         {/* ===== PAINEL ===== */}
         {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
-        {aba === 'iss' && <IssSegmentoPrestador ano={anoTrib || undefined} mes={mesTrib || undefined} />}
-        {aba === 'iss' && <IssForaMunicipio ano={anoTrib || undefined} mes={mesTrib || undefined} />}
-        {aba === 'iss' && (
-          <div style={{ background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Limite Anual de Faturamento</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Referência regulatória (Lei Complementar nº 123/2006 e alterações) — não vem do cadastro, é contexto para comparar com o faturamento das empresas</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 16 }}>
-              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>MEI — Microempreendedor Individual</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>R$ 81.000,00 / ano</div>
-                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>Acima do limite, a empresa é desenquadrada do MEI (proporcional se aberta durante o ano).</div>
-              </div>
-              <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>Simples Nacional</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>R$ 4.800.000,00 / ano</div>
-                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>Acima do limite, a empresa deixa de poder optar/permanecer no Simples Nacional.</div>
-              </div>
-            </div>
-            <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>Valores de referência federais — confirme se houve atualização legislativa antes de usar para decisões fiscais.</div>
-          </div>
-        )}
+        {aba === 'iss' && <IssSegmentoPrestador ano={anoTrib || undefined} mes={mesTrib || undefined} crescimentoPct={crescimentoPctIss} />}
+        {aba === 'iss' && <IssForaMunicipio ano={anoTrib || undefined} mes={mesTrib || undefined} previsao={previsaoIss} cenario={cenarioIss} onCenarioChange={setCenarioIss} />}
+        {aba === 'iss' && <LimiteFaturamento cenario={cenarioIss} />}
         {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'tfe' && <TfePorSegmento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
         {aba === 'tfe' && <MeiEnquadramentoLancamento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
