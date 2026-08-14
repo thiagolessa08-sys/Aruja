@@ -9,6 +9,7 @@ import TopNav from '../_components/TopNav'
 import PainelTributo from '../tributo/PainelTributo'
 import TfePorSegmento from '../_components/TfePorSegmento'
 import IssSegmentoPrestador from '../_components/IssSegmentoPrestador'
+import IssSegmentoEnquadramento from '../_components/IssSegmentoEnquadramento'
 import IssForaMunicipio from '../_components/IssForaMunicipio'
 import LimiteFaturamento from '../_components/LimiteFaturamento'
 import MeiEnquadramentoLancamento from '../_components/MeiEnquadramentoLancamento'
@@ -59,6 +60,11 @@ export default function MobiliarioPage() {
     const prevTotal = previsaoIss.local[cenarioIss] + previsaoIss.fora[cenarioIss]
     return (prevTotal - baseTotal) / baseTotal
   })()
+
+  // Segmento selecionado em "ISS por Segmento" — alimenta o painel companion "Análise de
+  // Enquadramento" (renderizado ao lado), que mostra a composição por tipo de empresa e
+  // situação cadastral das empresas daquele segmento.
+  const [segmentoIssSel, setSegmentoIssSel] = useState<string | null>(null)
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -175,7 +181,12 @@ export default function MobiliarioPage() {
 
         {/* ===== PAINEL ===== */}
         {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
-        {aba === 'iss' && <IssSegmentoPrestador ano={anoTrib || undefined} mes={mesTrib || undefined} crescimentoPct={crescimentoPctIss} />}
+        {aba === 'iss' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, alignItems: 'start' }}>
+            <IssSegmentoPrestador ano={anoTrib || undefined} mes={mesTrib || undefined} crescimentoPct={crescimentoPctIss} onSegmentoChange={setSegmentoIssSel} />
+            <IssSegmentoEnquadramento segmento={segmentoIssSel} />
+          </div>
+        )}
         {aba === 'iss' && <IssForaMunicipio ano={anoTrib || undefined} mes={mesTrib || undefined} previsao={previsaoIss} cenario={cenarioIss} onCenarioChange={setCenarioIss} />}
         {aba === 'iss' && <LimiteFaturamento cenario={cenarioIss} />}
         {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}

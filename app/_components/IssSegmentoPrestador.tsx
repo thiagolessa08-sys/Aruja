@@ -27,7 +27,10 @@ const voltarBtn: React.CSSProperties = { border: 'none', background: '#eef1fb', 
 // ISS Prestador de Fora do Município (crescimentoTotalPct, lib/iss-fora-previsao) — quando
 // presente, cada barra de segmento (nível 1) ganha uma extensão tracejada mostrando o valor
 // projetado para o próximo exercício com aquela % de crescimento.
-export default function IssSegmentoPrestador({ ano, mes, crescimentoPct }: { ano?: number; mes?: number; crescimentoPct?: number | null }) {
+// `onSegmentoChange` (opcional) avisa o pai qual segmento está selecionado (ou null) — usado
+// por app/mobiliario/page.tsx pra alimentar o painel companion "Análise de Enquadramento"
+// (IssSegmentoEnquadramento), renderizado ao lado deste card.
+export default function IssSegmentoPrestador({ ano, mes, crescimentoPct, onSegmentoChange }: { ano?: number; mes?: number; crescimentoPct?: number | null; onSegmentoChange?: (segmento: string | null) => void }) {
   const [segmentos, setSegmentos] = useState<Segmento[] | null>(null)
   const [segmentoSel, setSegmentoSel] = useState<string | null>(null)
   const [prestadores, setPrestadores] = useState<Prestador[] | null>(null)
@@ -42,12 +45,14 @@ export default function IssSegmentoPrestador({ ano, mes, crescimentoPct }: { ano
     setBusca('')
     setExpandido(null)
     setSerieExpandida(null)
+    onSegmentoChange?.(null)
     const qs = new URLSearchParams()
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
     const q = qs.toString()
     fetch(`/api/mobiliario/iss-segmento${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error && Array.isArray(d.porSegmento)) setSegmentos(d.porSegmento) }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ano, mes])
 
   function abrirSegmento(nome: string) {
@@ -56,6 +61,7 @@ export default function IssSegmentoPrestador({ ano, mes, crescimentoPct }: { ano
     setBusca('')
     setExpandido(null)
     setSerieExpandida(null)
+    onSegmentoChange?.(nome)
     const qs = new URLSearchParams({ top: '20', segmento: nome })
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
@@ -67,6 +73,7 @@ export default function IssSegmentoPrestador({ ano, mes, crescimentoPct }: { ano
     setSegmentoSel(null)
     setPrestadores(null)
     setBusca('')
+    onSegmentoChange?.(null)
     setExpandido(null)
     setSerieExpandida(null)
   }
