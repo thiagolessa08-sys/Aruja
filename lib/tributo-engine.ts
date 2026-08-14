@@ -50,13 +50,12 @@ export async function serieTributoPorCodigos(codigos: number[], anoMin = 2018, a
 
 export interface CenariosTributo { conservador: number; moderado: number; agressivo: number }
 export interface PrevisaoTributoResp {
-  anoBase: number       // exercício-âncora (o mais recente com lançamento real, pode ser o corrente)
-  anoPrevisao: number   // exercício projetado (sempre anoAtual + 1, ex.: 2026 → 2027)
-  base: number           // lançado real do anoBase (mesma base dos 3 cenários)
+  anoInicio: number      // primeiro exercício com lançamento usado na regressão (início da série histórica)
+  anoBase: number        // exercício-âncora (o mais recente com lançamento real, pode ser o corrente)
+  anoPrevisao: number    // exercício projetado (sempre anoAtual + 1, ex.: 2026 → 2027)
+  base: number            // lançado real do anoBase (mesma base dos 3 cenários)
   cenarios: CenariosTributo
 }
-
-const JANELA_PREV = 5 // nº de exercícios completos usados na regressão
 
 // Regressão linear simples (mínimos quadrados) — mesma técnica de previsaoIssFora
 // (lib/iss-fora-previsao.ts) e previsaoMensalIptu, aplicada aqui ao lançado anual de um
@@ -83,18 +82,20 @@ function regressaoLinearSimples(pontos: { x: number; y: number }[]): (x: number)
  * uma tendência, em vez de descartar o único dado mais recente e ficar sem crescimento
  * nenhum pra projetar. A âncora (anoBase/base) é o exercício mais recente que de fato tem
  * lançamento pro(s) código(s) — não necessariamente anoAtual, pois códigos descontinuados
- * (sem lançamento neste nem no ano anterior) caem num ano mais antigo. Regressão linear
- * sobre os últimos JANELA_PREV exercícios com lançamento — mesma técnica e mesma convenção
- * de 3 níveis de previsaoIssFora (conservador = metade do crescimento projetado, moderado =
- * regressão cheia, agressivo = 1,5× o crescimento — todos ancorados no valor real da âncora).
- * Sempre em base ANUAL, independente do filtro de mês da tela.
+ * (sem lançamento neste nem no ano anterior) caem num ano mais antigo. Regressão linear sobre
+ * TODA a série histórica disponível do(s) código(s) (desde 2018, mesmo mínimo usado em todo o
+ * app — não só os últimos anos), pra não descartar histórico real de tributos antigos — mesma
+ * técnica e mesma convenção de 3 níveis de previsaoIssFora (conservador = metade do
+ * crescimento projetado, moderado = regressão cheia, agressivo = 1,5× o crescimento — todos
+ * ancorados no valor real da âncora). Sempre em base ANUAL, independente do filtro de mês da
+ * tela.
  */
 export async function previsaoTributoCodigos(codigos: number[]): Promise<PrevisaoTributoResp> {
   const chave = [...codigos].sort((a, b) => a - b).join('.')
   return cached(`previsaoTributoCod:${chave}`, TTL_15MIN, async () => {
     const anoAtual = new Date().getFullYear()
     const anoPrevisao = anoAtual + 1
-    const serie = await serieTributoPorCodigos(codigos, anoAtual - JANELA_PREV + 1, anoAtual)
+    const serie = await serieTributoPorCodigos(codigos, undefined, anoAtual)
 
     const pontos = serie.map(s => ({ x: s.ano, y: s.lancado }))
     const moderado = pontos.length ? Math.max(0, regressaoLinearSimples(pontos)(anoPrevisao)) : 0
@@ -103,10 +104,12 @@ export async function previsaoTributoCodigos(codigos: number[]): Promise<Previsa
     // descarta lancado=arrecadado=saldo=0), então o último item é sempre a âncora correta.
     const ultimo = serie[serie.length - 1]
     const anoBase = ultimo?.ano ?? anoAtual - 1
+    const anoInicio = serie[0]?.ano ?? anoBase
     const base = ultimo?.lancado ?? 0
     const crescimento = moderado - base
 
     return {
+      anoInicio,
       anoBase,
       anoPrevisao,
       base,

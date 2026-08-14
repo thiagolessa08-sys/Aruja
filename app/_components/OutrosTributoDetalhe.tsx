@@ -7,7 +7,7 @@ import type { TipoSelecionado } from './OutrosTributosPorTipo'
 
 interface SerieItem { ano: number; lancado: number; arrecadado: number; saldo: number }
 interface CenariosTributo { conservador: number; moderado: number; agressivo: number }
-interface PrevisaoTributo { anoBase: number; anoPrevisao: number; base: number; cenarios: CenariosTributo }
+interface PrevisaoTributo { anoInicio: number; anoBase: number; anoPrevisao: number; base: number; cenarios: CenariosTributo }
 
 const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -153,7 +153,7 @@ export default function OutrosTributoDetalhe({ item, mes }: { item: TipoSelecion
                   <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 4 }}>
                     {semVariacao
                       ? `Histórico insuficiente (só ${previsao.anoBase}) para projetar uma tendência de crescimento — os 3 cenários coincidem com o lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Estimativa para planejamento, não uma garantia.`
-                      : `Regressão linear sobre os exercícios com lançamento até ${previsao.anoBase} (inclui o ano corrente, se já houver dado), projetando ${previsao.anoPrevisao}, ancorada no lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Arraste entre o cenário conservador (50% do crescimento projetado) e o agressivo (150%) — estimativa para planejamento, não uma garantia.`}
+                      : `Regressão linear sobre toda a série histórica com lançamento (desde ${previsao.anoInicio}, inclui o ano corrente), projetando ${previsao.anoPrevisao}, ancorada no lançado real de ${previsao.anoBase} (${fmtAbrev(previsao.base)}). Arraste entre o cenário conservador (50% do crescimento projetado) e o agressivo (150%) — estimativa para planejamento, não uma garantia.`}
                   </div>
 
                   <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
