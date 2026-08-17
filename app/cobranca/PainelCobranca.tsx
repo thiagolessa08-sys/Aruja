@@ -243,7 +243,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   const g = d ?? FALLBACK
-  const maxTrib = Math.max(1, ...g.tributos.map(t => t.lancado))
   const gb = geomBars(g.baixasPorAno)
 
   const totCanais = g.canais.reduce((a, c) => a + c.n, 0) || 1
@@ -350,28 +349,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       </div>
 
       {/* ROW 1 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1.1fr', gap: 18, marginTop: 20 }}>
-        {/* Conversão por tributo */}
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Conversão por Tributo</span>
-            <span style={reportBadge}>{g.ano}</span>
-          </div>
-          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {g.tributos.map(t => (
-              <div key={t.nome}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 6 }}>{t.nome}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: convCor(t.conversao), flex: 'none' }}>{fmtPct(t.conversao)}</span>
-                </div>
-                <div style={{ height: 13, borderRadius: 5, background: '#eef1f7', overflow: 'hidden', position: 'relative' }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, t.conversao).toFixed(1)}%`, background: convCor(t.conversao), borderRadius: 5 }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, marginTop: 20 }}>
         {/* Insights */}
         <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -420,11 +398,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
       </div>
 
-      {/* Análise de Conversão — arrecadado ÷ lançado sob 3 lentes selecionáveis: por tributo
-          (mesma métrica de "Conversão por Tributo" acima), por período (exercício de
-          lançamento) e por operador (cd_usuario_gerador da guia, pesando o valor $ em vez da
-          contagem — revela se guias autoemitidas têm conversão pior do que as trabalhadas
-          por atendentes). */}
+      {/* Análise de Conversão — arrecadado ÷ lançado sob 3 lentes selecionáveis: por tributo,
+          por período (exercício de lançamento) e por operador (cd_usuario_gerador da guia,
+          pesando o valor $ em vez da contagem — revela se guias autoemitidas têm conversão
+          pior do que as trabalhadas por atendentes). */}
       <div style={{ ...card, marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div>
