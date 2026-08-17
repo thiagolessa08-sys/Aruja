@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import LoadingOverlay from '../_components/LoadingOverlay'
+import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Trib { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }
+interface TribInad { nome: string; saldo: number; lancado: number; conversao: number }
 interface Resumo {
   ano: number; lancado: number; arrecadado: number; saldo: number; conversao: number; totalBaixas: number
   tributos: Trib[]
+  inadimplenciaPorTributo: TribInad[]
   canais: { nome: string; n: number }[]
   baixasPorAno: { ano: number; n: number }[]
 }
@@ -30,6 +33,16 @@ const FALLBACK: Resumo = {
     { nome: 'Taxa de Contribuição Ambiental', lancado: 14900000, arrecadado: 8100000, saldo: 5200000, conversao: 55 },
     { nome: 'ISS - Simples Nacional', lancado: 11700000, arrecadado: 12200000, saldo: 800000, conversao: 100 },
   ],
+  inadimplenciaPorTributo: [
+    { nome: 'IPTU', saldo: 47800000, lancado: 124400000, conversao: 56 },
+    { nome: 'Taxa de Fiscalização de Estabelecimento', saldo: 7300000, lancado: 17600000, conversao: 35 },
+    { nome: 'ITBI', saldo: 7400000, lancado: 46900000, conversao: 49 },
+    { nome: 'Taxa de Contribuição Ambiental', saldo: 5200000, lancado: 14900000, conversao: 55 },
+    { nome: 'I.S.S.Q.N.', saldo: 4000000, lancado: 28600000, conversao: 82 },
+    { nome: 'ISS Construção Civil', saldo: 3000000, lancado: 15300000, conversao: 59 },
+    { nome: 'I.S.S.Q.N. - Tomador', saldo: 1500000, lancado: 32700000, conversao: 94 },
+    { nome: 'ISS - Simples Nacional', saldo: 800000, lancado: 11700000, conversao: 100 },
+  ],
   canais: [
     { nome: 'Febraban', n: 2908503 }, { nome: 'Parcelamento', n: 1805341 }, { nome: 'Conversao', n: 566431 },
     { nome: 'Processo', n: 229948 }, { nome: 'Internet', n: 146380 }, { nome: 'OS 43459', n: 107573 },
@@ -43,6 +56,7 @@ const FALLBACK: Resumo = {
 
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
+const INAD_CORES = ['#d64545', '#df6363', '#e88181', '#f0a0a0', '#f7bebe', '#c73333', '#b82727', '#a91c1c', '#961616', '#8a1414']
 
 function geomBars(d: { ano: number; n: number }[]) {
   const W = 960, H = 280, top = 24, bottom = 232
@@ -195,6 +209,55 @@ export default function PainelCobranca() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Inadimplência por Tributo Analítico — ranking pelo saldo devedor (não pelo lançado,
+          como "Conversão por Tributo" acima), a nível de cada cd_tributo individual (não
+          agrupado por IPTU/ITBI/ISS/...). Top N + linha agregada "Demais tributos". */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Inadimplência por Tributo Analítico</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo devedor por tributo individual (cd_tributo), não agrupado por família (IPTU/ITBI/ISS/...) — {g.ano}.</div>
+          </div>
+          <span style={reportBadge}>Saldo devedor</span>
+        </div>
+
+        {(() => {
+          const itens = g.inadimplenciaPorTributo
+          if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem inadimplência registrada no período.</div>
+          const totalSaldo = itens.reduce((s, t) => s + t.saldo, 0)
+          const maxSaldo = Math.max(1, ...itens.map(t => t.saldo))
+          return (
+            <>
+              <div style={{ marginTop: 12, background: '#d64545', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total a recuperar (top {itens.length})</span>
+                <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtMoney(totalSaldo)}</span>
+              </div>
+
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
+                {itens.map((t, i) => {
+                  const cor = /^Demais tributos/.test(t.nome) ? '#c2c9d6' : INAD_CORES[i % INAD_CORES.length]
+                  const w = Math.max(3, 100 * t.saldo / maxSaldo)
+                  return (
+                    <div key={t.nome}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
+                        <span style={{ fontSize: 11.5, color: '#3a4256', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#d64545', flex: 'none', textAlign: 'right' }}>
+                          {fmtAbrev(t.saldo)}
+                          <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>de {fmtAbrev(t.lancado)} lançado · {fmtPct(t.conversao)} conv.</span>
+                        </span>
+                      </div>
+                      <div style={{ height: 13, borderRadius: 5, background: '#f7e6e6', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       {/* ROW 2 — baixas por ano */}
