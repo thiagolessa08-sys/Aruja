@@ -7,7 +7,7 @@ import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Trib { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }
 interface TribInad { nome: string; codigos: number[]; saldo: number; lancado: number; conversao: number }
-interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
+interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; endereco?: string }
 interface PotTrib { nome: string; codigos: number[]; vencido: number; aVencer: number }
 interface Potencial { vencido: number; aVencer: number; porTributo: PotTrib[] }
 interface PotMes { ano: number; mes: number; saldo: number; vencido: boolean }
@@ -476,10 +476,11 @@ export default function PainelCobranca() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingBottom: 6 }}>
                           {devedoresMes.map((dv, di) => (
                             <div key={dv.cd}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 2 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 1 }}>
                                 <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{di + 1}. {dv.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>{dv.cpfCnpj ? `· ${dv.cpfCnpj}` : ''}</span></span>
                                 <span style={{ color: '#d64545', fontWeight: 700, flex: 'none' }}>{fmtAbrev(dv.saldo)}</span>
                               </div>
+                              {dv.endereco ? <div style={{ fontSize: 10, color: '#9098a8', marginBottom: 3, paddingLeft: 14 }}>{dv.endereco}</div> : null}
                               <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
                                 <div style={{ height: '100%', width: `${Math.max(3, 100 * dv.saldo / maxDev).toFixed(1)}%`, borderRadius: 5, background: '#d64545' }} />
                               </div>

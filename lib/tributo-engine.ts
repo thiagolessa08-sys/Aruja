@@ -287,7 +287,7 @@ async function rankingTributosRaw(somenteOutros: boolean, ano?: number, mes?: nu
     .sort((a, b) => b.lancado - a.lancado)
 }
 
-export interface DevedorTributo { cd: number; nome: string; cpfCnpj: string; saldo: number }
+export interface DevedorTributo { cd: number; nome: string; cpfCnpj: string; saldo: number; endereco?: string }
 
 /**
  * Drill "quem deve" do ranking de Inadimplência por Tributo Analítico (Cobrança): maiores
@@ -324,7 +324,11 @@ async function devedoresPorTributoRaw(codigos: number[], ano: number | undefined
  * potencialMensalTributo: ao clicar num mês específico do gráfico, mostra os maiores
  * devedores daquele(s) código(s) de tributo com parcela vencendo naquele mês/ano exato
  * (YEAR/MONTH de dt_vencimento, não exercício de lançamento — diferente de
- * devedoresPorTributo). Mesmo padrão de agrupamento por g.cd_contr.
+ * devedoresPorTributo). Mesmo padrão de agrupamento por g.cd_contr. Inclui o endereço
+ * completo (tb_dsod_contribuinte_endereco + tb_dsod_cep, tributo-agnóstico — mesma tabela
+ * de endereço usada em mobiliario-empresa.ts detalhe(), mas aqui por cd_contr direto em
+ * vez de cd_contr_mob) — é o endereço CADASTRAL do contribuinte, não necessariamente o do
+ * imóvel gerador da guia (podem divergir, ex.: empresa com sede fora de Arujá).
  */
 export async function devedoresPorTributoMes(codigos: number[], anoVenc: number, mesVenc: number, top = 15): Promise<DevedorTributo[]> {
   const chave = [...codigos].sort((a, b) => a - b).join('.')
@@ -333,16 +337,29 @@ export async function devedoresPorTributoMes(codigos: number[], anoVenc: number,
 
 async function devedoresPorTributoMesRaw(codigos: number[], anoVenc: number, mesVenc: number, top: number): Promise<DevedorTributo[]> {
   const r = await agentQuery(`
-    SELECT TOP ${top} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pp.vl_saldo) saldo
+    SELECT TOP ${top} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pp.vl_saldo) saldo,
+           MIN(ce.ds_endereco) rua, MIN(e.no_logr) numero, MIN(ce.nm_bairro) bairro, MIN(ce.no_cep) cep
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
+    LEFT JOIN ${SCHEMA}.tb_dsod_contribuinte_endereco e ON e.cd_contr = g.cd_contr
+    LEFT JOIN ${SCHEMA}.tb_dsod_cep ce ON ce.cd_cep = e.cd_cep
     WHERE g.cd_tributo IN (${codigos.join(',')}) AND YEAR(p.dt_vencimento) = ${anoVenc} AND MONTH(p.dt_vencimento) = ${mesVenc}
     GROUP BY g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj
     ORDER BY saldo DESC`, top)
   return r.rows
-    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim() || 'Não informado', cpfCnpj: String(row[2] ?? '').trim(), saldo: num(row[3]) }))
+    .map(row => {
+      const rua = String(row[4] ?? '').trim()
+      const numero = String(row[5] ?? '').trim()
+      const bairro = String(row[6] ?? '').trim()
+      const cep = String(row[7] ?? '').trim()
+      const partes = [rua && (numero ? `${rua}, ${numero}` : rua), bairro, cep ? `CEP ${cep}` : ''].filter(Boolean)
+      return {
+        cd: num(row[0]), nome: String(row[1] ?? '').trim() || 'Não informado', cpfCnpj: String(row[2] ?? '').trim(), saldo: num(row[3]),
+        endereco: partes.join(' — ') || 'Endereço não cadastrado',
+      }
+    })
     .filter(x => x.saldo > 0)
 }
 
