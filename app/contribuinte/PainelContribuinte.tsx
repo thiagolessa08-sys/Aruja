@@ -15,6 +15,7 @@ interface SitItem { label: string; n: number; pct: number }
 interface Evol { ano: number; novos: number; pf: number; pj: number; pctPj: number }
 interface Vinculo { campo: string; label: string; n: number }
 interface ContribuinteItem { cd: number; nome: string; doc: string; email: string; telefone: string; endereco: string }
+interface DevedorGrupo { cd: number; nome: string; doc: string; pessoa: 'F' | 'J' | ''; lancado: number; debito: number }
 interface ScoreBanda { banda: 'A' | 'B' | 'C' | 'D' | 'E'; n: number; media: number }
 interface Score { bandas: ScoreBanda[]; mediaGeral: number; total: number }
 interface Graficos {
@@ -196,6 +197,8 @@ function geomGrupoBars(d: { grupo: string; label: string; lancado: number; debit
       cx,
       lanc: { x: cx - bw - 3, y: bottom - hL, h: hL },
       deb: { x: cx + 3, y: bottom - hD, h: hD },
+      grupo: x.grupo,
+      label: x.label,
       rotulo: ABREV_GRUPO[x.grupo] ?? x.label,
       tip: {
         title: x.label,
@@ -253,6 +256,12 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   const [insights, setInsights] = useState<string[] | null>(null)
   const [graf, setGraf] = useState<Graficos | null>(null)
   const [tributos, setTributos] = useState<{ grupo: string; label: string; lancado: number; debito: number }[] | null>(null)
+
+  // Drill do gráfico "Tributos Lançados": clique num grupo → maiores devedores (nome + F/J)
+  const [grupoSel, setGrupoSel] = useState<{ grupo: string; label: string } | null>(null)
+  const [devedoresGrupo, setDevedoresGrupo] = useState<DevedorGrupo[] | null>(null)
+  const [devedoresGrupoErro, setDevedoresGrupoErro] = useState(false)
+
   const [drillAnoNovos, setDrillAnoNovos] = useState<number | null>(null)
   const [serieMesNovos, setSerieMesNovos] = useState<{ mes: number; pf: number; pj: number }[] | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
@@ -284,6 +293,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   }, [drillAnoNovos])
   useEffect(() => {
     setTributos(null)
+    setGrupoSel(null)
     const p = new URLSearchParams()
     if (filtros.ano) p.set('ano', String(filtros.ano))
     if (filtros.mes) p.set('mes', String(filtros.mes))
@@ -291,6 +301,23 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
     fetch(`/api/contribuinte/tributos-lancados${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error && Array.isArray(d.grupos)) setTributos(d.grupos) }).catch(() => {})
   }, [filtros.ano, filtros.mes])
+  useEffect(() => {
+    if (!grupoSel) { setDevedoresGrupo(null); setDevedoresGrupoErro(false); return }
+    setDevedoresGrupo(null)
+    setDevedoresGrupoErro(false)
+    const p = new URLSearchParams({ grupo: grupoSel.grupo })
+    if (filtros.ano) p.set('ano', String(filtros.ano))
+    if (filtros.mes) p.set('mes', String(filtros.mes))
+    fetch(`/api/contribuinte/devedores-grupo?${p.toString()}`).then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && !d.error && Array.isArray(d.itens)) setDevedoresGrupo(d.itens)
+        else setDevedoresGrupoErro(true)
+      }).catch(() => setDevedoresGrupoErro(true))
+  }, [grupoSel, filtros.ano, filtros.mes])
+
+  function selecionarGrupo(grupo: string, label: string) {
+    setGrupoSel(prev => prev?.grupo === grupo ? null : { grupo, label })
+  }
   useEffect(() => {
     if (!vinculoSel) { setContribuintesVinculo([]); return }
     let vivo = true
@@ -577,7 +604,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
           <div>
             <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Tributos Lançados</span>
             <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-              lançado × débitos (valores em aberto) por grupo de tributo{filtros.ano ? ` — exercício ${filtros.ano}` : ' (todos os exercícios)'}{filtros.mes ? ` até o mês ${filtros.mes}` : ''}
+              lançado × débitos (valores em aberto) por grupo de tributo{filtros.ano ? ` — exercício ${filtros.ano}` : ' (todos os exercícios)'}{filtros.mes ? ` até o mês ${filtros.mes}` : ''}. Clique num grupo para ver os maiores devedores.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
@@ -607,21 +634,69 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                   </g>
                 ))}
                 <line x1="0" y1={gg.bottom} x2={String(gg.W)} y2={gg.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+                {gg.bars.map((b, i) => {
+                  const sel = grupoSel?.grupo === b.grupo
+                  return (
+                    <g key={i}>
+                      <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width={gg.bw.toFixed(1)} height={b.lanc.h.toFixed(1)} rx="4" fill="url(#ctbTrib)" stroke={sel ? '#1f2a44' : 'none'} strokeWidth={sel ? 2 : 0} />
+                      <rect x={b.deb.x.toFixed(1)} y={b.deb.y.toFixed(1)} width={gg.bw.toFixed(1)} height={b.deb.h.toFixed(1)} rx="4" fill="url(#ctbDeb)" stroke={sel ? '#1f2a44' : 'none'} strokeWidth={sel ? 2 : 0} />
+                      <text x={b.cx.toFixed(1)} y={String(gg.H - 6)} fontSize="14" fontWeight={sel ? 700 : 400} fill={sel ? '#283e93' : '#3a4256'} textAnchor="middle" style={axisFont}>{b.rotulo}</text>
+                    </g>
+                  )
+                })}
                 {gg.bars.map((b, i) => (
-                  <g key={i}>
-                    <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width={gg.bw.toFixed(1)} height={b.lanc.h.toFixed(1)} rx="4" fill="url(#ctbTrib)" />
-                    <rect x={b.deb.x.toFixed(1)} y={b.deb.y.toFixed(1)} width={gg.bw.toFixed(1)} height={b.deb.h.toFixed(1)} rx="4" fill="url(#ctbDeb)" />
-                    <text x={b.cx.toFixed(1)} y={String(gg.H - 6)} fontSize="14" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.rotulo}</text>
-                  </g>
-                ))}
-                {gg.bars.map((b, i) => (
-                  <rect key={i} onMouseEnter={() => setTipTrib(b.tip)} x={(b.cx - gg.bw - 6).toFixed(1)} y="0" width={(gg.bw * 2 + 12).toFixed(1)} height={String(gg.H - 20)} fill="transparent" pointerEvents="all" />
+                  <rect key={i} onMouseEnter={() => setTipTrib(b.tip)} onClick={() => selecionarGrupo(b.grupo, b.label)}
+                    x={(b.cx - gg.bw - 6).toFixed(1)} y="0" width={(gg.bw * 2 + 12).toFixed(1)} height={String(gg.H - 20)} fill="transparent" pointerEvents="all" />
                 ))}
               </svg>
               {tipTrib ? <Tooltip t={tipTrib} /> : null}
             </div>
           )
         })()}
+
+        {grupoSel ? (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>Maiores devedores · {grupoSel.label}</span>
+              <button onClick={() => setGrupoSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Fechar</button>
+            </div>
+            {devedoresGrupoErro ? (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar os devedores.</div>
+                <button onClick={() => setGrupoSel(sel => sel && ({ ...sel }))} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+              </div>
+            ) : !devedoresGrupo ? <Spinner label="Carregando…" size={26} padding={16} />
+              : !devedoresGrupo.length ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '16px 0' }}>Nenhum devedor identificado para este grupo.</div>
+              : (() => {
+                const maxD = Math.max(1, ...devedoresGrupo.map(x => x.debito))
+                return (
+                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
+                    {devedoresGrupo.map((dv, i) => (
+                      <div key={dv.cd} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '9px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: 11.5, color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {dv.nome}</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: '#d64545', flex: 'none' }}>{fmtAbrev(dv.debito)}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, borderRadius: 10, padding: '2px 8px',
+                            color: dv.pessoa === 'J' ? '#7d8fce' : '#283e93',
+                            background: dv.pessoa === 'J' ? 'rgba(125,143,206,0.12)' : 'rgba(40,62,147,0.1)',
+                          }}>
+                            {dv.pessoa === 'J' ? 'Pessoa Jurídica' : dv.pessoa === 'F' ? 'Pessoa Física' : 'Não informado'}
+                          </span>
+                          <span style={{ fontSize: 10, color: '#9098a8' }}>{dv.doc || '—'}</span>
+                        </div>
+                        <div style={{ height: 8, borderRadius: 4, background: '#e9edf8', overflow: 'hidden', marginTop: 6 }}>
+                          <div style={{ height: '100%', width: `${Math.max(3, 100 * dv.debito / maxD).toFixed(1)}%`, borderRadius: 4, background: '#d64545' }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+          </div>
+        ) : null}
       </div>
 
       {/* ===== ROW 2 ===== */}

@@ -241,6 +241,56 @@ async function lancadoPorGrupoRaw(ano?: number, mes?: number): Promise<LancadoGr
     .sort((a, b) => b.lancado - a.lancado)
 }
 
+export interface DevedorGrupo { cd: number; nome: string; doc: string; pessoa: 'F' | 'J' | ''; lancado: number; debito: number }
+
+const TOP_N_DEVEDOR_GRUPO = 15
+
+/**
+ * Maiores devedores de um grupo de tributo (drill do gráfico "Tributos Lançados" da tela
+ * de Contribuinte) — TOP N contribuintes por débito (saldo em aberto), com nome e tipo de
+ * pessoa (F/J) via tb_dsod_contribuinte. Mesma fonte/filtro (ano/mês) de lancadoPorGrupo,
+ * só que agrupado por contribuinte em vez de por grupo de tributo inteiro.
+ */
+export async function devedoresPorGrupo(grupo: GrupoTributo, ano?: number, mes?: number, top = TOP_N_DEVEDOR_GRUPO): Promise<DevedorGrupo[]> {
+  return cached(`devedoresGrupo:${grupo}:${ano ?? 'all'}:${mes ?? ''}:${top}`, TTL_15MIN, () => devedoresPorGrupoRaw(grupo, ano, mes, top))
+}
+
+async function devedoresPorGrupoRaw(grupo: GrupoTributo, ano?: number, mes?: number, top = TOP_N_DEVEDOR_GRUPO): Promise<DevedorGrupo[]> {
+  // pp.vl_saldo > 0 restringe às parcelas efetivamente em aberto — sem isso, grupos grandes
+  // (IPTU sem filtro de ano) escaneiam décadas de parcelas já quitadas e estouram o timeout
+  // do agente (~100s). Também é mais correto: quem já quitou tudo não é "devedor".
+  const cond = [
+    whereTributo(grupo),
+    'g.cd_contr > 0',
+    'pp.vl_saldo > 0',
+    ano ? `g.no_exercicio_lancamento = ${ano}` : '',
+    mes ? `MONTH(p.dt_vencimento) <= ${mes}` : '',
+  ].filter(Boolean).join(' AND ')
+  const r = await agentQuery(`
+    SELECT TOP ${top} g.cd_contr, c.nm_rsocial, c.no_cpf_cnpj, c.ic_pessoa,
+           SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_saldo) AS debito
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    JOIN ${SCHEMA}.tb_dsod_contribuinte c ON c.cd_contr = g.cd_contr
+    WHERE ${cond}
+    GROUP BY g.cd_contr, c.nm_rsocial, c.no_cpf_cnpj, c.ic_pessoa
+    ORDER BY debito DESC`, top)
+
+  return r.rows.map(row => {
+    const doc = String(row[2] ?? '').trim()
+    const p = String(row[3] ?? '').trim()
+    return {
+      cd: num(row[0]),
+      nome: String(row[1] ?? '').trim() || `Contribuinte ${num(row[0])}`,
+      doc: doc && doc !== '-1' ? doc : '',
+      pessoa: p === 'F' || p === 'J' ? p as 'F' | 'J' : '',
+      lancado: num(row[4]),
+      debito: num(row[5]),
+    }
+  })
+}
+
 /**
  * Ranking de tributos (cd_tributo + nome) por lançado/arrecadado/saldo,
  * usado na aba "Outros Tributos". Junta com tb_dsod_tributos para o rótulo.
