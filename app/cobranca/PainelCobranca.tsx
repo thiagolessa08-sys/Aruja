@@ -6,7 +6,6 @@ import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
 interface Trib { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }
-interface TribInad { nome: string; codigos: number[]; saldo: number; lancado: number; conversao: number }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; endereco?: string }
 interface PotTrib { nome: string; codigos: number[]; vencido: number; aVencer: number }
 interface Potencial { vencido: number; aVencer: number; porTributo: PotTrib[] }
@@ -18,7 +17,6 @@ interface DamsGeradas { ano: number; total: number; porMes: DamMes[]; porTributo
 interface Resumo {
   ano: number; lancado: number; arrecadado: number; saldo: number; conversao: number; totalBaixas: number
   tributos: Trib[]
-  inadimplenciaPorTributo: TribInad[]
   canais: { nome: string; n: number }[]
   baixasPorAno: { ano: number; n: number }[]
 }
@@ -41,16 +39,6 @@ const FALLBACK: Resumo = {
     { nome: 'ISS Construção Civil', lancado: 15300000, arrecadado: 9100000, saldo: 3000000, conversao: 59 },
     { nome: 'Taxa de Contribuição Ambiental', lancado: 14900000, arrecadado: 8100000, saldo: 5200000, conversao: 55 },
     { nome: 'ISS - Simples Nacional', lancado: 11700000, arrecadado: 12200000, saldo: 800000, conversao: 100 },
-  ],
-  inadimplenciaPorTributo: [
-    { nome: 'IPTU', codigos: [1], saldo: 47800000, lancado: 124400000, conversao: 56 },
-    { nome: 'Taxa de Fiscalização de Estabelecimento', codigos: [2002], saldo: 7300000, lancado: 17600000, conversao: 35 },
-    { nome: 'ITBI', codigos: [10], saldo: 7400000, lancado: 46900000, conversao: 49 },
-    { nome: 'Taxa de Contribuição Ambiental', codigos: [67], saldo: 5200000, lancado: 14900000, conversao: 55 },
-    { nome: 'I.S.S.Q.N.', codigos: [3], saldo: 4000000, lancado: 28600000, conversao: 82 },
-    { nome: 'ISS Construção Civil', codigos: [40], saldo: 3000000, lancado: 15300000, conversao: 59 },
-    { nome: 'I.S.S.Q.N. - Tomador', codigos: [7], saldo: 1500000, lancado: 32700000, conversao: 94 },
-    { nome: 'ISS - Simples Nacional', codigos: [572], saldo: 800000, lancado: 11700000, conversao: 100 },
   ],
   canais: [
     { nome: 'Febraban', n: 2908503 }, { nome: 'Parcelamento', n: 1805341 }, { nome: 'Conversao', n: 566431 },
@@ -102,7 +90,6 @@ const FALLBACK_DAMS: DamsGeradas = {
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
-const INAD_CORES = ['#d64545', '#df6363', '#e88181', '#f0a0a0', '#f7bebe', '#c73333', '#b82727', '#a91c1c', '#961616', '#8a1414']
 const DAM_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e', '#eaa957', '#f0bb7c']
 
 function geomBars(d: { ano: number; n: number }[]) {
@@ -120,10 +107,6 @@ function geomBars(d: { ano: number; n: number }[]) {
 export default function PainelCobranca() {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
-  const [inadExpandido, setInadExpandido] = useState<string | null>(null)
-  const [inadTrib, setInadTrib] = useState<TribInad | null>(null)
-  const [devedores, setDevedores] = useState<Devedor[] | null>(null)
-  const [devedoresErro, setDevedoresErro] = useState(false)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
   const [potMensal, setPotMensal] = useState<PotMes[] | null>(null)
@@ -140,24 +123,6 @@ export default function PainelCobranca() {
     fetch('/api/cobranca/dams?ano=2025').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
   }, [])
-
-  function buscarDevedores(t: TribInad) {
-    setDevedores(null)
-    setDevedoresErro(false)
-    const qs = new URLSearchParams({ codigos: t.codigos.join(','), ano: String(g.ano) })
-    fetch(`/api/cobranca/devedores-tributo?${qs}`).then(r => r.ok ? r.json() : null)
-      .then(res => {
-        if (res && !res.error && Array.isArray(res.itens)) setDevedores(res.itens)
-        else setDevedoresErro(true)
-      }).catch(() => setDevedoresErro(true))
-  }
-
-  function alternarInad(t: TribInad) {
-    if (inadExpandido === t.nome) { setInadExpandido(null); setInadTrib(null); setDevedores(null); setDevedoresErro(false); return }
-    setInadExpandido(t.nome)
-    setInadTrib(t)
-    buscarDevedores(t)
-  }
 
   function selecionarPotencial(t: PotTrib) {
     setPotMesSel(null)
@@ -320,89 +285,6 @@ export default function PainelCobranca() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Inadimplência por Tributo Analítico — ranking pelo saldo devedor (não pelo lançado,
-          como "Conversão por Tributo" acima), a nível de cada cd_tributo individual (não
-          agrupado por IPTU/ITBI/ISS/...). Top N + linha agregada "Demais tributos". */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Inadimplência por Tributo Analítico</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo devedor por tributo individual (cd_tributo), não agrupado por família (IPTU/ITBI/ISS/...) — {g.ano}. Clique num item para ver os maiores devedores.</div>
-          </div>
-          <span style={reportBadge}>Saldo devedor</span>
-        </div>
-
-        {(() => {
-          const itens = g.inadimplenciaPorTributo
-          if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem inadimplência registrada no período.</div>
-          const totalSaldo = itens.reduce((s, t) => s + t.saldo, 0)
-          const maxSaldo = Math.max(1, ...itens.map(t => t.saldo))
-          return (
-            <>
-              <div style={{ marginTop: 12, background: '#d64545', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total a recuperar (top {itens.length})</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtMoney(totalSaldo)}</span>
-              </div>
-
-              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
-                {itens.map((t, i) => {
-                  const cor = /^Demais tributos/.test(t.nome) ? '#c2c9d6' : INAD_CORES[i % INAD_CORES.length]
-                  const w = Math.max(3, 100 * t.saldo / maxSaldo)
-                  const aberto = inadExpandido === t.nome
-                  const maxDevedor = Math.max(1, ...(devedores ?? []).map(x => x.saldo))
-                  return (
-                    <div key={t.nome}>
-                      <div onClick={() => alternarInad(t)} style={{ cursor: 'pointer' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
-                          <span style={{ fontSize: 11.5, color: aberto ? '#d64545' : '#3a4256', fontWeight: aberto ? 700 : 400, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="3" style={{ flex: 'none', transform: aberto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}><path d="M9 6l6 6-6 6" /></svg>
-                            {t.nome}
-                          </span>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: '#d64545', flex: 'none', textAlign: 'right' }}>
-                            {fmtAbrev(t.saldo)}
-                            <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>de {fmtAbrev(t.lancado)} lançado · {fmtPct(t.conversao)} conv.</span>
-                          </span>
-                        </div>
-                        <div style={{ height: 13, borderRadius: 5, background: '#f7e6e6', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
-                        </div>
-                      </div>
-                      {aberto ? (
-                        <div style={{ marginTop: 8, background: '#f7f9fd', borderRadius: 10, padding: '10px 10px 4px' }}>
-                          <div style={{ fontSize: 10.5, color: '#5b6477', fontWeight: 600, padding: '0 4px 8px' }}>Maiores devedores{t.codigos.length > 1 ? ` — soma de ${t.codigos.length} códigos` : ''}</div>
-                          {devedoresErro ? (
-                            <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                              <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar os devedores.</div>
-                              <button onClick={() => inadTrib && buscarDevedores(inadTrib)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
-                            </div>
-                          ) : !devedores ? <Spinner label="Carregando…" size={26} padding={16} />
-                            : !devedores.length ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Nenhum devedor identificado.</div>
-                            : (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingBottom: 6 }}>
-                                {devedores.map((dv, di) => (
-                                  <div key={dv.cd}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 2 }}>
-                                      <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{di + 1}. {dv.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>{dv.cpfCnpj ? `· ${dv.cpfCnpj}` : ''}</span></span>
-                                      <span style={{ color: '#d64545', fontWeight: 700, flex: 'none' }}>{fmtAbrev(dv.saldo)}</span>
-                                    </div>
-                                    <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                                      <div style={{ height: '100%', width: `${Math.max(3, 100 * dv.saldo / maxDevedor).toFixed(1)}%`, borderRadius: 5, background: '#d64545' }} />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )
-        })()}
       </div>
 
       {/* Potencial de Arrecadação — painel: do saldo devedor, quanto já VENCEU (inadimplência

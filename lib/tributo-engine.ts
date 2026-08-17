@@ -290,45 +290,15 @@ async function rankingTributosRaw(somenteOutros: boolean, ano?: number, mes?: nu
 export interface DevedorTributo { cd: number; nome: string; cpfCnpj: string; saldo: number; endereco?: string }
 
 /**
- * Drill "quem deve" do ranking de Inadimplência por Tributo Analítico (Cobrança): maiores
- * devedores (contribuintes) de um ou mais códigos de tributo específicos, pelo saldo em
- * aberto (vl_saldo) — mesma base/filtros do saldo agregado em rankingTributos (sem
- * restringir a situação de dívida ativa, ao contrário de maioresDevedores em
- * lib/divida-engine.ts, que é escopado à dívida ativa formal), pra bater com o total do
- * card pai. Agrupa por g.cd_contr (contribuinte devedor da guia) — mesmo padrão de
- * maioresDevedoresRaw.
- */
-export async function devedoresPorTributo(codigos: number[], ano?: number, top = 15): Promise<DevedorTributo[]> {
-  const chave = [...codigos].sort((a, b) => a - b).join('.')
-  return cached(`devedoresTributo:${chave}:${ano ?? 'all'}:${top}`, TTL_15MIN, () => devedoresPorTributoRaw(codigos, ano, top))
-}
-
-async function devedoresPorTributoRaw(codigos: number[], ano: number | undefined, top: number): Promise<DevedorTributo[]> {
-  const filtroAno = ano ? ` AND g.no_exercicio_lancamento = ${ano}` : ''
-  const r = await agentQuery(`
-    SELECT TOP ${top} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pp.vl_saldo) saldo
-    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
-    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
-    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-    JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
-    WHERE g.cd_tributo IN (${codigos.join(',')})${filtroAno}
-    GROUP BY g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj
-    ORDER BY saldo DESC`, top)
-  return r.rows
-    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim() || 'Não informado', cpfCnpj: String(row[2] ?? '').trim(), saldo: num(row[3]) }))
-    .filter(x => x.saldo > 0)
-}
-
-/**
  * Drill "quem deve" do painel "Quando Vence" (Cobrança) — um nível além de
  * potencialMensalTributo: ao clicar num mês específico do gráfico, mostra os maiores
  * devedores daquele(s) código(s) de tributo com parcela vencendo naquele mês/ano exato
- * (YEAR/MONTH de dt_vencimento, não exercício de lançamento — diferente de
- * devedoresPorTributo). Mesmo padrão de agrupamento por g.cd_contr. Inclui o endereço
- * completo (tb_dsod_contribuinte_endereco + tb_dsod_cep, tributo-agnóstico — mesma tabela
- * de endereço usada em mobiliario-empresa.ts detalhe(), mas aqui por cd_contr direto em
- * vez de cd_contr_mob) — é o endereço CADASTRAL do contribuinte, não necessariamente o do
- * imóvel gerador da guia (podem divergir, ex.: empresa com sede fora de Arujá).
+ * (YEAR/MONTH de dt_vencimento, não exercício de lançamento). Agrupa por g.cd_contr
+ * (contribuinte devedor da guia). Inclui o endereço completo (tb_dsod_contribuinte_endereco
+ * + tb_dsod_cep, tributo-agnóstico — mesma tabela de endereço usada em mobiliario-empresa.ts
+ * detalhe(), mas aqui por cd_contr direto em vez de cd_contr_mob) — é o endereço CADASTRAL
+ * do contribuinte, não necessariamente o do imóvel gerador da guia (podem divergir, ex.:
+ * empresa com sede fora de Arujá).
  */
 export async function devedoresPorTributoMes(codigos: number[], anoVenc: number, mesVenc: number, top = 15): Promise<DevedorTributo[]> {
   const chave = [...codigos].sort((a, b) => a - b).join('.')
