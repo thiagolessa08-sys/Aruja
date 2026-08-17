@@ -1,5 +1,6 @@
 import { agentQuery } from '@/lib/agent'
 import { rankingTributos } from '@/lib/tributo-engine'
+import { CODIGOS_EXCLUIDOS } from '@/lib/tributos'
 import { cached, TTL_15MIN } from '@/lib/cache'
 
 const SCHEMA = 'pref_aruja_sp'
@@ -188,4 +189,90 @@ async function resultadoMensalRaw(ano: number): Promise<ResultadoMensal> {
     totalRecebidas: porMes.reduce((s, x) => s + x.recebidas, 0),
     porMes,
   }
+}
+
+export interface ConversaoItem { nome: string; lancado: number; arrecadado: number; conversao: number }
+export interface AnaliseConversao {
+  ano: number
+  porTributo: ConversaoItem[]
+  porPeriodo: ConversaoItem[]
+  porOperador: ConversaoItem[]
+}
+
+const TOP_N_CONV_OPER = 10
+const ANO_MIN_CONV = 2018
+
+/**
+ * Análise de Conversão (arrecadado ÷ lançado) sob 3 lentes — mesma métrica de
+ * "Conversão por Tributo" já mostrado no topo da tela, aqui reaproveitada em rankingTributos
+ * (por tributo) e cruzada com duas dimensões novas: por período (exercício de lançamento,
+ * desde ${ANO_MIN_CONV}) e por operador (cd_usuario_gerador da guia — mesmo campo usado em
+ * damsGeradas, mas aqui pesando o valor $ lançado/pago em vez da contagem de guias). "Por
+ * operador" revela conversão por QUEM gerou a guia — útil pra distinguir guias trabalhadas
+ * ativamente por atendentes de guias autoemitidas pelo portal que ficam sem seguimento.
+ */
+export async function analiseConversao(ano = 2025): Promise<AnaliseConversao> {
+  return cached(`analiseConversao:${ano}`, TTL_15MIN, () => analiseConversaoRaw(ano))
+}
+
+async function analiseConversaoRaw(ano: number): Promise<AnaliseConversao> {
+  const excl = CODIGOS_EXCLUIDOS.join(',')
+  const [rank, periodoR, totalAnoR, operR] = await Promise.all([
+    rankingTributos(false, ano),
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento AS ex, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento >= ${ANO_MIN_CONV}
+      GROUP BY g.no_exercicio_lancamento`, 30),
+    agentQuery(`
+      SELECT SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}`, 1),
+    // Milhares de operadores distintos (mesma situação de damsGeradas) — TOP + ORDER BY
+    // direto no SQL, "Demais operadores" calculado por diferença do total do ano.
+    agentQuery(`
+      SELECT TOP ${TOP_N_CONV_OPER} g.cd_usuario_gerador, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}
+      GROUP BY g.cd_usuario_gerador
+      ORDER BY lancado DESC`, TOP_N_CONV_OPER),
+  ])
+
+  const porTributo: ConversaoItem[] = rank
+    .filter(t => t.lancado > 0)
+    .sort((a, b) => b.lancado - a.lancado)
+    .slice(0, 10)
+    .map(t => ({ nome: t.nome, lancado: t.lancado, arrecadado: t.arrecadado, conversao: t.lancado ? (t.arrecadado / t.lancado) * 100 : 0 }))
+
+  // Descarta exercícios "futuros" além do corrente com valores residuais (poucos reais,
+  // ruído de lançamento/teste) — mantém só anos com volume real de lançamento.
+  const anoAtual = new Date().getFullYear()
+  const porPeriodo: ConversaoItem[] = periodoR.rows
+    .map(row => ({ ex: num(row[0]), lancado: num(row[1]), pago: num(row[2]) }))
+    .filter(x => x.ex >= ANO_MIN_CONV && x.ex <= anoAtual && x.lancado >= 1000)
+    .sort((a, b) => a.ex - b.ex)
+    .map(x => ({ nome: String(x.ex), lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
+
+  const totalLancadoAno = num(totalAnoR.rows[0]?.[0])
+  const totalPagoAno = num(totalAnoR.rows[0]?.[1])
+
+  const operList = operR.rows
+    .map(row => ({ nome: String(row[0] ?? '').trim() || 'Não identificado', lancado: num(row[1]), pago: num(row[2]) }))
+    .filter(x => x.lancado > 0)
+  const somaLancadoTop = operList.reduce((s, x) => s + x.lancado, 0)
+  const somaPagoTop = operList.reduce((s, x) => s + x.pago, 0)
+  const porOperador: ConversaoItem[] = operList.map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
+  const restoLancado = totalLancadoAno - somaLancadoTop
+  const restoPago = totalPagoAno - somaPagoTop
+  if (restoLancado > 0) {
+    porOperador.push({ nome: 'Demais operadores', lancado: restoLancado, arrecadado: restoPago, conversao: restoLancado ? (restoPago / restoLancado) * 100 : 0 })
+  }
+
+  return { ano, porTributo, porPeriodo, porOperador }
 }

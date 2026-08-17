@@ -16,6 +16,8 @@ interface DamOperador { nome: string; qt: number }
 interface DamsGeradas { ano: number; total: number; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
 interface ResultadoMes { mes: number; geradas: number; recebidas: number }
 interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; porMes: ResultadoMes[] }
+interface ConversaoItem { nome: string; lancado: number; arrecadado: number; conversao: number }
+interface AnaliseConversao { ano: number; porTributo: ConversaoItem[]; porPeriodo: ConversaoItem[]; porOperador: ConversaoItem[] }
 interface Resumo {
   ano: number; lancado: number; arrecadado: number; saldo: number; conversao: number; totalBaixas: number
   tributos: Trib[]
@@ -101,6 +103,31 @@ const FALLBACK_RESULTADO: ResultadoMensal = {
   ],
 }
 
+const FALLBACK_ANALISE: AnaliseConversao = {
+  ano: 2025,
+  porTributo: [
+    { nome: 'IPTU', lancado: 124458245.38, arrecadado: 69722847.06, conversao: 56.0 },
+    { nome: 'ITBI', lancado: 46855166.3, arrecadado: 22786236.26, conversao: 48.6 },
+    { nome: 'I.S.S.Q.N. - Tomador', lancado: 32784232.05, arrecadado: 30951146.65, conversao: 94.4 },
+    { nome: 'I.S.S.Q.N.', lancado: 28623756.56, arrecadado: 23370130.1, conversao: 81.6 },
+    { nome: 'Taxa de Fiscalização de Estabelecimento', lancado: 17615267.82, arrecadado: 6181592.52, conversao: 35.1 },
+  ],
+  porPeriodo: [
+    { nome: '2021', lancado: 289801861.8, arrecadado: 123971395.34, conversao: 42.8 },
+    { nome: '2022', lancado: 287222858.68, arrecadado: 126163038.17, conversao: 43.9 },
+    { nome: '2023', lancado: 298463992.66, arrecadado: 149773589.34, conversao: 50.2 },
+    { nome: '2024', lancado: 359866298.18, arrecadado: 166314389.46, conversao: 46.2 },
+    { nome: '2025', lancado: 305107766.15, arrecadado: 186251990.56, conversao: 61.0 },
+  ],
+  porOperador: [
+    { nome: 'Arquimedes', lancado: 139095937.47, arrecadado: 77725602.16, conversao: 55.9 },
+    { nome: 'BeatrizPS', lancado: 21721801.66, arrecadado: 6879338.74, conversao: 31.7 },
+    { nome: 'Schedule', lancado: 8996615.25, arrecadado: 6967863.25, conversao: 77.4 },
+    { nome: 'JoaoRSN', lancado: 5419757.08, arrecadado: 3645521.15, conversao: 67.3 },
+    { nome: 'Demais operadores', lancado: 98290260.28, arrecadado: 75503551.26, conversao: 76.8 },
+  ],
+}
+
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
@@ -129,6 +156,8 @@ export default function PainelCobranca() {
   const [devedoresMesErro, setDevedoresMesErro] = useState(false)
   const [dams, setDams] = useState<DamsGeradas | null>(null)
   const [resultado, setResultado] = useState<ResultadoMensal | null>(null)
+  const [analise, setAnalise] = useState<AnaliseConversao | null>(null)
+  const [conversaoDim, setConversaoDim] = useState<'tributo' | 'periodo' | 'operador'>('tributo')
 
   useEffect(() => {
     fetch('/api/cobranca/resumo?ano=2025').then(r => r.ok ? r.json() : null)
@@ -139,6 +168,8 @@ export default function PainelCobranca() {
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
     fetch('/api/cobranca/resultado-mensal?ano=2025').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.totalGeradas === 'number') setResultado(x) }).catch(() => {})
+    fetch('/api/cobranca/analise-conversao?ano=2025').then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && Array.isArray(x.porTributo)) setAnalise(x) }).catch(() => {})
   }, [])
 
   function selecionarPotencial(t: PotTrib) {
@@ -302,6 +333,62 @@ export default function PainelCobranca() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Análise de Conversão — arrecadado ÷ lançado sob 3 lentes selecionáveis: por tributo
+          (mesma métrica de "Conversão por Tributo" acima), por período (exercício de
+          lançamento) e por operador (cd_usuario_gerador da guia, pesando o valor $ em vez da
+          contagem — revela se guias autoemitidas têm conversão pior do que as trabalhadas
+          por atendentes). */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Análise de Conversão</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Arrecadado ÷ lançado — {(analise ?? FALLBACK_ANALISE).ano}, sob 3 lentes.</div>
+          </div>
+          <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
+            {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
+              <button key={key} onClick={() => setConversaoDim(key)}
+                style={{
+                  border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                  background: conversaoDim === key ? '#283e93' : 'transparent',
+                  color: conversaoDim === key ? '#fff' : '#5b6477',
+                  transition: 'background .15s, color .15s',
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {(() => {
+          const an = analise ?? FALLBACK_ANALISE
+          const itens = conversaoDim === 'tributo' ? an.porTributo : conversaoDim === 'periodo' ? an.porPeriodo : an.porOperador
+          if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados para esta visão.</div>
+          const maxLanc = Math.max(1, ...itens.map(i => i.lancado))
+          return (
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
+              {itens.map(item => {
+                const cor = convCor(item.conversao)
+                const w = Math.max(3, 100 * item.lancado / maxLanc)
+                return (
+                  <div key={item.nome}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
+                      <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: cor, flex: 'none', textAlign: 'right' }}>
+                        {fmtPct(item.conversao)}
+                        <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>{fmtAbrev(item.arrecadado)} de {fmtAbrev(item.lancado)} lançado</span>
+                      </span>
+                    </div>
+                    <div style={{ height: 13, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Potencial de Arrecadação — painel: do saldo devedor, quanto já VENCEU (inadimplência
