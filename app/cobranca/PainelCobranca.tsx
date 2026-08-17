@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, type BarRectangleItem } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
@@ -167,6 +167,9 @@ function geomBars(d: { ano: number; n: number }[]) {
 export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number }) {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
+  const [tipQV, setTipQV] = useState<{ left: number; top: number; label: string; saldo: number } | null>(null)
+  const [tipDam, setTipDam] = useState<{ left: number; top: number; label: string; qt: number } | null>(null)
+  const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; recebidas: number } | null>(null)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
   const [potMensal, setPotMensal] = useState<PotMes[] | null>(null)
@@ -561,19 +564,16 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
               ) : !potMensal.length ? (
                 <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem parcelas com saldo para este item.</div>
               ) : (
-                <div style={{ height: 240, marginTop: 16 }}>
+                <div style={{ height: 240, marginTop: 16, position: 'relative' }} onMouseLeave={() => setTipQV(null)}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={potMensal.map(m => ({ ...m, label: `${String(m.mes).padStart(2, '0')}/${String(m.ano).slice(2)}` }))} margin={{ top: 10, right: 8, left: 0, bottom: 0 }} barCategoryGap="18%">
+                    <BarChart data={potMensal.map(m => ({ ...m, label: `${String(m.mes).padStart(2, '0')}/${String(m.ano).slice(2)}` }))} margin={{ top: 30, right: 8, left: 0, bottom: 0 }} barCategoryGap="18%">
                       <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={potMensal.length > 14 ? 1 : 0} />
                       <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                      <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                        content={(props: { active?: boolean; payload?: readonly { value?: unknown }[]; label?: React.ReactNode }) => {
-                          const { active, payload, label } = props
-                          if (!active || !payload?.length) return null
-                          const v = Number(payload[0].value) || 0
-                          return tipBox(label, [{ texto: `Saldo: R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }])
-                        }} />
-                      <Bar dataKey="saldo" radius={[4, 4, 0, 0]} maxBarSize={26} cursor="pointer" onClick={(data: { payload?: PotMes }) => { if (data.payload) selecionarMes(data.payload) }}>
+                      <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+                      <Bar dataKey="saldo" radius={[4, 4, 0, 0]} maxBarSize={26} cursor="pointer"
+                        onClick={(data: { payload?: PotMes }) => { if (data.payload) selecionarMes(data.payload) }}
+                        onMouseEnter={(data: BarRectangleItem) => setTipQV({ left: data.x + data.width / 2, top: data.y, label: String((data.payload as { label: string }).label), saldo: (data.payload as PotMes).saldo })}
+                        onMouseLeave={() => setTipQV(null)}>
                         {potMensal.map((m, i) => {
                           const sel = potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes
                           return <Cell key={i} fill={m.vencido ? '#d64545' : '#e8962e'} stroke={sel ? '#1f2a44' : 'none'} strokeWidth={sel ? 2 : 0} />
@@ -581,6 +581,11 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
+                  {tipQV ? (
+                    <div style={{ position: 'absolute', left: tipQV.left, top: tipQV.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                      {tipBox(tipQV.label, [{ texto: `Saldo: R$ ${tipQV.saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }])}
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -691,21 +696,22 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
               )}
 
               <div style={{ marginTop: 16, fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por mês</div>
-              <div style={{ height: 200, marginTop: 10 }}>
+              <div style={{ height: 200, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDam(null)}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 10, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                  <BarChart data={dm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
                     <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                     <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                      content={(props: { active?: boolean; payload?: readonly { value?: unknown }[]; label?: React.ReactNode }) => {
-                        const { active, payload, label } = props
-                        if (!active || !payload?.length) return null
-                        const v = Number(payload[0].value) || 0
-                        return tipBox(label, [{ texto: `Geradas: ${v.toLocaleString('pt-BR')} guias` }])
-                      }} />
-                    <Bar dataKey="qt" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={34} />
+                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+                    <Bar dataKey="qt" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={34}
+                      onMouseEnter={(data: BarRectangleItem) => setTipDam({ left: data.x + data.width / 2, top: data.y, label: String((data.payload as { label: string }).label), qt: (data.payload as DamMes).qt })}
+                      onMouseLeave={() => setTipDam(null)} />
                   </BarChart>
                 </ResponsiveContainer>
+                {tipDam ? (
+                  <div style={{ position: 'absolute', left: tipDam.left, top: tipDam.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                    {tipBox(tipDam.label, [{ texto: `Geradas: ${fmtInt(tipDam.qt)} guias` }])}
+                  </div>
+                ) : null}
               </div>
 
               <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 18 }}>
@@ -790,22 +796,29 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
                 </div>
               )}
 
-              <div style={{ height: 220, marginTop: 16 }}>
+              <div style={{ height: 220, marginTop: 16, position: 'relative' }} onMouseLeave={() => setTipResultado(null)}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 10, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                  <BarChart data={rm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 48, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
                     <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                     <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                      content={(props: { active?: boolean; payload?: readonly { value?: unknown; name?: unknown; color?: string }[]; label?: React.ReactNode }) => {
-                        const { active, payload, label } = props
-                        if (!active || !payload?.length) return null
-                        return tipBox(label, payload.map(p => ({ texto: `${String(p.name)}: ${(Number(p.value) || 0).toLocaleString('pt-BR')} DAMs`, cor: p.color })))
-                      }} />
+                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26} />
-                    <Bar dataKey="recebidas" name="Recebidas" fill="#e8962e" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                    <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
+                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas }) }}
+                      onMouseLeave={() => setTipResultado(null)} />
+                    <Bar dataKey="recebidas" name="Recebidas" fill="#e8962e" radius={[4, 4, 0, 0]} maxBarSize={26}
+                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas }) }}
+                      onMouseLeave={() => setTipResultado(null)} />
                   </BarChart>
                 </ResponsiveContainer>
+                {tipResultado ? (
+                  <div style={{ position: 'absolute', left: tipResultado.left, top: tipResultado.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                    {tipBox(tipResultado.label, [
+                      { texto: `Geradas: ${fmtInt(tipResultado.geradas)} DAMs`, cor: '#283e93' },
+                      { texto: `Recebidas: ${fmtInt(tipResultado.recebidas)} DAMs`, cor: '#e8962e' },
+                    ])}
+                  </div>
+                ) : null}
               </div>
             </>
           )
