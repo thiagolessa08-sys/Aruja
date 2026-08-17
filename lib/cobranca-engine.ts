@@ -85,3 +85,85 @@ async function resumoCobrancaRaw(ano: number): Promise<ResumoCobranca> {
     totalBaixas, tributos, inadimplenciaPorTributo, canais, baixasPorAno,
   }
 }
+
+export interface DamMes { mes: number; qt: number }
+export interface DamTributo { nome: string; codigos: number[]; qt: number }
+export interface DamOperador { nome: string; qt: number }
+export interface DamsGeradas {
+  ano: number
+  total: number
+  porMes: DamMes[]
+  porTributo: DamTributo[]
+  porOperador: DamOperador[]
+}
+
+const TOP_N_DAM_TRIB = 10
+const TOP_N_DAM_OPER = 10
+
+/**
+ * Documentos de Arrecadação Municipal (DAM) gerados — tb_dsod_guias, cada linha é uma guia
+ * (= um DAM) emitida. `dt_geracao` = quando foi gerada (não confundir com
+ * no_exercicio_lancamento, o exercício fiscal a que a guia pertence — uma guia de 2025 pode
+ * ser reemitida/gerada em 2026). `cd_usuario_gerador` = operador que gerou (nome de
+ * atendente, ou identificadores especiais como "Internet"/autoatendimento pelo portal e
+ * "Schedule"/geração automática agendada — nem todo valor é uma pessoa). Por tributo usa o
+ * mesmo cd_tributo=20 "Documento de Arrecadacao" (DAM genérico, sem tributo específico
+ * vinculado) já mapeado em lib/tributos.ts CODIGOS_EXCLUIDOS.
+ */
+export async function damsGeradas(ano = 2025): Promise<DamsGeradas> {
+  return cached(`dams:${ano}`, TTL_15MIN, () => damsGeradasRaw(ano))
+}
+
+async function damsGeradasRaw(ano: number): Promise<DamsGeradas> {
+  const [totalR, mesR, tribR, operR] = await Promise.all([
+    agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_guias WHERE YEAR(dt_geracao) = ${ano}`, 1),
+    agentQuery(`
+      SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias
+      WHERE YEAR(dt_geracao) = ${ano}
+      GROUP BY MONTH(dt_geracao)`, 20),
+    agentQuery(`
+      SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias g
+      LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+      WHERE YEAR(g.dt_geracao) = ${ano}
+      GROUP BY g.cd_tributo, t.ds_tributo`, 200),
+    // Milhares de valores distintos (muitos são CPF/CNPJ de contribuintes que geraram a
+    // própria guia pelo portal) — TOP + ORDER BY direto no SQL, "Demais" calculado por
+    // diferença do total (evita trazer a cauda toda pro JS).
+    agentQuery(`
+      SELECT TOP ${TOP_N_DAM_OPER} cd_usuario_gerador, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias
+      WHERE YEAR(dt_geracao) = ${ano}
+      GROUP BY cd_usuario_gerador
+      ORDER BY qt DESC`, TOP_N_DAM_OPER),
+  ])
+
+  const total = num(totalR.rows[0]?.[0])
+
+  const porMesMap = new Map<number, number>()
+  for (const row of mesR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) porMesMap.set(m, num(row[1])) }
+  const porMes: DamMes[] = []
+  for (let m = 1; m <= 12; m++) porMes.push({ mes: m, qt: porMesMap.get(m) ?? 0 })
+
+  const tribList = tribR.rows
+    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim() || `Tributo ${num(row[0])}`, qt: num(row[2]) }))
+    .filter(x => x.qt > 0)
+    .sort((a, b) => b.qt - a.qt)
+  const topTrib = tribList.slice(0, TOP_N_DAM_TRIB)
+  const restoTrib = tribList.slice(TOP_N_DAM_TRIB)
+  const porTributo: DamTributo[] = topTrib.map(t => ({ nome: t.nome, codigos: [t.cd], qt: t.qt }))
+  if (restoTrib.length) {
+    porTributo.push({ nome: `Demais tributos (${restoTrib.length})`, codigos: restoTrib.map(t => t.cd), qt: restoTrib.reduce((s, t) => s + t.qt, 0) })
+  }
+
+  const operList = operR.rows
+    .map(row => ({ nome: String(row[0] ?? '').trim() || 'Não identificado', qt: num(row[1]) }))
+    .filter(x => x.qt > 0)
+  const somaTopOper = operList.reduce((s, x) => s + x.qt, 0)
+  const porOperador: DamOperador[] = [...operList]
+  const restoOper = total - somaTopOper
+  if (restoOper > 0) porOperador.push({ nome: 'Demais operadores', qt: restoOper })
+
+  return { ano, total, porMes, porTributo, porOperador }
+}

@@ -11,6 +11,10 @@ interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; en
 interface PotTrib { nome: string; codigos: number[]; vencido: number; aVencer: number }
 interface Potencial { vencido: number; aVencer: number; porTributo: PotTrib[] }
 interface PotMes { ano: number; mes: number; saldo: number; vencido: boolean }
+interface DamMes { mes: number; qt: number }
+interface DamTributo { nome: string; codigos: number[]; qt: number }
+interface DamOperador { nome: string; qt: number }
+interface DamsGeradas { ano: number; total: number; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
 interface Resumo {
   ano: number; lancado: number; arrecadado: number; saldo: number; conversao: number; totalBaixas: number
   tributos: Trib[]
@@ -73,9 +77,33 @@ const FALLBACK_POTENCIAL: Potencial = {
   ],
 }
 
+const FALLBACK_DAMS: DamsGeradas = {
+  ano: 2025, total: 1240924,
+  porMes: [
+    { mes: 1, qt: 73192 }, { mes: 2, qt: 43244 }, { mes: 3, qt: 44118 }, { mes: 4, qt: 30754 },
+    { mes: 5, qt: 22646 }, { mes: 6, qt: 42330 }, { mes: 7, qt: 23636 }, { mes: 8, qt: 23447 },
+    { mes: 9, qt: 24308 }, { mes: 10, qt: 23563 }, { mes: 11, qt: 42396 }, { mes: 12, qt: 847290 },
+  ],
+  porTributo: [
+    { nome: 'Documento de Arrecadacao', codigos: [20], qt: 1033997 },
+    { nome: 'ISS - Simples Nacional', codigos: [301], qt: 66095 },
+    { nome: 'IPTU', codigos: [1], qt: 31689 },
+    { nome: 'Taxa de Contribuição Ambiental (TCA)', codigos: [67], qt: 30786 },
+    { nome: 'ISS - Simples Nacional Dívida Ativa', codigos: [303], qt: 24434 },
+    { nome: 'I.S.S.Q.N.', codigos: [3], qt: 10390 },
+    { nome: 'Taxa de Fiscalização de Estabelecimento', codigos: [2002], qt: 10051 },
+  ],
+  porOperador: [
+    { nome: 'CalebeAM', qt: 827806 }, { nome: 'Schedule', qt: 107300 }, { nome: 'Internet', qt: 48198 },
+    { nome: 'KellyCPS', qt: 41174 }, { nome: 'BeatrizPS', qt: 33249 }, { nome: 'Arquimedes', qt: 18910 },
+  ],
+}
+
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
 const INAD_CORES = ['#d64545', '#df6363', '#e88181', '#f0a0a0', '#f7bebe', '#c73333', '#b82727', '#a91c1c', '#961616', '#8a1414']
+const DAM_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e', '#eaa957', '#f0bb7c']
 
 function geomBars(d: { ano: number; n: number }[]) {
   const W = 960, H = 280, top = 24, bottom = 232
@@ -102,12 +130,15 @@ export default function PainelCobranca() {
   const [potMesSel, setPotMesSel] = useState<PotMes | null>(null)
   const [devedoresMes, setDevedoresMes] = useState<Devedor[] | null>(null)
   const [devedoresMesErro, setDevedoresMesErro] = useState(false)
+  const [dams, setDams] = useState<DamsGeradas | null>(null)
 
   useEffect(() => {
     fetch('/api/cobranca/resumo?ano=2025').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.lancado === 'number') setD(x) }).catch(() => {})
     fetch('/api/cobranca/potencial?ano=2025').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.vencido === 'number') setPotencial(x) }).catch(() => {})
+    fetch('/api/cobranca/dams?ano=2025').then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
   }, [])
 
   function buscarDevedores(t: TribInad) {
@@ -552,6 +583,96 @@ export default function PainelCobranca() {
             </div>
           ) : null}
         </div>
+      </div>
+
+      {/* Documentos de Arrecadação Municipal (DAM) gerados — por data (mês), tributo e
+          operador. tb_dsod_guias, dt_geracao = quando a guia/DAM foi emitida (não confundir
+          com o exercício fiscal a que pertence). */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Documentos de Arrecadação Municipal (DAM)</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Guias geradas por data, tributo e operador — {(dams ?? FALLBACK_DAMS).ano}. &quot;Internet&quot; = autoatendimento pelo portal; &quot;Schedule&quot; = geração automática agendada.</div>
+          </div>
+          <span style={reportBadge}>Geradas</span>
+        </div>
+
+        {(() => {
+          const dm = dams ?? FALLBACK_DAMS
+          const maxMes = Math.max(1, ...dm.porMes.map(m => m.qt))
+          const mesPico = [...dm.porMes].sort((a, b) => b.qt - a.qt)[0]
+          const operPico = dm.porOperador[0]
+          const pctMesPico = dm.total ? (mesPico.qt / dm.total) * 100 : 0
+          const pctOperPico = dm.total && operPico ? (operPico.qt / dm.total) * 100 : 0
+          return (
+            <>
+              <div style={{ marginTop: 12, background: '#283e93', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total de DAMs geradas em {dm.ano}</span>
+                <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtInt(dm.total)}</span>
+              </div>
+              {!dams ? null : (
+                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
+                  {MESES_ABREV[mesPico.mes - 1]}/{dm.ano} concentra {fmtInt(mesPico.qt)} guias ({fmtPct(pctMesPico)} do ano){operPico ? ` · ${operPico.nome} gerou ${fmtInt(operPico.qt)} (${fmtPct(pctOperPico)} do total)` : ''} — provável geração em lote, não trabalho manual individual.
+                </div>
+              )}
+
+              <div style={{ marginTop: 16, fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por mês</div>
+              <div style={{ height: 200, marginTop: 10 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 10, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                    <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                    <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
+                      formatter={(val) => [Number(val).toLocaleString('pt-BR') + ' guias', 'Geradas'] as [string, string]}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                    <Bar dataKey="qt" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={34} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 18 }}>
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por tributo</div>
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                    {(() => {
+                      const maxTrib = Math.max(1, ...dm.porTributo.map(t => t.qt))
+                      return dm.porTributo.map((t, i) => (
+                        <div key={t.nome}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
+                            <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(t.qt)}</span>
+                          </div>
+                          <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.max(3, 100 * t.qt / maxTrib).toFixed(1)}%`, borderRadius: 5, background: /^Demais tributos/.test(t.nome) ? '#c2c9d6' : DAM_CORES[i % DAM_CORES.length] }} />
+                          </div>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por operador</div>
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                    {(() => {
+                      const maxOper = Math.max(1, ...dm.porOperador.map(o => o.qt))
+                      return dm.porOperador.map((o, i) => (
+                        <div key={o.nome}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
+                            <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.nome}</span>
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)}</span>
+                          </div>
+                          <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.max(3, 100 * o.qt / maxOper).toFixed(1)}%`, borderRadius: 5, background: o.nome === 'Demais operadores' ? '#c2c9d6' : CANAL_CORES[i % CANAL_CORES.length] }} />
+                          </div>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       {/* Tabela por tributo */}
