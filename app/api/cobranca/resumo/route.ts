@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { resumoCobranca } from '@/lib/cobranca-engine'
+import { dataAtualizacaoTributo } from '@/lib/tributo-engine'
 
 export async function GET(req: NextRequest) {
   const session = getSession()
@@ -11,8 +12,11 @@ export async function GET(req: NextRequest) {
   const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
 
   try {
-    const data = await resumoCobranca(ano, mes)
-    return NextResponse.json(data)
+    const [data, dataAtualizacao] = await Promise.all([
+      resumoCobranca(ano, mes),
+      dataAtualizacaoTributo(),
+    ])
+    return NextResponse.json({ ...data, dataAtualizacao })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

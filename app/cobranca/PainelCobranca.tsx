@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
+import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 
 interface Trib { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; endereco?: string }
@@ -31,6 +32,7 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
 
 const FALLBACK: Resumo = {
   ano: 2025, lancado: 304700000, arrecadado: 185500000, saldo: 80700000, conversao: 60.9, totalBaixas: 8381161,
@@ -158,6 +160,8 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
   const [resultado, setResultado] = useState<ResultadoMensal | null>(null)
   const [analise, setAnalise] = useState<AnaliseConversao | null>(null)
   const [conversaoDim, setConversaoDim] = useState<'tributo' | 'periodo' | 'operador'>('tributo')
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
   useEffect(() => {
     setD(null)
@@ -172,7 +176,10 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
     setDevedoresMesErro(false)
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
-      .then(x => { if (x && !x.error && typeof x.lancado === 'number') setD(x) }).catch(() => {})
+      .then(x => {
+        if (x && !x.error && typeof x.lancado === 'number') setD(x)
+        if (x && !x.error) setDataAtualizacao(x.dataAtualizacao ?? null)
+      }).catch(() => {})
     fetch(`/api/cobranca/potencial?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.vencido === 'number') setPotencial(x) }).catch(() => {})
     fetch(`/api/cobranca/dams?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
@@ -239,6 +246,29 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
     { label: 'Baixas Processadas', value: fmtInt(g.totalBaixas), subLabel: `no exercício ${g.ano}`, subValue: '', pct: '', cor: '' },
   ]
 
+  // Relatório (PDF/Excel): cards = KPIs da tela; tabela = conversão por tributo (mesma
+  // usada na tabela final da página).
+  async function gerarRelatorio(tipo: 'pdf' | 'excel') {
+    if (!g.tributos.length || gerandoRelatorio) return
+    setGerandoRelatorio(true)
+    try {
+      const dados: DadosRelatorio = {
+        titulo: `Cobrança — Exercício ${g.ano}${mes ? ` (até ${MESES_ABREV[mes - 1]})` : ''}`,
+        subtitulo: `Lançado ${fmtReais(g.lancado)} · Arrecadado ${fmtReais(g.arrecadado)} (${fmtPct(g.conversao)})`,
+        cards: kpis.map(k => ({ rotulo: k.label, valor: k.value })),
+        colunas: ['Tributo', 'Lançado', 'Arrecadado', 'A Recuperar', 'Conversão'],
+        linhas: g.tributos.map(t => [t.nome, fmtReais(t.lancado), fmtReais(t.arrecadado), fmtReais(t.saldo), fmtPct(t.conversao)]),
+        arquivo: `Cobranca-${g.ano}`,
+      }
+      const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
+      await fn(dados)
+    } catch {
+      alert('Não foi possível gerar o relatório. Tente novamente.')
+    } finally {
+      setGerandoRelatorio(false)
+    }
+  }
+
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
   const dots: React.CSSProperties = { color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14, flex: 'none' }
@@ -255,6 +285,21 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
   return (
     <div style={{ position: 'relative' }}>
       {!d ? <LoadingOverlay label="Carregando…" /> : null}
+
+      {/* Barra de relatórios (Excel/PDF a partir dos KPIs + conversão por tributo) */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, margin: '0 4px' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
+            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
+          Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(dataAtualizacao)}</b>
+        </span>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {
           const azul = i === 0
