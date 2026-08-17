@@ -97,6 +97,8 @@ export default function PainelCobranca() {
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
   const [potMensal, setPotMensal] = useState<PotMes[] | null>(null)
+  const [potMesSel, setPotMesSel] = useState<PotMes | null>(null)
+  const [devedoresMes, setDevedoresMes] = useState<Devedor[] | null>(null)
 
   useEffect(() => {
     fetch('/api/cobranca/resumo?ano=2025').then(r => r.ok ? r.json() : null)
@@ -115,12 +117,24 @@ export default function PainelCobranca() {
   }
 
   function selecionarPotencial(t: PotTrib) {
+    setPotMesSel(null)
+    setDevedoresMes(null)
     if (potSel?.nome === t.nome) { setPotSel(null); setPotMensal(null); return }
     setPotSel(t)
     setPotMensal(null)
     const qs = new URLSearchParams({ codigos: t.codigos.join(','), ano: String(g.ano) })
     fetch(`/api/cobranca/potencial-mensal?${qs}`).then(r => r.ok ? r.json() : null)
       .then(res => { if (res && !res.error && Array.isArray(res.itens)) setPotMensal(res.itens) }).catch(() => {})
+  }
+
+  function selecionarMes(m: PotMes) {
+    if (!potSel) return
+    if (potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes) { setPotMesSel(null); setDevedoresMes(null); return }
+    setPotMesSel(m)
+    setDevedoresMes(null)
+    const qs = new URLSearchParams({ codigos: potSel.codigos.join(','), anoVenc: String(m.ano), mesVenc: String(m.mes) })
+    fetch(`/api/cobranca/devedores-tributo-mes?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => { if (res && !res.error && Array.isArray(res.itens)) setDevedoresMes(res.itens) }).catch(() => {})
   }
 
   const g = d ?? FALLBACK
@@ -422,7 +436,7 @@ export default function PainelCobranca() {
                 <span style={reportBadge}>Por mês</span>
               </div>
               <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-                Saldo devedor por mês de vencimento{potSel.codigos.length > 1 ? ` — soma de ${potSel.codigos.length} códigos` : ''}. Barras vermelhas já venceram; laranjas ainda vão vencer.
+                Saldo devedor por mês de vencimento{potSel.codigos.length > 1 ? ` — soma de ${potSel.codigos.length} códigos` : ''}. Barras vermelhas já venceram; laranjas ainda vão vencer. Clique num mês pra ver os devedores.
               </div>
 
               {!potMensal ? (
@@ -438,13 +452,44 @@ export default function PainelCobranca() {
                       <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
                         formatter={(val) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'Saldo'] as [string, string]}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
-                      <Bar dataKey="saldo" radius={[4, 4, 0, 0]} maxBarSize={26}>
-                        {potMensal.map((m, i) => <Cell key={i} fill={m.vencido ? '#d64545' : '#e8962e'} />)}
+                      <Bar dataKey="saldo" radius={[4, 4, 0, 0]} maxBarSize={26} cursor="pointer" onClick={(data: { payload?: PotMes }) => { if (data.payload) selecionarMes(data.payload) }}>
+                        {potMensal.map((m, i) => {
+                          const sel = potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes
+                          return <Cell key={i} fill={m.vencido ? '#d64545' : '#e8962e'} stroke={sel ? '#1f2a44' : 'none'} strokeWidth={sel ? 2 : 0} />
+                        })}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               )}
+
+              {potMesSel ? (
+                <div style={{ marginTop: 16, background: '#f7f9fd', borderRadius: 10, padding: '10px 10px 4px' }}>
+                  <div style={{ fontSize: 10.5, color: '#5b6477', fontWeight: 600, padding: '0 4px 8px' }}>
+                    Maiores devedores · vencimento {String(potMesSel.mes).padStart(2, '0')}/{potMesSel.ano}
+                  </div>
+                  {!devedoresMes ? <Spinner label="Carregando…" size={26} padding={16} />
+                    : !devedoresMes.length ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Nenhum devedor identificado.</div>
+                    : (() => {
+                      const maxDev = Math.max(1, ...devedoresMes.map(x => x.saldo))
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingBottom: 6 }}>
+                          {devedoresMes.map((dv, di) => (
+                            <div key={dv.cd}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 2 }}>
+                                <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{di + 1}. {dv.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>{dv.cpfCnpj ? `· ${dv.cpfCnpj}` : ''}</span></span>
+                                <span style={{ color: '#d64545', fontWeight: 700, flex: 'none' }}>{fmtAbrev(dv.saldo)}</span>
+                              </div>
+                              <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.max(3, 100 * dv.saldo / maxDev).toFixed(1)}%`, borderRadius: 5, background: '#d64545' }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                </div>
+              ) : null}
             </>
           )}
         </div>
