@@ -13,7 +13,7 @@ export interface ResumoCobranca {
   conversao: number
   totalBaixas: number
   tributos: { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }[]
-  inadimplenciaPorTributo: { nome: string; saldo: number; lancado: number; conversao: number }[]
+  inadimplenciaPorTributo: { nome: string; codigos: number[]; saldo: number; lancado: number; conversao: number }[]
   canais: { nome: string; n: number }[]
   baixasPorAno: { ano: number; n: number }[]
 }
@@ -49,12 +49,13 @@ async function resumoCobrancaRaw(ano: number): Promise<ResumoCobranca> {
   const rankSaldo = rank.filter(t => t.saldo > 0).sort((a, b) => b.saldo - a.saldo)
   const topInad = rankSaldo.slice(0, TOP_N_INAD)
   const restoInad = rankSaldo.slice(TOP_N_INAD)
-  const inadimplenciaPorTributo = topInad.map(t => ({ nome: t.nome, saldo: t.saldo, lancado: t.lancado, conversao: t.lancado ? (t.arrecadado / t.lancado) * 100 : 0 }))
+  const inadimplenciaPorTributo = topInad.map(t => ({ nome: t.nome, codigos: [t.cd], saldo: t.saldo, lancado: t.lancado, conversao: t.lancado ? (t.arrecadado / t.lancado) * 100 : 0 }))
   if (restoInad.length) {
     const lancadoResto = restoInad.reduce((a, t) => a + t.lancado, 0)
     const arrecadadoResto = restoInad.reduce((a, t) => a + t.arrecadado, 0)
     inadimplenciaPorTributo.push({
       nome: `Demais tributos (${restoInad.length})`,
+      codigos: restoInad.map(t => t.cd),
       saldo: restoInad.reduce((a, t) => a + t.saldo, 0),
       lancado: lancadoResto,
       conversao: lancadoResto ? (arrecadadoResto / lancadoResto) * 100 : 0,
