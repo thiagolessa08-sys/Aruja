@@ -144,3 +144,48 @@ async function damsGeradasRaw(ano: number): Promise<DamsGeradas> {
 
   return { ano, total, porMes, porTributo, porOperador }
 }
+
+export interface ResultadoMes { mes: number; geradas: number; recebidas: number }
+export interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; porMes: ResultadoMes[] }
+
+/**
+ * Resultado mensal da arrecadação: DAM GERADAS (tb_dsod_guias.dt_geracao — emitidas) × DAM
+ * RECEBIDAS pelo setor de Cobrança (tb_dsod_parcela_baixas.dt_baixa — mesma fonte/conceito
+ * de baixasPorAno em resumoCobranca, aqui quebrado por mês em vez de por ano). Datas de
+ * geração e de baixa são eventos independentes — uma guia gerada em dezembro (ex.: lote de
+ * IPTU do próximo exercício) só é "recebida" quando o contribuinte efetivamente paga, meses
+ * depois; por isso os dois volumes mensais não precisam (e tipicamente não vão) bater.
+ */
+export async function resultadoMensalArrecadacao(ano = 2025): Promise<ResultadoMensal> {
+  return cached(`resultadoMensal:${ano}`, TTL_15MIN, () => resultadoMensalRaw(ano))
+}
+
+async function resultadoMensalRaw(ano: number): Promise<ResultadoMensal> {
+  const [geradasR, recebidasR] = await Promise.all([
+    agentQuery(`
+      SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias
+      WHERE YEAR(dt_geracao) = ${ano}
+      GROUP BY MONTH(dt_geracao)`, 20),
+    agentQuery(`
+      SELECT MONTH(dt_baixa) AS mes, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas
+      WHERE YEAR(dt_baixa) = ${ano}
+      GROUP BY MONTH(dt_baixa)`, 20),
+  ])
+
+  const geradasMap = new Map<number, number>()
+  for (const row of geradasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) geradasMap.set(m, num(row[1])) }
+  const recebidasMap = new Map<number, number>()
+  for (const row of recebidasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) recebidasMap.set(m, num(row[1])) }
+
+  const porMes: ResultadoMes[] = []
+  for (let m = 1; m <= 12; m++) porMes.push({ mes: m, geradas: geradasMap.get(m) ?? 0, recebidas: recebidasMap.get(m) ?? 0 })
+
+  return {
+    ano,
+    totalGeradas: porMes.reduce((s, x) => s + x.geradas, 0),
+    totalRecebidas: porMes.reduce((s, x) => s + x.recebidas, 0),
+    porMes,
+  }
+}

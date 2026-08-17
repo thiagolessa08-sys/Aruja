@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
@@ -14,6 +14,8 @@ interface DamMes { mes: number; qt: number }
 interface DamTributo { nome: string; codigos: number[]; qt: number }
 interface DamOperador { nome: string; qt: number }
 interface DamsGeradas { ano: number; total: number; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
+interface ResultadoMes { mes: number; geradas: number; recebidas: number }
+interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; porMes: ResultadoMes[] }
 interface Resumo {
   ano: number; lancado: number; arrecadado: number; saldo: number; conversao: number; totalBaixas: number
   tributos: Trib[]
@@ -87,6 +89,18 @@ const FALLBACK_DAMS: DamsGeradas = {
   ],
 }
 
+const FALLBACK_RESULTADO: ResultadoMensal = {
+  ano: 2025, totalGeradas: 1240924, totalRecebidas: 294786,
+  porMes: [
+    { mes: 1, geradas: 73192, recebidas: 16297 }, { mes: 2, geradas: 43244, recebidas: 30827 },
+    { mes: 3, geradas: 44118, recebidas: 29493 }, { mes: 4, geradas: 30754, recebidas: 27124 },
+    { mes: 5, geradas: 22646, recebidas: 26331 }, { mes: 6, geradas: 42330, recebidas: 26188 },
+    { mes: 7, geradas: 23636, recebidas: 25939 }, { mes: 8, geradas: 23447, recebidas: 24847 },
+    { mes: 9, geradas: 24308, recebidas: 25272 }, { mes: 10, geradas: 23563, recebidas: 25477 },
+    { mes: 11, geradas: 42396, recebidas: 24687 }, { mes: 12, geradas: 847290, recebidas: 12304 },
+  ],
+}
+
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
@@ -114,6 +128,7 @@ export default function PainelCobranca() {
   const [devedoresMes, setDevedoresMes] = useState<Devedor[] | null>(null)
   const [devedoresMesErro, setDevedoresMesErro] = useState(false)
   const [dams, setDams] = useState<DamsGeradas | null>(null)
+  const [resultado, setResultado] = useState<ResultadoMensal | null>(null)
 
   useEffect(() => {
     fetch('/api/cobranca/resumo?ano=2025').then(r => r.ok ? r.json() : null)
@@ -122,6 +137,8 @@ export default function PainelCobranca() {
       .then(x => { if (x && !x.error && typeof x.vencido === 'number') setPotencial(x) }).catch(() => {})
     fetch('/api/cobranca/dams?ano=2025').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
+    fetch('/api/cobranca/resultado-mensal?ano=2025').then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && typeof x.totalGeradas === 'number') setResultado(x) }).catch(() => {})
   }, [])
 
   function selecionarPotencial(t: PotTrib) {
@@ -551,6 +568,62 @@ export default function PainelCobranca() {
                     })()}
                   </div>
                 </div>
+              </div>
+            </>
+          )
+        })()}
+      </div>
+
+      {/* Resultado Mensal da Arrecadação — DAM Geradas × DAM Recebidas pelo setor de
+          Cobrança, por mês. São eventos independentes (data de geração da guia vs. data da
+          baixa/pagamento); uma guia gerada num mês só "vira" recebida quando o contribuinte
+          efetivamente paga, meses depois. */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Resultado Mensal da Arrecadação</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas × DAM Recebidas pelo setor de Cobrança, por mês — {(resultado ?? FALLBACK_RESULTADO).ano}.</div>
+          </div>
+          <span style={reportBadge}>Geradas × Recebidas</span>
+        </div>
+
+        {(() => {
+          const rm = resultado ?? FALLBACK_RESULTADO
+          const pctRecebidas = rm.totalGeradas ? (rm.totalRecebidas / rm.totalGeradas) * 100 : 0
+          const mesDestaque = [...rm.porMes].sort((a, b) => (b.geradas - b.recebidas) - (a.geradas - a.recebidas))[0]
+          return (
+            <>
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
+                <div style={{ background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>DAM Geradas em {rm.ano}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalGeradas)}</div>
+                </div>
+                <div style={{ background: '#fdf3e6', border: '1px solid #f2ddb8', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#c07a2e' }}>DAM Recebidas em {rm.ano}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalRecebidas)}</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctRecebidas)} das geradas no ano</div>
+                </div>
+              </div>
+
+              {!resultado ? null : (
+                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
+                  {MESES_ABREV[mesDestaque.mes - 1]}/{rm.ano} tem o maior descompasso: {fmtInt(mesDestaque.geradas)} geradas × {fmtInt(mesDestaque.recebidas)} recebidas — geração e recebimento são eventos independentes (guia gerada num mês só é recebida quando o contribuinte paga, meses depois).
+                </div>
+              )}
+
+              <div style={{ height: 220, marginTop: 16 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={rm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 10, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                    <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                    <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
+                      formatter={(val, name) => [Number(val).toLocaleString('pt-BR') + ' DAMs', name] as [string, string]}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                    <Bar dataKey="recebidas" name="Recebidas" fill="#e8962e" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </>
           )
