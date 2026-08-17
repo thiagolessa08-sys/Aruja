@@ -15,9 +15,10 @@ export async function GET(req: NextRequest) {
   if (!codigos.length) return NextResponse.json({ error: 'codigos inválido' }, { status: 400 })
   const anoRaw = req.nextUrl.searchParams.get('ano')
   const ano = anoRaw && /^\d{4}$/.test(anoRaw) ? Number(anoRaw) : undefined
+  const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
 
   try {
-    const itens = await potencialMensalTributo(codigos, ano)
+    const itens = await potencialMensalTributo(codigos, ano, mes)
     return NextResponse.json({ itens })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

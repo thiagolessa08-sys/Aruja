@@ -23,15 +23,25 @@ export async function resumoCobranca(ano = 2025, mes?: number): Promise<ResumoCo
 }
 
 async function resumoCobrancaRaw(ano: number, mes?: number): Promise<ResumoCobranca> {
+  const filtroMesBaixa = mes ? ` AND MONTH(dt_baixa) <= ${mes}` : ''
+  const whereMesBaixa = mes ? `WHERE MONTH(dt_baixa) <= ${mes}` : ''
   const [rank, canaisR, anoR] = await Promise.all([
     rankingTributos(false, ano, mes),
+    // Canais de arrecadação (baixas) do exercício/mês selecionado — mesmo filtro de
+    // ano/mes usado no resto do resumo, pra "Canais de Arrecadação" e o KPI "Baixas
+    // Processadas" reagirem aos filtros da tela.
     agentQuery(`
       SELECT ds_setor_origem_baixa AS setor, COUNT(*) AS n
       FROM ${SCHEMA}.tb_dsod_parcela_baixas
+      WHERE YEAR(dt_baixa) = ${ano}${filtroMesBaixa}
       GROUP BY ds_setor_origem_baixa`, 100),
+    // Série histórica (todos os anos) pro gráfico "Baixas Processadas por Ano" — não
+    // restringe por exercício (é o propósito do gráfico mostrar a tendência plurianual),
+    // mas acompanha o filtro de mês (acumulado até o mês, em cada ano) quando selecionado.
     agentQuery(`
       SELECT YEAR(dt_baixa) AS ano, COUNT(*) AS n
       FROM ${SCHEMA}.tb_dsod_parcela_baixas
+      ${whereMesBaixa}
       GROUP BY YEAR(dt_baixa)`, 100),
   ])
 
@@ -55,7 +65,7 @@ async function resumoCobrancaRaw(ano: number, mes?: number): Promise<ResumoCobra
     .filter(x => x.ano >= 2015 && x.ano <= 2026)
     .sort((a, b) => a.ano - b.ano)
 
-  const totalBaixas = anoR.rows.reduce((a, r) => a + num(r[1]), 0)
+  const totalBaixas = canaisR.rows.reduce((a, r) => a + num(r[1]), 0)
 
   return {
     ano, lancado, arrecadado, saldo,

@@ -880,12 +880,13 @@ const TOP_N_POTENCIAL = 10
  * mas por tributo analítico (cd_tributo individual) em vez de por grupo. `ano` (opcional)
  * restringe ao exercício de lançamento — mesma convenção de rankingTributos.
  */
-export async function potencialArrecadacao(ano?: number): Promise<PotencialArrecadacao> {
-  return cached(`potencialArrec:${ano ?? 'all'}`, TTL_15MIN, () => potencialArrecadacaoRaw(ano))
+export async function potencialArrecadacao(ano?: number, mes?: number): Promise<PotencialArrecadacao> {
+  return cached(`potencialArrec:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => potencialArrecadacaoRaw(ano, mes))
 }
 
-async function potencialArrecadacaoRaw(ano?: number): Promise<PotencialArrecadacao> {
+async function potencialArrecadacaoRaw(ano?: number, mes?: number): Promise<PotencialArrecadacao> {
   const filtroAno = ano ? ` AND g.no_exercicio_lancamento = ${ano}` : ''
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const r = await agentQuery(`
     SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm,
            SUM(pp.vl_saldo) AS saldo
@@ -893,7 +894,7 @@ async function potencialArrecadacaoRaw(ano?: number): Promise<PotencialArrecadac
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
-    WHERE g.cd_tributo NOT IN (${CODIGOS_EXCLUIDOS.join(',')})${filtroAno}
+    WHERE g.cd_tributo NOT IN (${CODIGOS_EXCLUIDOS.join(',')})${filtroAno}${filtroMes}
     GROUP BY g.cd_tributo, t.ds_tributo, YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 5000)
 
   const now = new Date()
@@ -947,19 +948,20 @@ export interface PotencialMes { ano: number; mes: number; saldo: number; vencido
  * (ano,mês) é integralmente vencido ou a vencer relativamente a hoje — não há mistura
  * dentro do mesmo mês.
  */
-export async function potencialMensalTributo(codigos: number[], ano?: number): Promise<PotencialMes[]> {
+export async function potencialMensalTributo(codigos: number[], ano?: number, mes?: number): Promise<PotencialMes[]> {
   const chave = [...codigos].sort((a, b) => a - b).join('.')
-  return cached(`potencialMensal:${chave}:${ano ?? 'all'}`, TTL_15MIN, () => potencialMensalTributoRaw(codigos, ano))
+  return cached(`potencialMensal:${chave}:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => potencialMensalTributoRaw(codigos, ano, mes))
 }
 
-async function potencialMensalTributoRaw(codigos: number[], ano?: number): Promise<PotencialMes[]> {
+async function potencialMensalTributoRaw(codigos: number[], ano?: number, mes?: number): Promise<PotencialMes[]> {
   const filtroAno = ano ? ` AND g.no_exercicio_lancamento = ${ano}` : ''
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const r = await agentQuery(`
     SELECT YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm, SUM(pp.vl_saldo) AS saldo
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-    WHERE g.cd_tributo IN (${codigos.join(',')})${filtroAno}
+    WHERE g.cd_tributo IN (${codigos.join(',')})${filtroAno}${filtroMes}
     GROUP BY YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 500)
 
   const now = new Date()

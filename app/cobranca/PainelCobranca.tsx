@@ -173,7 +173,7 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.lancado === 'number') setD(x) }).catch(() => {})
-    fetch(`/api/cobranca/potencial?ano=${ano}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/cobranca/potencial?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.vencido === 'number') setPotencial(x) }).catch(() => {})
     fetch(`/api/cobranca/dams?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
@@ -190,7 +190,7 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
     if (potSel?.nome === t.nome) { setPotSel(null); setPotMensal(null); return }
     setPotSel(t)
     setPotMensal(null)
-    const qs = new URLSearchParams({ codigos: t.codigos.join(','), ano: String(g.ano) })
+    const qs = new URLSearchParams({ codigos: t.codigos.join(','), ano: String(g.ano), ...(mes ? { mes: String(mes) } : {}) })
     fetch(`/api/cobranca/potencial-mensal?${qs}`).then(r => r.ok ? r.json() : null)
       .then(res => { if (res && !res.error && Array.isArray(res.itens)) setPotMensal(res.itens) }).catch(() => {})
   }
@@ -228,7 +228,7 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
   const insights = [
     `Em ${g.ano}, ${fmtReais(g.lancado)} lançados e ${fmtReais(g.arrecadado)} arrecadados — conversão de ${fmtPct(g.conversao)}.`,
     `Potencial de ${fmtMoney(g.saldo)} ainda a recuperar.${piorConv ? ` ${piorConv.nome} tem a menor conversão (${fmtPct(piorConv.conversao)}).` : ''}`,
-    febraban ? `O canal bancário (Febraban) processa ${fmtPct(febraban.n / totCanais * 100)} das baixas — principal meio de arrecadação.` : `${fmtInt(g.totalBaixas)} baixas processadas no histórico.`,
+    febraban ? `O canal bancário (Febraban) processa ${fmtPct(febraban.n / totCanais * 100)} das baixas — principal meio de arrecadação.` : `${fmtInt(g.totalBaixas)} baixas processadas em ${g.ano}.`,
   ]
 
   const kpis = [
@@ -236,7 +236,7 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
     { label: 'Arrecadado', value: fmtMoney(g.arrecadado), subLabel: 'do lançado', subValue: fmtPct(g.conversao), pct: '', cor: '' },
     { label: 'Conversão', value: fmtPct(g.conversao), subLabel: 'arrecadado / lançado', subValue: '', pct: '', cor: '' },
     { label: 'Potencial a Recuperar', value: fmtMoney(g.saldo), subLabel: 'inadimplência', subValue: '', pct: '', cor: '' },
-    { label: 'Baixas Processadas', value: fmtInt(g.totalBaixas), subLabel: 'histórico', subValue: '', pct: '', cor: '' },
+    { label: 'Baixas Processadas', value: fmtInt(g.totalBaixas), subLabel: `no exercício ${g.ano}`, subValue: '', pct: '', cor: '' },
   ]
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
@@ -561,16 +561,27 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Baixas Processadas por Ano</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>volume de DAMs recebidas pelo setor de Cobrança</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>volume de DAMs recebidas pelo setor de Cobrança{mes ? ` — acumulado até ${MESES_ABREV[mes - 1]}, em cada ano` : ''}. Exercício selecionado ({g.ano}) em destaque.</div>
           </div>
           <span style={reportBadge}>Volume</span>
         </div>
         <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
           <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" style={{ display: 'block' }}>
-            <defs><linearGradient id="cobBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#7d8fce" /></linearGradient></defs>
+            <defs>
+              <linearGradient id="cobBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#7d8fce" /></linearGradient>
+              <linearGradient id="cobBarSel" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f0bb7c" /></linearGradient>
+            </defs>
             {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v}k</text></g>))}
             <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-            {gb.bars.map((b, i) => (<g key={i}><rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="5" fill="url(#cobBar)" /><text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="9" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text></g>))}
+            {gb.bars.map((b, i) => {
+              const sel = b.ano === g.ano
+              return (
+                <g key={i}>
+                  <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="5" fill={sel ? 'url(#cobBarSel)' : 'url(#cobBar)'} />
+                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="9" fontWeight={sel ? 700 : 400} fill={sel ? '#c07a2e' : '#3a4256'} textAnchor="middle" style={axisFont}>{b.ano}</text>
+                </g>
+              )
+            })}
             {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip({ left: `${(b.cx / gb.W * 100).toFixed(1)}%`, top: `${(b.y / gb.H * 100).toFixed(1)}%`, ano: b.ano, n: b.n })} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />))}
           </svg>
           {tip ? (
