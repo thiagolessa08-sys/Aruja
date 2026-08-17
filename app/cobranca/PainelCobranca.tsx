@@ -145,7 +145,7 @@ function geomBars(d: { ano: number; n: number }[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
-export default function PainelCobranca({ ano }: { ano: number }) {
+export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number }) {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
@@ -170,17 +170,18 @@ export default function PainelCobranca({ ano }: { ano: number }) {
     setPotMesSel(null)
     setDevedoresMes(null)
     setDevedoresMesErro(false)
-    fetch(`/api/cobranca/resumo?ano=${ano}`).then(r => r.ok ? r.json() : null)
+    const sufMes = mes ? `&mes=${mes}` : ''
+    fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.lancado === 'number') setD(x) }).catch(() => {})
     fetch(`/api/cobranca/potencial?ano=${ano}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.vencido === 'number') setPotencial(x) }).catch(() => {})
-    fetch(`/api/cobranca/dams?ano=${ano}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/cobranca/dams?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
-    fetch(`/api/cobranca/resultado-mensal?ano=${ano}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/cobranca/resultado-mensal?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.totalGeradas === 'number') setResultado(x) }).catch(() => {})
-    fetch(`/api/cobranca/analise-conversao?ano=${ano}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/cobranca/analise-conversao?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.porTributo)) setAnalise(x) }).catch(() => {})
-  }, [ano])
+  }, [ano, mes])
 
   function selecionarPotencial(t: PotTrib) {
     setPotMesSel(null)

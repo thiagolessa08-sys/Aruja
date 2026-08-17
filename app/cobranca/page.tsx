@@ -6,11 +6,13 @@ import TopNav from '../_components/TopNav'
 import PainelCobranca from './PainelCobranca'
 
 const ANO_MIN = 2018
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 export default function CobrancaPage() {
   const [saudacao, setSaudacao] = useState('Bom dia')
   const nome = useSaudacaoNome()
   const [ano, setAno] = useState(() => new Date().getFullYear())
+  const [mes, setMes] = useState<number | ''>('') // mês selecionado (acumulado); '' = ano todo
 
   useEffect(() => {
     const h = new Date().getHours()
@@ -44,8 +46,12 @@ export default function CobrancaPage() {
           <select aria-label="Exercício" value={ano} onChange={e => setAno(Number(e.target.value))} style={selectPill}>
             {anos.map(a => <option key={a} value={a}>Exercício: {a}</option>)}
           </select>
+          <select aria-label="Mês" value={mes} onChange={e => setMes(e.target.value ? Number(e.target.value) : '')} style={selectPill}>
+            <option value="">Mês: Ano todo</option>
+            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
         </div>
-        <PainelCobranca ano={ano} />
+        <PainelCobranca ano={ano} mes={mes || undefined} />
       </div>
     </div>
   )

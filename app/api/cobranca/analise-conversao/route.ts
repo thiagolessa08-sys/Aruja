@@ -8,9 +8,10 @@ export async function GET(req: NextRequest) {
 
   const anoRaw = req.nextUrl.searchParams.get('ano')
   const ano = anoRaw && /^\d{4}$/.test(anoRaw) ? Number(anoRaw) : 2025
+  const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
 
   try {
-    const data = await analiseConversao(ano)
+    const data = await analiseConversao(ano, mes)
     return NextResponse.json(data)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

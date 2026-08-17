@@ -18,13 +18,13 @@ export interface ResumoCobranca {
   baixasPorAno: { ano: number; n: number }[]
 }
 
-export async function resumoCobranca(ano = 2025): Promise<ResumoCobranca> {
-  return cached(`cobranca:${ano}`, TTL_15MIN, () => resumoCobrancaRaw(ano))
+export async function resumoCobranca(ano = 2025, mes?: number): Promise<ResumoCobranca> {
+  return cached(`cobranca:${ano}:${mes ?? ''}`, TTL_15MIN, () => resumoCobrancaRaw(ano, mes))
 }
 
-async function resumoCobrancaRaw(ano: number): Promise<ResumoCobranca> {
+async function resumoCobrancaRaw(ano: number, mes?: number): Promise<ResumoCobranca> {
   const [rank, canaisR, anoR] = await Promise.all([
-    rankingTributos(false, ano),
+    rankingTributos(false, ano, mes),
     agentQuery(`
       SELECT ds_setor_origem_baixa AS setor, COUNT(*) AS n
       FROM ${SCHEMA}.tb_dsod_parcela_baixas
@@ -88,23 +88,24 @@ const TOP_N_DAM_OPER = 10
  * mesmo cd_tributo=20 "Documento de Arrecadacao" (DAM genérico, sem tributo específico
  * vinculado) já mapeado em lib/tributos.ts CODIGOS_EXCLUIDOS.
  */
-export async function damsGeradas(ano = 2025): Promise<DamsGeradas> {
-  return cached(`dams:${ano}`, TTL_15MIN, () => damsGeradasRaw(ano))
+export async function damsGeradas(ano = 2025, mes?: number): Promise<DamsGeradas> {
+  return cached(`dams:${ano}:${mes ?? ''}`, TTL_15MIN, () => damsGeradasRaw(ano, mes))
 }
 
-async function damsGeradasRaw(ano: number): Promise<DamsGeradas> {
+async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
+  const filtroMes = mes ? ` AND MONTH(dt_geracao) <= ${mes}` : ''
   const [totalR, mesR, tribR, operR] = await Promise.all([
-    agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_guias WHERE YEAR(dt_geracao) = ${ano}`, 1),
+    agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_guias WHERE YEAR(dt_geracao) = ${ano}${filtroMes}`, 1),
     agentQuery(`
       SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
-      WHERE YEAR(dt_geracao) = ${ano}
+      WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
       GROUP BY MONTH(dt_geracao)`, 20),
     agentQuery(`
       SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
       LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
-      WHERE YEAR(g.dt_geracao) = ${ano}
+      WHERE YEAR(g.dt_geracao) = ${ano}${filtroMes}
       GROUP BY g.cd_tributo, t.ds_tributo`, 200),
     // Milhares de valores distintos (muitos são CPF/CNPJ de contribuintes que geraram a
     // própria guia pelo portal) — TOP + ORDER BY direto no SQL, "Demais" calculado por
@@ -112,7 +113,7 @@ async function damsGeradasRaw(ano: number): Promise<DamsGeradas> {
     agentQuery(`
       SELECT TOP ${TOP_N_DAM_OPER} cd_usuario_gerador, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
-      WHERE YEAR(dt_geracao) = ${ano}
+      WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
       GROUP BY cd_usuario_gerador
       ORDER BY qt DESC`, TOP_N_DAM_OPER),
   ])
@@ -157,21 +158,23 @@ export interface ResultadoMensal { ano: number; totalGeradas: number; totalReceb
  * IPTU do próximo exercício) só é "recebida" quando o contribuinte efetivamente paga, meses
  * depois; por isso os dois volumes mensais não precisam (e tipicamente não vão) bater.
  */
-export async function resultadoMensalArrecadacao(ano = 2025): Promise<ResultadoMensal> {
-  return cached(`resultadoMensal:${ano}`, TTL_15MIN, () => resultadoMensalRaw(ano))
+export async function resultadoMensalArrecadacao(ano = 2025, mes?: number): Promise<ResultadoMensal> {
+  return cached(`resultadoMensal:${ano}:${mes ?? ''}`, TTL_15MIN, () => resultadoMensalRaw(ano, mes))
 }
 
-async function resultadoMensalRaw(ano: number): Promise<ResultadoMensal> {
+async function resultadoMensalRaw(ano: number, mes?: number): Promise<ResultadoMensal> {
+  const filtroMes = mes ? ` AND MONTH(dt_geracao) <= ${mes}` : ''
+  const filtroMesBaixa = mes ? ` AND MONTH(dt_baixa) <= ${mes}` : ''
   const [geradasR, recebidasR] = await Promise.all([
     agentQuery(`
       SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
-      WHERE YEAR(dt_geracao) = ${ano}
+      WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
       GROUP BY MONTH(dt_geracao)`, 20),
     agentQuery(`
       SELECT MONTH(dt_baixa) AS mes, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_parcela_baixas
-      WHERE YEAR(dt_baixa) = ${ano}
+      WHERE YEAR(dt_baixa) = ${ano}${filtroMesBaixa}
       GROUP BY MONTH(dt_baixa)`, 20),
   ])
 
@@ -211,27 +214,28 @@ const ANO_MIN_CONV = 2018
  * operador" revela conversão por QUEM gerou a guia — útil pra distinguir guias trabalhadas
  * ativamente por atendentes de guias autoemitidas pelo portal que ficam sem seguimento.
  */
-export async function analiseConversao(ano = 2025): Promise<AnaliseConversao> {
-  return cached(`analiseConversao:${ano}`, TTL_15MIN, () => analiseConversaoRaw(ano))
+export async function analiseConversao(ano = 2025, mes?: number): Promise<AnaliseConversao> {
+  return cached(`analiseConversao:${ano}:${mes ?? ''}`, TTL_15MIN, () => analiseConversaoRaw(ano, mes))
 }
 
-async function analiseConversaoRaw(ano: number): Promise<AnaliseConversao> {
+async function analiseConversaoRaw(ano: number, mes?: number): Promise<AnaliseConversao> {
   const excl = CODIGOS_EXCLUIDOS.join(',')
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const [rank, periodoR, totalAnoR, operR] = await Promise.all([
-    rankingTributos(false, ano),
+    rankingTributos(false, ano, mes),
     agentQuery(`
       SELECT g.no_exercicio_lancamento AS ex, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento >= ${ANO_MIN_CONV}
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento >= ${ANO_MIN_CONV}${filtroMes}
       GROUP BY g.no_exercicio_lancamento`, 30),
     agentQuery(`
       SELECT SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}`, 1),
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}${filtroMes}`, 1),
     // Milhares de operadores distintos (mesma situação de damsGeradas) — TOP + ORDER BY
     // direto no SQL, "Demais operadores" calculado por diferença do total do ano.
     agentQuery(`
@@ -239,7 +243,7 @@ async function analiseConversaoRaw(ano: number): Promise<AnaliseConversao> {
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}${filtroMes}
       GROUP BY g.cd_usuario_gerador
       ORDER BY lancado DESC`, TOP_N_CONV_OPER),
   ])
