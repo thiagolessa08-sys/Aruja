@@ -7,6 +7,8 @@ import { fmtAbrev } from '@/lib/fmt-grafico'
 interface Trib { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }
 interface TribInad { nome: string; codigos: number[]; saldo: number; lancado: number; conversao: number }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
+interface PotTrib { nome: string; codigos: number[]; vencido: number; aVencer: number }
+interface Potencial { vencido: number; aVencer: number; porTributo: PotTrib[] }
 interface Resumo {
   ano: number; lancado: number; arrecadado: number; saldo: number; conversao: number; totalBaixas: number
   tributos: Trib[]
@@ -55,6 +57,20 @@ const FALLBACK: Resumo = {
   ],
 }
 
+const FALLBACK_POTENCIAL: Potencial = {
+  vencido: 80000000, aVencer: 140000,
+  porTributo: [
+    { nome: 'IPTU', codigos: [1], vencido: 47500000, aVencer: 80000 },
+    { nome: 'ITBI', codigos: [10], vencido: 7400000, aVencer: 0 },
+    { nome: 'Taxa de Fiscalização de Estabelecimento', codigos: [2002], vencido: 7080000, aVencer: 4700 },
+    { nome: 'Taxa de Contribuição Ambiental (TCA)', codigos: [67], vencido: 6180000, aVencer: 14500 },
+    { nome: 'I.S.S.Q.N.', codigos: [3], vencido: 3790000, aVencer: 0 },
+    { nome: 'ISS Construção Civil', codigos: [40], vencido: 2720000, aVencer: 0 },
+    { nome: 'Taxa de Fiscalização de Higiene e Saúde', codigos: [2003], vencido: 2140000, aVencer: 4200 },
+    { nome: 'Auto de Infração', codigos: [19], vencido: 1490000, aVencer: 0 },
+  ],
+}
+
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
 const INAD_CORES = ['#d64545', '#df6363', '#e88181', '#f0a0a0', '#f7bebe', '#c73333', '#b82727', '#a91c1c', '#961616', '#8a1414']
@@ -76,10 +92,13 @@ export default function PainelCobranca() {
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
   const [inadExpandido, setInadExpandido] = useState<string | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
+  const [potencial, setPotencial] = useState<Potencial | null>(null)
 
   useEffect(() => {
     fetch('/api/cobranca/resumo?ano=2025').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.lancado === 'number') setD(x) }).catch(() => {})
+    fetch('/api/cobranca/potencial?ano=2025').then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && typeof x.vencido === 'number') setPotencial(x) }).catch(() => {})
   }, [])
 
   function alternarInad(t: TribInad) {
@@ -292,6 +311,71 @@ export default function PainelCobranca() {
                             )}
                         </div>
                       ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )
+        })()}
+      </div>
+
+      {/* Potencial de Arrecadação — painel: do saldo devedor, quanto já VENCEU (inadimplência
+          genuína, ação de cobrança já cabível) × quanto ainda NÃO VENCEU (potencial futuro,
+          não cobrável ainda), por tributo analítico. */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Potencial de Arrecadação</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Do saldo devedor, quanto já venceu (cobrável agora) × quanto ainda não venceu (potencial futuro), por tributo — {g.ano}.</div>
+          </div>
+          <span style={reportBadge}>Vencido × A Vencer</span>
+        </div>
+
+        {(() => {
+          const p = potencial ?? FALLBACK_POTENCIAL
+          if (!potencial) return <div style={{ marginTop: 14, height: 160, borderRadius: 12, background: '#eef1f7' }} />
+          const totalPot = p.vencido + p.aVencer
+          const pctVenc = totalPot ? (p.vencido / totalPot) * 100 : 0
+          const pctAVenc = totalPot ? (p.aVencer / totalPot) * 100 : 0
+          const maxTrib = Math.max(1, ...p.porTributo.map(t => t.vencido + t.aVencer))
+          return (
+            <>
+              <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
+                <div style={{ background: '#fdeceb', border: '1px solid #f3d0cd', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#d64545' }}>Vencido · cobrável agora</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtMoney(p.vencido)}</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctVenc)} do potencial total</div>
+                </div>
+                <div style={{ background: '#fdf3e6', border: '1px solid #f2ddb8', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#c07a2e' }}>A Vencer · potencial futuro</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtMoney(p.aVencer)}</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctAVenc)} do potencial total</div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por tributo</span>
+                <div style={{ display: 'flex', gap: 14, fontSize: 10.5, color: '#5b6477' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#d64545' }} />Vencido</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#e8962e' }} />A Vencer</span>
+                </div>
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13 }}>
+                {p.porTributo.map(t => {
+                  const tot = t.vencido + t.aVencer
+                  const wVenc = Math.max(0, 100 * t.vencido / maxTrib)
+                  const wAVenc = Math.max(0, 100 * t.aVencer / maxTrib)
+                  return (
+                    <div key={t.nome}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
+                        <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(tot)}</span>
+                      </div>
+                      <div style={{ height: 12, borderRadius: 5, background: '#eef1f7', overflow: 'hidden', display: 'flex' }}>
+                        <div style={{ width: `${wVenc.toFixed(1)}%`, background: '#d64545' }} />
+                        <div style={{ width: `${wAVenc.toFixed(1)}%`, background: '#e8962e' }} />
+                      </div>
                     </div>
                   )
                 })}

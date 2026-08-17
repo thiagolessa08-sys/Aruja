@@ -848,6 +848,80 @@ export async function saldoVencidoAberto(grupo: GrupoTributo): Promise<Map<numbe
   return cached(`saldoVA:${grupo}`, TTL_15MIN, () => saldoVAraw(grupo))
 }
 
+export interface PotencialTributo { nome: string; codigos: number[]; vencido: number; aVencer: number }
+export interface PotencialArrecadacao {
+  vencido: number
+  aVencer: number
+  porTributo: PotencialTributo[]
+}
+
+const TOP_N_POTENCIAL = 10
+
+/**
+ * "Potencial de Arrecadação" (Cobrança): do total de saldo em aberto (todos os tributos, a
+ * nível analítico), quanto já está VENCIDO (inadimplência genuína, ação de cobrança já
+ * cabível) × quanto está A VENCER (parcela ainda não venceu — potencial futuro, não
+ * cobrável ainda). Mesma classificação vencido/aberto de saldoVencidoAberto (compara
+ * ano/mês de vencimento com hoje, em JS — evita operador < no SQL, que quebra o agente IQ),
+ * mas por tributo analítico (cd_tributo individual) em vez de por grupo. `ano` (opcional)
+ * restringe ao exercício de lançamento — mesma convenção de rankingTributos.
+ */
+export async function potencialArrecadacao(ano?: number): Promise<PotencialArrecadacao> {
+  return cached(`potencialArrec:${ano ?? 'all'}`, TTL_15MIN, () => potencialArrecadacaoRaw(ano))
+}
+
+async function potencialArrecadacaoRaw(ano?: number): Promise<PotencialArrecadacao> {
+  const filtroAno = ano ? ` AND g.no_exercicio_lancamento = ${ano}` : ''
+  const r = await agentQuery(`
+    SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm,
+           SUM(pp.vl_saldo) AS saldo
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+    WHERE g.cd_tributo NOT IN (${CODIGOS_EXCLUIDOS.join(',')})${filtroAno}
+    GROUP BY g.cd_tributo, t.ds_tributo, YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 5000)
+
+  const now = new Date()
+  const curY = now.getFullYear()
+  const curM = now.getMonth() + 1
+  const porCd = new Map<number, { nome: string; vencido: number; aVencer: number }>()
+
+  for (const row of r.rows) {
+    const cd = num(row[0])
+    const nome = String(row[1] ?? '').trim() || `Tributo ${cd}`
+    const vy = num(row[2]), vm = num(row[3]), saldo = num(row[4])
+    if (saldo <= 0) continue
+    const vencido = vy < curY || (vy === curY && vm < curM)
+    const cur = porCd.get(cd) ?? { nome, vencido: 0, aVencer: 0 }
+    if (vencido) cur.vencido += saldo; else cur.aVencer += saldo
+    porCd.set(cd, cur)
+  }
+
+  const lista = Array.from(porCd.entries())
+    .map(([cd, v]) => ({ cd, nome: v.nome, vencido: v.vencido, aVencer: v.aVencer }))
+    .filter(x => x.vencido > 0 || x.aVencer > 0)
+    .sort((a, b) => b.vencido - a.vencido)
+
+  const top = lista.slice(0, TOP_N_POTENCIAL)
+  const resto = lista.slice(TOP_N_POTENCIAL)
+  const porTributo: PotencialTributo[] = top.map(t => ({ nome: t.nome, codigos: [t.cd], vencido: t.vencido, aVencer: t.aVencer }))
+  if (resto.length) {
+    porTributo.push({
+      nome: `Demais tributos (${resto.length})`,
+      codigos: resto.map(t => t.cd),
+      vencido: resto.reduce((s, t) => s + t.vencido, 0),
+      aVencer: resto.reduce((s, t) => s + t.aVencer, 0),
+    })
+  }
+
+  return {
+    vencido: lista.reduce((s, t) => s + t.vencido, 0),
+    aVencer: lista.reduce((s, t) => s + t.aVencer, 0),
+    porTributo,
+  }
+}
+
 async function saldoVAraw(grupo: GrupoTributo): Promise<Map<number, { vencido: number; aberto: number }>> {
   const r = await agentQuery(`
     SELECT g.no_exercicio_lancamento AS ex, YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm,
