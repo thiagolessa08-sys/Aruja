@@ -131,6 +131,7 @@ const FALLBACK_ANALISE: AnaliseConversao = {
 }
 
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
 const DAM_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e', '#eaa957', '#f0bb7c']
@@ -164,7 +165,7 @@ function geomBars(d: { ano: number; n: number }[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
-export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number }) {
+export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number; mes?: number; onLimparMes?: () => void }) {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
   const [tipQV, setTipQV] = useState<{ left: number; top: number; label: string; saldo: number } | null>(null)
@@ -319,6 +320,14 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
           Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(dataAtualizacao)}</b>
         </span>
       </div>
+
+      {/* Banner de filtro global por mês (acumulado até o mês selecionado) */}
+      {mes ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '14px 4px 0' }}>
+          <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>Toda a tela filtrada pelo mês: <b>até {MESES[mes - 1]}</b></span>
+          <button onClick={onLimparMes} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Limpar filtro</button>
+        </div>
+      ) : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
         {kpis.map((k, i) => {

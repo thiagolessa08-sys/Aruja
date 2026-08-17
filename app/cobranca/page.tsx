@@ -51,7 +51,7 @@ export default function CobrancaPage() {
             {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
         </div>
-        <PainelCobranca ano={ano} mes={mes || undefined} />
+        <PainelCobranca ano={ano} mes={mes || undefined} onLimparMes={() => setMes('')} />
       </div>
     </div>
   )
