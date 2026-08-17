@@ -93,12 +93,15 @@ export default function PainelCobranca() {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
   const [inadExpandido, setInadExpandido] = useState<string | null>(null)
+  const [inadTrib, setInadTrib] = useState<TribInad | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
+  const [devedoresErro, setDevedoresErro] = useState(false)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
   const [potMensal, setPotMensal] = useState<PotMes[] | null>(null)
   const [potMesSel, setPotMesSel] = useState<PotMes | null>(null)
   const [devedoresMes, setDevedoresMes] = useState<Devedor[] | null>(null)
+  const [devedoresMesErro, setDevedoresMesErro] = useState(false)
 
   useEffect(() => {
     fetch('/api/cobranca/resumo?ano=2025').then(r => r.ok ? r.json() : null)
@@ -107,18 +110,28 @@ export default function PainelCobranca() {
       .then(x => { if (x && !x.error && typeof x.vencido === 'number') setPotencial(x) }).catch(() => {})
   }, [])
 
-  function alternarInad(t: TribInad) {
-    if (inadExpandido === t.nome) { setInadExpandido(null); setDevedores(null); return }
-    setInadExpandido(t.nome)
+  function buscarDevedores(t: TribInad) {
     setDevedores(null)
+    setDevedoresErro(false)
     const qs = new URLSearchParams({ codigos: t.codigos.join(','), ano: String(g.ano) })
     fetch(`/api/cobranca/devedores-tributo?${qs}`).then(r => r.ok ? r.json() : null)
-      .then(res => { if (res && !res.error && Array.isArray(res.itens)) setDevedores(res.itens) }).catch(() => {})
+      .then(res => {
+        if (res && !res.error && Array.isArray(res.itens)) setDevedores(res.itens)
+        else setDevedoresErro(true)
+      }).catch(() => setDevedoresErro(true))
+  }
+
+  function alternarInad(t: TribInad) {
+    if (inadExpandido === t.nome) { setInadExpandido(null); setInadTrib(null); setDevedores(null); setDevedoresErro(false); return }
+    setInadExpandido(t.nome)
+    setInadTrib(t)
+    buscarDevedores(t)
   }
 
   function selecionarPotencial(t: PotTrib) {
     setPotMesSel(null)
     setDevedoresMes(null)
+    setDevedoresMesErro(false)
     if (potSel?.nome === t.nome) { setPotSel(null); setPotMensal(null); return }
     setPotSel(t)
     setPotMensal(null)
@@ -127,14 +140,23 @@ export default function PainelCobranca() {
       .then(res => { if (res && !res.error && Array.isArray(res.itens)) setPotMensal(res.itens) }).catch(() => {})
   }
 
-  function selecionarMes(m: PotMes) {
+  function buscarDevedoresMes(m: PotMes) {
     if (!potSel) return
-    if (potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes) { setPotMesSel(null); setDevedoresMes(null); return }
-    setPotMesSel(m)
     setDevedoresMes(null)
+    setDevedoresMesErro(false)
     const qs = new URLSearchParams({ codigos: potSel.codigos.join(','), anoVenc: String(m.ano), mesVenc: String(m.mes) })
     fetch(`/api/cobranca/devedores-tributo-mes?${qs}`).then(r => r.ok ? r.json() : null)
-      .then(res => { if (res && !res.error && Array.isArray(res.itens)) setDevedoresMes(res.itens) }).catch(() => {})
+      .then(res => {
+        if (res && !res.error && Array.isArray(res.itens)) setDevedoresMes(res.itens)
+        else setDevedoresMesErro(true)
+      }).catch(() => setDevedoresMesErro(true))
+  }
+
+  function selecionarMes(m: PotMes) {
+    if (!potSel) return
+    if (potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes) { setPotMesSel(null); setDevedoresMes(null); setDevedoresMesErro(false); return }
+    setPotMesSel(m)
+    buscarDevedoresMes(m)
   }
 
   const g = d ?? FALLBACK
@@ -319,7 +341,12 @@ export default function PainelCobranca() {
                       {aberto ? (
                         <div style={{ marginTop: 8, background: '#f7f9fd', borderRadius: 10, padding: '10px 10px 4px' }}>
                           <div style={{ fontSize: 10.5, color: '#5b6477', fontWeight: 600, padding: '0 4px 8px' }}>Maiores devedores{t.codigos.length > 1 ? ` — soma de ${t.codigos.length} códigos` : ''}</div>
-                          {!devedores ? <Spinner label="Carregando…" size={26} padding={16} />
+                          {devedoresErro ? (
+                            <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                              <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar os devedores.</div>
+                              <button onClick={() => inadTrib && buscarDevedores(inadTrib)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                            </div>
+                          ) : !devedores ? <Spinner label="Carregando…" size={26} padding={16} />
                             : !devedores.length ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Nenhum devedor identificado.</div>
                             : (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingBottom: 6 }}>
@@ -468,7 +495,12 @@ export default function PainelCobranca() {
                   <div style={{ fontSize: 10.5, color: '#5b6477', fontWeight: 600, padding: '0 4px 8px' }}>
                     Maiores devedores · vencimento {String(potMesSel.mes).padStart(2, '0')}/{potMesSel.ano}
                   </div>
-                  {!devedoresMes ? <Spinner label="Carregando…" size={26} padding={16} />
+                  {devedoresMesErro ? (
+                    <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                      <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar os devedores.</div>
+                      <button onClick={() => potMesSel && buscarDevedoresMes(potMesSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                    </div>
+                  ) : !devedoresMes ? <Spinner label="Carregando…" size={26} padding={16} />
                     : !devedoresMes.length ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Nenhum devedor identificado.</div>
                     : (() => {
                       const maxDev = Math.max(1, ...devedoresMes.map(x => x.saldo))
