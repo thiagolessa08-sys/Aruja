@@ -922,6 +922,45 @@ async function potencialArrecadacaoRaw(ano?: number): Promise<PotencialArrecadac
   }
 }
 
+export interface PotencialMes { ano: number; mes: number; saldo: number; vencido: boolean }
+
+/**
+ * Drill "quando vence" do ranking de Potencial de Arrecadação (Cobrança): saldo por MÊS DE
+ * VENCIMENTO de um ou mais códigos de tributo específicos — a granularidade mensal que
+ * potencialArrecadacaoRaw já busca, mas aqui exposta como série (não colapsada em
+ * vencido/aVencer), pra revelar a distribuição temporal da dívida (concentrada em meses
+ * recentes = mais recuperável; concentrada em meses antigos = mais difícil). Cada
+ * (ano,mês) é integralmente vencido ou a vencer relativamente a hoje — não há mistura
+ * dentro do mesmo mês.
+ */
+export async function potencialMensalTributo(codigos: number[], ano?: number): Promise<PotencialMes[]> {
+  const chave = [...codigos].sort((a, b) => a - b).join('.')
+  return cached(`potencialMensal:${chave}:${ano ?? 'all'}`, TTL_15MIN, () => potencialMensalTributoRaw(codigos, ano))
+}
+
+async function potencialMensalTributoRaw(codigos: number[], ano?: number): Promise<PotencialMes[]> {
+  const filtroAno = ano ? ` AND g.no_exercicio_lancamento = ${ano}` : ''
+  const r = await agentQuery(`
+    SELECT YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm, SUM(pp.vl_saldo) AS saldo
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    WHERE g.cd_tributo IN (${codigos.join(',')})${filtroAno}
+    GROUP BY YEAR(p.dt_vencimento), MONTH(p.dt_vencimento)`, 500)
+
+  const now = new Date()
+  const curY = now.getFullYear()
+  const curM = now.getMonth() + 1
+
+  return r.rows
+    .map(row => {
+      const ano2 = num(row[0]), mes = num(row[1]), saldo = num(row[2])
+      return { ano: ano2, mes, saldo, vencido: ano2 < curY || (ano2 === curY && mes < curM) }
+    })
+    .filter(x => x.saldo > 0 && x.ano >= 2005 && x.ano <= 2035 && x.mes >= 1 && x.mes <= 12)
+    .sort((a, b) => a.ano - b.ano || a.mes - b.mes)
+}
+
 async function saldoVAraw(grupo: GrupoTributo): Promise<Map<number, { vencido: number; aberto: number }>> {
   const r = await agentQuery(`
     SELECT g.no_exercicio_lancamento AS ex, YEAR(p.dt_vencimento) AS vy, MONTH(p.dt_vencimento) AS vm,
