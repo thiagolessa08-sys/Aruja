@@ -135,6 +135,23 @@ const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
 const DAM_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e', '#eaa957', '#f0bb7c']
 
+// Tooltip padrão da tela — mesmo visual do gráfico "Baixas Processadas por Ano" (caixa
+// escura, título em branco, linhas em cinza-claro), reaproveitado nos gráficos Recharts via
+// o prop `content`.
+function tipBox(titulo: React.ReactNode, linhas: { texto: string; cor?: string }[]) {
+  return (
+    <div style={{ background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{titulo}</div>
+      {linhas.map((l, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: i === 0 ? 3 : 2 }}>
+          {l.cor ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.cor, flex: 'none' }} /> : null}
+          {l.texto}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function geomBars(d: { ano: number; n: number }[]) {
   const W = 960, H = 280, top = 24, bottom = 232
   const span = bottom - top - 8
@@ -550,8 +567,12 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
                       <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={potMensal.length > 14 ? 1 : 0} />
                       <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                       <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                        formatter={(val) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'Saldo'] as [string, string]}
-                        contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                        content={(props: { active?: boolean; payload?: readonly { value?: unknown }[]; label?: React.ReactNode }) => {
+                          const { active, payload, label } = props
+                          if (!active || !payload?.length) return null
+                          const v = Number(payload[0].value) || 0
+                          return tipBox(label, [{ texto: `Saldo: R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }])
+                        }} />
                       <Bar dataKey="saldo" radius={[4, 4, 0, 0]} maxBarSize={26} cursor="pointer" onClick={(data: { payload?: PotMes }) => { if (data.payload) selecionarMes(data.payload) }}>
                         {potMensal.map((m, i) => {
                           const sel = potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes
@@ -676,8 +697,12 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
                     <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                     <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                     <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                      formatter={(val) => [Number(val).toLocaleString('pt-BR') + ' guias', 'Geradas'] as [string, string]}
-                      contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                      content={(props: { active?: boolean; payload?: readonly { value?: unknown }[]; label?: React.ReactNode }) => {
+                        const { active, payload, label } = props
+                        if (!active || !payload?.length) return null
+                        const v = Number(payload[0].value) || 0
+                        return tipBox(label, [{ texto: `Geradas: ${v.toLocaleString('pt-BR')} guias` }])
+                      }} />
                     <Bar dataKey="qt" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={34} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -771,8 +796,11 @@ export default function PainelCobranca({ ano, mes }: { ano: number; mes?: number
                     <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                     <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                     <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                      formatter={(val, name) => [Number(val).toLocaleString('pt-BR') + ' DAMs', name] as [string, string]}
-                      contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                      content={(props: { active?: boolean; payload?: readonly { value?: unknown; name?: unknown; color?: string }[]; label?: React.ReactNode }) => {
+                        const { active, payload, label } = props
+                        if (!active || !payload?.length) return null
+                        return tipBox(label, payload.map(p => ({ texto: `${String(p.name)}: ${(Number(p.value) || 0).toLocaleString('pt-BR')} DAMs`, cor: p.color })))
+                      }} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26} />
                     <Bar dataKey="recebidas" name="Recebidas" fill="#e8962e" radius={[4, 4, 0, 0]} maxBarSize={26} />
