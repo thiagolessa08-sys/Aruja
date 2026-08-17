@@ -145,7 +145,7 @@ function geomBars(d: { ano: number; n: number }[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
-export default function PainelCobranca() {
+export default function PainelCobranca({ ano }: { ano: number }) {
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
@@ -160,17 +160,27 @@ export default function PainelCobranca() {
   const [conversaoDim, setConversaoDim] = useState<'tributo' | 'periodo' | 'operador'>('tributo')
 
   useEffect(() => {
-    fetch('/api/cobranca/resumo?ano=2025').then(r => r.ok ? r.json() : null)
+    setD(null)
+    setPotencial(null)
+    setDams(null)
+    setResultado(null)
+    setAnalise(null)
+    setPotSel(null)
+    setPotMensal(null)
+    setPotMesSel(null)
+    setDevedoresMes(null)
+    setDevedoresMesErro(false)
+    fetch(`/api/cobranca/resumo?ano=${ano}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.lancado === 'number') setD(x) }).catch(() => {})
-    fetch('/api/cobranca/potencial?ano=2025').then(r => r.ok ? r.json() : null)
+    fetch(`/api/cobranca/potencial?ano=${ano}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.vencido === 'number') setPotencial(x) }).catch(() => {})
-    fetch('/api/cobranca/dams?ano=2025').then(r => r.ok ? r.json() : null)
+    fetch(`/api/cobranca/dams?ano=${ano}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
-    fetch('/api/cobranca/resultado-mensal?ano=2025').then(r => r.ok ? r.json() : null)
+    fetch(`/api/cobranca/resultado-mensal?ano=${ano}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.totalGeradas === 'number') setResultado(x) }).catch(() => {})
-    fetch('/api/cobranca/analise-conversao?ano=2025').then(r => r.ok ? r.json() : null)
+    fetch(`/api/cobranca/analise-conversao?ano=${ano}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.porTributo)) setAnalise(x) }).catch(() => {})
-  }, [])
+  }, [ano])
 
   function selecionarPotencial(t: PotTrib) {
     setPotMesSel(null)
