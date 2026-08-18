@@ -13,12 +13,15 @@ interface PorAno { ano: number; iss: number }
 interface AbEnc { ano: number; aberturas: number; encerramentos: number }
 interface Porte { label: string; qt: number }
 interface Segmento { nome: string; qt: number; pct: number }
+interface RfbMotivo { motivo: string; label: string; n: number; pct: number }
+interface SituacaoRfb { total: number; indeferidas: number; naoIndeferidas: number; semVerificacao: number; porMotivo: RfbMotivo[] }
 interface Graficos {
   porAno: PorAno[]
   portes: Porte[]
   ativInat: { ativas: number; inativas: number }
   abVsEnc: AbEnc[]
   segmentos: Segmento[]
+  situacaoRfb: SituacaoRfb
   dataAtualizacao: string | null
 }
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
@@ -95,6 +98,17 @@ const FALLBACK_GRAF: Graficos = {
     { nome: 'CONSERVATÓRIO MUSICAL', qt: 341, pct: 2.3 },
     { nome: 'INDUSTRIA', qt: 196, pct: 1.3 },
   ],
+  situacaoRfb: {
+    total: 154002, indeferidas: 78118, naoIndeferidas: 10847, semVerificacao: 65037,
+    porMotivo: [
+      { motivo: 'NaoCadastrado', label: 'Não cadastrado no município', n: 43740, pct: 56.0 },
+      { motivo: 'TemDebito', label: 'Débito em aberto', n: 18790, pct: 24.1 },
+      { motivo: 'CadastroNaoAtivo TemDebito', label: 'Cadastro inativo + débito', n: 5813, pct: 7.4 },
+      { motivo: 'SemLicenca', label: 'Sem licença/alvará', n: 4303, pct: 5.5 },
+      { motivo: 'CadastroNaoAtivo', label: 'Cadastro inativo', n: 4162, pct: 5.3 },
+      { motivo: 'LicencaVencida', label: 'Licença vencida', n: 1310, pct: 1.7 },
+    ],
+  },
   dataAtualizacao: null,
 }
 const INSIGHTS_CAD = [
@@ -723,6 +737,72 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
           )
         })() : null}
       </div>
+
+      {/* ===== Situação na Receita Federal (RFB) — resultado do processo de indeferimento
+          no licenciamento/alvará (integração municipal), base completa (não filtra por
+          situação/segmento — ver nota no backend). ===== */}
+      {(() => {
+        const rfb = g.situacaoRfb
+        const totRfb = rfb.total || 1
+        const RFB_CORES = { indeferidas: '#d64545', naoIndeferidas: '#1fa463', semVerificacao: '#c5d0ee' }
+        const buckets = [
+          { key: 'indeferidas', label: 'Indeferidas', n: rfb.indeferidas, cor: RFB_CORES.indeferidas },
+          { key: 'naoIndeferidas', label: 'Não indeferidas', n: rfb.naoIndeferidas, cor: RFB_CORES.naoIndeferidas },
+          { key: 'semVerificacao', label: 'Sem verificação', n: rfb.semVerificacao, cor: RFB_CORES.semVerificacao },
+        ]
+        const maxMotivo = Math.max(1, ...rfb.porMotivo.map(m => m.n))
+        return (
+          <div style={{ ...card, marginTop: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação na Receita Federal (RFB)</span>
+                <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+                  Resultado do processo de indeferimento no licenciamento/alvará (integração municipal com a RFB) — base completa, {fmtInt(rfb.total)} verificações.
+                </div>
+              </div>
+              <span style={dots}>···</span>
+            </div>
+
+            <div style={{ display: 'flex', height: 18, borderRadius: 9, overflow: 'hidden', marginTop: 16, background: '#eef1f7' }}>
+              {buckets.map(b => (
+                <div key={b.key} title={`${b.label}: ${fmtPct(b.n / totRfb * 100)}`} style={{ width: `${(b.n / totRfb * 100).toFixed(2)}%`, background: b.cor }} />
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginTop: 16 }}>
+              {buckets.map(b => (
+                <div key={b.key} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 3, background: b.cor, flex: 'none' }} />
+                    <span style={{ fontSize: 11, color: '#5b6477' }}>{b.label}</span>
+                  </div>
+                  <div style={{ fontSize: 19, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>{fmtInt(b.n)}</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(b.n / totRfb * 100)} do total</div>
+                </div>
+              ))}
+            </div>
+
+            {rfb.porMotivo.length ? (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Motivo do indeferimento</div>
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {rfb.porMotivo.map((m, i) => (
+                    <div key={m.motivo}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: '#3a4256' }}>{m.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(m.n)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(m.pct)})</span></span>
+                      </div>
+                      <div style={{ height: 12, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${(m.n / maxMotivo * 100).toFixed(1)}%`, background: SEG_CORES[i % SEG_CORES.length], borderRadius: 5 }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>% do motivo é sobre o total de indeferidas.</div>
+              </div>
+            ) : null}
+          </div>
+        )
+      })()}
 
       {/* ===== Evolução das Empresas Encerradas (com variação ano a ano) ===== */}
       <div style={{ ...card, marginTop: 18 }}>

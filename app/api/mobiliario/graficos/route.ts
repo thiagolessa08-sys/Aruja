@@ -10,6 +10,17 @@ const RE_ISS = /IMPOSTOS SOBRE SERVI/i
 const PORTE_ORDEM = ['ME', 'EPP', 'DEMAIS']
 const PORTE_LABEL: Record<string, string> = { ME: 'Microempresa (ME)', EPP: 'Pequeno Porte (EPP)', DEMAIS: 'Demais portes' }
 
+// Motivos de indeferimento no processo de licenciamento/alvará (integração municipal com a
+// RFB) — só populado quando ic_indeferido = 'S'.
+const MOTIVO_LABEL: Record<string, string> = {
+  NaoCadastrado: 'Não cadastrado no município',
+  TemDebito: 'Débito em aberto',
+  'CadastroNaoAtivo TemDebito': 'Cadastro inativo + débito',
+  CadastroNaoAtivo: 'Cadastro inativo',
+  SemLicenca: 'Sem licença/alvará',
+  LicencaVencida: 'Licença vencida',
+}
+
 function normGrupo(v: string): string {
   const t = v.trim()
   if (!t || /^não informado$/i.test(t)) return ''
@@ -30,7 +41,7 @@ export async function GET(req: NextRequest) {
     const filtroMesIni = f.mes ? ` AND MONTH(dt_inicio_atividade) <= ${f.mes}` : ''
     const filtroMesEnc = f.mes ? ` AND MONTH(dt_enc_atividade) <= ${f.mes}` : ''
 
-    const [porteRows, grupoRows, abRows, encRows, receita, dataAtualizacao] = await Promise.all([
+    const [porteRows, grupoRows, abRows, encRows, receita, rfbRows, dataAtualizacao] = await Promise.all([
       agentQuery(`
         SELECT ds_situacao AS sit, ds_porte_empresa AS porte, COUNT(*) AS n
         FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario
@@ -56,6 +67,15 @@ export async function GET(req: NextRequest) {
         JOIN ${SCHEMA}.DIM_BIORC_DATA_CALENDARIO d ON r.SK_DATA_CALENDARIO_ANO = d.SK_DATA_CALENDARIO
         WHERE d.NO_ANO BETWEEN 2018 AND 2030
         GROUP BY d.NO_ANO, nr.DS_ALINEA_RECEITA`, 2000),
+      // Situação na Receita Federal (RFB): resultado do indeferimento no processo de
+      // licenciamento/alvará (integração municipal, ver tb_dsod_contribuinte_mob_receita_
+      // federal). Base completa — cd_contr_mob pode ser -1 (CNPJ nunca cadastrado
+      // localmente, motivo "NaoCadastrado"), então não dá pra restringir por situação/
+      // segmento do cadastro mobiliário sem perder esses casos.
+      agentQuery(`
+        SELECT ic_indeferido AS ind, ds_tipo_indeferimento AS motivo, COUNT(*) AS n
+        FROM ${SCHEMA}.tb_dsod_contribuinte_mob_receita_federal
+        GROUP BY ic_indeferido, ds_tipo_indeferimento`, 30),
       dataAtualizacaoMobiliario(),
     ])
 
@@ -137,7 +157,28 @@ export async function GET(req: NextRequest) {
       .slice(-8)
     const abVsEnc = anosFluxo.map(ano => ({ ano, aberturas: ab.get(ano) ?? 0, encerramentos: enc.get(ano) ?? 0 }))
 
-    return NextResponse.json({ porAno, portes, ativInat, abVsEnc, segmentos, referencia: { ano: anoAtual }, dataAtualizacao })
+    // ---- Situação na Receita Federal (RFB) ----
+    let totalRfb = 0, indeferidasRfb = 0, naoIndeferidasRfb = 0, semVerificacaoRfb = 0
+    const motivoCount = new Map<string, number>()
+    for (const r of rfbRows.rows) {
+      const indRaw = r[0]
+      const motivo = String(r[1] ?? '').trim()
+      const n = Number(r[2]) || 0
+      totalRfb += n
+      if (indRaw == null) { semVerificacaoRfb += n; continue }
+      if (String(indRaw).trim() === 'S') {
+        indeferidasRfb += n
+        if (motivo) motivoCount.set(motivo, (motivoCount.get(motivo) ?? 0) + n)
+      } else {
+        naoIndeferidasRfb += n
+      }
+    }
+    const porMotivo = Array.from(motivoCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([motivo, n]) => ({ motivo, label: MOTIVO_LABEL[motivo] ?? motivo, n, pct: indeferidasRfb ? (n / indeferidasRfb) * 100 : 0 }))
+    const situacaoRfb = { total: totalRfb, indeferidas: indeferidasRfb, naoIndeferidas: naoIndeferidasRfb, semVerificacao: semVerificacaoRfb, porMotivo }
+
+    return NextResponse.json({ porAno, portes, ativInat, abVsEnc, segmentos, situacaoRfb, referencia: { ano: anoAtual }, dataAtualizacao })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
