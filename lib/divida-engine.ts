@@ -118,15 +118,22 @@ async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida
 
 export interface MaiorDevedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
 
+// Situações de dívida "reais" (exclui 'Normal' — sem formalização, tratada à parte por
+// não ter um cd_devedor tributo-agnóstico confiável, ver debitosPassiveisDivida).
+const SITUACOES_DIVIDA = new Set(['DividaAtiva', 'Ajuizada', 'Em Ajuizamento'])
+
 // Maiores devedores (dívida ativa) — agrupado por g.cd_contr (contribuinte devedor da
 // guia, tributo-agnóstico, ao contrário de cd_origem/cd_devedor que apontam pra tabelas
 // diferentes conforme o tributo). Soma vl_saldo de todas as guias em situação de dívida.
-export async function maioresDevedores(limite = 200, ano?: number, mes?: number): Promise<MaiorDevedor[]> {
-  return cached(`divida:devedores:${limite}:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => maioresDevedoresRaw(limite, ano, mes))
+// `situacao` (opcional) restringe a uma única situação (drill do gráfico "Situação das
+// Parcelas") — sem ela, mantém o padrão de somar as 3 situações de dívida juntas.
+export async function maioresDevedores(limite = 200, ano?: number, mes?: number, situacao?: string): Promise<MaiorDevedor[]> {
+  const sit = situacao && SITUACOES_DIVIDA.has(situacao) ? situacao : undefined
+  return cached(`divida:devedores:${limite}:${ano ?? 'all'}:${mes ?? ''}:${sit ?? 'all'}`, TTL_15MIN, () => maioresDevedoresRaw(limite, ano, mes, sit))
 }
 
-async function maioresDevedoresRaw(limite: number, ano?: number, mes?: number): Promise<MaiorDevedor[]> {
-  const cond = [`p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento')`]
+async function maioresDevedoresRaw(limite: number, ano?: number, mes?: number, situacao?: string): Promise<MaiorDevedor[]> {
+  const cond = [situacao ? `p.ds_situacao = '${situacao}'` : `p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento')`]
   if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
   if (mes) cond.push(`MONTH(p.dt_vencimento) <= ${mes}`)
   const r = await agentQuery(`
@@ -231,7 +238,7 @@ async function debitosPassiveisDividaRaw(ano?: number, mes?: number): Promise<De
   return { total, quantidade, porTributo }
 }
 
-export interface SituacaoParcela { situacao: string; quantidade: number; pct: number }
+export interface SituacaoParcela { codigo: string; situacao: string; quantidade: number; pct: number }
 
 const LABEL_SITUACAO: Record<string, string> = {
   Normal: 'Normal',
@@ -265,6 +272,6 @@ async function situacaoParcelasRaw(ano?: number, mes?: number): Promise<Situacao
     .filter(x => x.situacao)
   const total = itens.reduce((s, x) => s + x.quantidade, 0) || 1
   return itens
-    .map(x => ({ situacao: LABEL_SITUACAO[x.situacao] ?? x.situacao, quantidade: x.quantidade, pct: (x.quantidade / total) * 100 }))
+    .map(x => ({ codigo: x.situacao, situacao: LABEL_SITUACAO[x.situacao] ?? x.situacao, quantidade: x.quantidade, pct: (x.quantidade / total) * 100 }))
     .sort((a, b) => b.quantidade - a.quantidade)
 }

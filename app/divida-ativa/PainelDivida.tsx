@@ -12,7 +12,7 @@ interface Resumo {
   iptuDivida?: { imoveisComIptu: number; imoveisEmDivida: number; valorDivida: number }
   debitosPassiveis?: { total: number; quantidade: number; porTributo: { nome: string; valor: number }[] }
   recuperacao?: { lancado: number; pago: number; taxa: number; porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[] }
-  situacoes?: { situacao: string; quantidade: number; pct: number }[]
+  situacoes?: { codigo: string; situacao: string; quantidade: number; pct: number }[]
   dataAtualizacao?: string | null
 }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
@@ -116,6 +116,14 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [buscaDevedor, setBuscaDevedor] = useState('')
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
+  // Drill do gráfico "Situação das Parcelas": clique numa situação → maiores devedores
+  // (situações de dívida real) ou débitos por tributo (situação "Normal", reaproveitando
+  // debitosPassiveis já carregado — ver nota em lib/divida-engine.ts sobre por que "Normal"
+  // não tem um valor por devedor confiável).
+  const [situacaoSel, setSituacaoSel] = useState<string | null>(null)
+  const [devedoresSituacao, setDevedoresSituacao] = useState<Devedor[] | null>(null)
+  const [devedoresSituacaoErro, setDevedoresSituacaoErro] = useState(false)
+
   // Os filtros de Exercício/Mês (ano/mes) ainda não restringem os dados desta tela —
   // ela sempre mostra o histórico completo acumulado, como antes de os filtros existirem.
   useEffect(() => {
@@ -132,6 +140,24 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
     fetch('/api/divida/devedores?limite=200').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.devedores)) setDevedores(x.devedores) }).catch(() => {})
   }, [])
+  function buscarDevedoresSituacao(codigo: string) {
+    setDevedoresSituacao(null)
+    setDevedoresSituacaoErro(false)
+    fetch(`/api/divida/devedores?limite=15&situacao=${encodeURIComponent(codigo)}`).then(r => r.ok ? r.json() : null)
+      .then(x => {
+        if (x && !x.error && Array.isArray(x.devedores)) setDevedoresSituacao(x.devedores)
+        else setDevedoresSituacaoErro(true)
+      }).catch(() => setDevedoresSituacaoErro(true))
+  }
+  useEffect(() => {
+    if (!situacaoSel || situacaoSel === 'Normal') { setDevedoresSituacao(null); setDevedoresSituacaoErro(false); return }
+    buscarDevedoresSituacao(situacaoSel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [situacaoSel])
+
+  function selecionarSituacao(codigo: string) {
+    setSituacaoSel(prev => prev === codigo ? null : codigo)
+  }
 
   const g = d ?? FALLBACK
   const pctJud = g.total ? (g.judicial / g.total) * 100 : 0
@@ -525,7 +551,9 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         )
       })() : null}
 
-      {/* Situação das Parcelas */}
+      {/* Situação das Parcelas — clique numa situação faz drill: nas 3 situações de dívida
+          real, mostra os maiores devedores; em "Normal" (sem valor por devedor confiável,
+          ver nota em lib/divida-engine.ts), mostra os débitos por tributo já carregados. */}
       {g.situacoes ? (() => {
         const SIT_CORES: Record<string, string> = {
           'Normal': '#9cabd9',
@@ -534,17 +562,26 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           'Em Ajuizamento': '#c5d0ee',
         }
         const maxSit = Math.max(1, ...g.situacoes.map(s => s.quantidade))
+        const dp = g.debitosPassiveis
+        const maxDpTrib = dp ? Math.max(1, ...dp.porTributo.map(t => t.valor)) : 1
+        const maxDevSit = devedoresSituacao ? Math.max(1, ...devedoresSituacao.map(x => x.saldo)) : 1
+        const situacaoAtual = g.situacoes.find(s => s.codigo === situacaoSel)
         return (
           <div style={{ ...card, marginTop: 18 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação das Parcelas</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral, no universo completo (todos os tributos e exercícios)</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral, no universo completo (todos os tributos e exercícios). Clique numa situação para ver o detalhe.</div>
             <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
               {g.situacoes.map(s => {
                 const w = (s.quantidade / maxSit) * 100
+                const ativo = situacaoSel === s.codigo
                 return (
-                  <div key={s.situacao}>
+                  <div key={s.situacao} onClick={() => selecionarSituacao(s.codigo)}
+                    style={{ cursor: 'pointer', borderRadius: 8, padding: '4px 6px', margin: '-4px -6px', background: ativo ? '#eef1fb' : 'transparent', border: ativo ? '1px solid #cdd5ef' : '1px solid transparent' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, color: '#3a4256', lineHeight: 1.2 }}>{s.situacao}</span>
+                      <span style={{ fontSize: 12, color: ativo ? '#283e93' : '#3a4256', fontWeight: ativo ? 700 : 400, lineHeight: 1.2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="3" style={{ flex: 'none', transform: ativo ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}><path d="M9 6l6 6-6 6" /></svg>
+                        {s.situacao}
+                      </span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{s.quantidade.toLocaleString('pt-BR')} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
                     </div>
                     <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
@@ -555,6 +592,57 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
               })}
             </div>
             <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>"Normal" inclui parcelas já quitadas normalmente — o valor em aberto vencido dessa situação está no card "Débitos Passíveis de Inscrição"; o valor das demais situações está nos cards de dívida ativa acima.</div>
+
+            {situacaoSel ? (
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 10 }}>
+                  {situacaoSel === 'Normal' ? 'Débitos vencidos por tributo · Normal' : `Maiores devedores · ${situacaoAtual?.situacao ?? situacaoSel}`}
+                </div>
+                {situacaoSel === 'Normal' ? (
+                  !dp ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '16px 0' }}>Detalhe indisponível.</div>
+                    : !dp.porTributo.length ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '16px 0' }}>Sem débitos vencidos nesta situação.</div>
+                    : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                        {dp.porTributo.map(t => (
+                          <div key={t.nome} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '9px 12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                              <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#c0612a', flex: 'none' }}>{fmtAbrev(t.valor)}</span>
+                            </div>
+                            <div style={{ height: 8, borderRadius: 4, background: '#e9edf8', overflow: 'hidden', marginTop: 5 }}>
+                              <div style={{ height: '100%', width: `${Math.max(3, 100 * t.valor / maxDpTrib).toFixed(1)}%`, borderRadius: 4, background: '#c0612a' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                ) : devedoresSituacaoErro ? (
+                  <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                    <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar os devedores.</div>
+                    <button onClick={() => situacaoSel && buscarDevedoresSituacao(situacaoSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                  </div>
+                ) : !devedoresSituacao ? (
+                  <div style={{ height: 60, borderRadius: 12, background: '#eef1f7' }} />
+                ) : !devedoresSituacao.length ? (
+                  <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '16px 0' }}>Nenhum devedor identificado.</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
+                    {devedoresSituacao.map((dv, i) => (
+                      <div key={dv.cd} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '9px 12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: 11.5, color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {dv.nome || '—'}</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: '#c0612a', flex: 'none' }}>{fmtAbrev(dv.saldo)}</span>
+                        </div>
+                        <div style={{ fontSize: 10, color: '#9098a8', marginTop: 1 }}>{dv.cpfCnpj || '—'}</div>
+                        <div style={{ height: 8, borderRadius: 4, background: '#e9edf8', overflow: 'hidden', marginTop: 5 }}>
+                          <div style={{ height: '100%', width: `${Math.max(3, 100 * dv.saldo / maxDevSit).toFixed(1)}%`, borderRadius: 4, background: '#c0612a' }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         )
       })() : null}

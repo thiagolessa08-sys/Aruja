@@ -9,7 +9,8 @@ export async function GET(req: NextRequest) {
     const limite = Number(req.nextUrl.searchParams.get('limite')) || 200
     const ano = Number(req.nextUrl.searchParams.get('ano')) || undefined
     const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
-    const devedores = await maioresDevedores(limite, ano, mes)
+    const situacao = req.nextUrl.searchParams.get('situacao') || undefined
+    const devedores = await maioresDevedores(limite, ano, mes, situacao)
     return NextResponse.json({ devedores })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
