@@ -14,6 +14,7 @@ interface AbEnc { ano: number; aberturas: number; encerramentos: number }
 interface Porte { label: string; qt: number }
 interface Segmento { nome: string; qt: number; pct: number }
 interface RfbMotivo { motivo: string; label: string; n: number; pct: number }
+interface RfbItem { nome: string; cnpj: string; situacao: string; motivo: string }
 interface SituacaoRfb { total: number; indeferidas: number; naoIndeferidas: number; semVerificacao: number; porMotivo: RfbMotivo[] }
 interface Graficos {
   porAno: PorAno[]
@@ -252,6 +253,14 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
   const [buscaSegmento, setBuscaSegmento] = useState('')
   const [empresasSegmento, setEmpresasSegmento] = useState<EmpresaMatch[]>([])
   const [carregandoSegmento, setCarregandoSegmento] = useState(false)
+
+  // Drill do card "Situação na Receita Federal (RFB)": clique num bucket (indeferidas/
+  // não indeferidas/sem verificação) ou num motivo específico → lista de CNPJs/empresas
+  const [rfbSel, setRfbSel] = useState<{ bucket: 'indeferidas' | 'naoIndeferidas' | 'semVerificacao'; motivo?: string; label: string } | null>(null)
+  const [buscaRfb, setBuscaRfb] = useState('')
+  const [itensRfb, setItensRfb] = useState<RfbItem[]>([])
+  const [carregandoRfb, setCarregandoRfb] = useState(false)
+
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
   const qs = buildQS(filtros, foco)
@@ -294,6 +303,21 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
     }, 300)
     return () => { vivo = false; clearTimeout(t) }
   }, [segmentoSel, buscaSegmento, filtros.situacao])
+
+  useEffect(() => {
+    if (!rfbSel) { setItensRfb([]); return }
+    let vivo = true
+    setCarregandoRfb(true)
+    const t = setTimeout(() => {
+      const p = new URLSearchParams({ bucket: rfbSel.bucket })
+      if (rfbSel.motivo) p.set('motivo', rfbSel.motivo)
+      if (buscaRfb.trim()) p.set('q', buscaRfb.trim())
+      fetch(`/api/mobiliario/rfb-situacao?${p.toString()}`).then(r => r.ok ? r.json() : null)
+        .then(d => { if (vivo && d?.itens) setItensRfb(d.itens) })
+        .finally(() => { if (vivo) setCarregandoRfb(false) })
+    }, 300)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [rfbSel, buscaRfb])
 
   function abrirEmpresa(cd: number) {
     setCarregandoEmpresa(true); setMatchesEmpresa([])
@@ -740,66 +764,109 @@ export default function PainelMobiliario({ filtros, foco = 'cadastro' }: { filtr
 
       {/* ===== Situação na Receita Federal (RFB) — resultado do processo de indeferimento
           no licenciamento/alvará (integração municipal), base completa (não filtra por
-          situação/segmento — ver nota no backend). ===== */}
+          situação/segmento — ver nota no backend). Clique num bucket ou motivo faz drill
+          pra lista de CNPJs/empresas (/api/mobiliario/rfb-situacao). ===== */}
       {(() => {
         const rfb = g.situacaoRfb
         const totRfb = rfb.total || 1
         const RFB_CORES = { indeferidas: '#d64545', naoIndeferidas: '#1fa463', semVerificacao: '#c5d0ee' }
         const buckets = [
-          { key: 'indeferidas', label: 'Indeferidas', n: rfb.indeferidas, cor: RFB_CORES.indeferidas },
-          { key: 'naoIndeferidas', label: 'Não indeferidas', n: rfb.naoIndeferidas, cor: RFB_CORES.naoIndeferidas },
-          { key: 'semVerificacao', label: 'Sem verificação', n: rfb.semVerificacao, cor: RFB_CORES.semVerificacao },
+          { key: 'indeferidas' as const, label: 'Indeferidas', n: rfb.indeferidas, cor: RFB_CORES.indeferidas },
+          { key: 'naoIndeferidas' as const, label: 'Não indeferidas', n: rfb.naoIndeferidas, cor: RFB_CORES.naoIndeferidas },
+          { key: 'semVerificacao' as const, label: 'Sem verificação', n: rfb.semVerificacao, cor: RFB_CORES.semVerificacao },
         ]
         const maxMotivo = Math.max(1, ...rfb.porMotivo.map(m => m.n))
+        function selecionarRfb(sel: { bucket: 'indeferidas' | 'naoIndeferidas' | 'semVerificacao'; motivo?: string; label: string }) {
+          setBuscaRfb('')
+          setRfbSel(prev => (prev && prev.bucket === sel.bucket && prev.motivo === sel.motivo) ? null : sel)
+        }
         return (
-          <div style={{ ...card, marginTop: 18 }}>
+          <div style={{ ...card, marginTop: 18, position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-              <div>
-                <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação na Receita Federal (RFB)</span>
-                <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-                  Resultado do processo de indeferimento no licenciamento/alvará (integração municipal com a RFB) — base completa, {fmtInt(rfb.total)} verificações.
+              {rfbSel ? (
+                <button onClick={() => { setRfbSel(null); setBuscaRfb('') }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 17, fontWeight: 600 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+                  {rfbSel.label}
+                </button>
+              ) : (
+                <div>
+                  <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação na Receita Federal (RFB)</span>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+                    Resultado do processo de indeferimento no licenciamento/alvará (integração municipal com a RFB) — base completa, {fmtInt(rfb.total)} verificações. Clique num bucket ou motivo para ver as empresas.
+                  </div>
                 </div>
-              </div>
+              )}
               <span style={dots}>···</span>
             </div>
 
-            <div style={{ display: 'flex', height: 18, borderRadius: 9, overflow: 'hidden', marginTop: 16, background: '#eef1f7' }}>
-              {buckets.map(b => (
-                <div key={b.key} title={`${b.label}: ${fmtPct(b.n / totRfb * 100)}`} style={{ width: `${(b.n / totRfb * 100).toFixed(2)}%`, background: b.cor }} />
-              ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginTop: 16 }}>
-              {buckets.map(b => (
-                <div key={b.key} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: 3, background: b.cor, flex: 'none' }} />
-                    <span style={{ fontSize: 11, color: '#5b6477' }}>{b.label}</span>
-                  </div>
-                  <div style={{ fontSize: 19, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>{fmtInt(b.n)}</div>
-                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(b.n / totRfb * 100)} do total</div>
+            {rfbSel ? (
+              <div style={{ marginTop: 12, position: 'relative' }}>
+                {carregandoRfb ? <LoadingOverlay label="Carregando empresas…" /> : null}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                  <input value={buscaRfb} onChange={e => setBuscaRfb(e.target.value)} placeholder="Buscar por nome ou CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
                 </div>
-              ))}
-            </div>
-
-            {rfb.porMotivo.length ? (
-              <div style={{ marginTop: 20 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Motivo do indeferimento</div>
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {rfb.porMotivo.map((m, i) => (
-                    <div key={m.motivo}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: '#3a4256' }}>{m.label}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(m.n)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(m.pct)})</span></span>
+                <div style={{ marginTop: 10, maxHeight: 400, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {itensRfb.length ? itensRfb.map((it, i) => (
+                    <div key={`${it.cnpj}-${i}`} style={{ padding: '8px 6px', borderRadius: 8, borderBottom: '1px solid #f0f2f8' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 12, color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nome}</span>
+                        <span style={{ fontSize: 10.5, color: '#5b6477', fontWeight: 600, flex: 'none' }}>{it.cnpj || '—'}</span>
                       </div>
-                      <div style={{ height: 12, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${(m.n / maxMotivo * 100).toFixed(1)}%`, background: SEG_CORES[i % SEG_CORES.length], borderRadius: 5 }} />
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 3 }}>
+                        {it.situacao ? <span style={{ fontSize: 10, fontWeight: 600, color: '#5b6477', background: '#f4f7fc', border: '1px solid #e3e9f5', borderRadius: 10, padding: '2px 8px' }}>{it.situacao}</span> : null}
+                        {it.motivo && !rfbSel.motivo ? <span style={{ fontSize: 10, fontWeight: 600, color: '#d64545', background: '#fdeceb', border: '1px solid #f3d0cd', borderRadius: 10, padding: '2px 8px' }}>{it.motivo}</span> : null}
                       </div>
+                    </div>
+                  )) : !carregandoRfb ? (
+                    <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhuma empresa encontrada.</div>
+                  ) : null}
+                  {itensRfb.length >= 200 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 200 primeiros — refine a busca para ver mais.</div> : null}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', height: 18, borderRadius: 9, overflow: 'hidden', marginTop: 16, background: '#eef1f7' }}>
+                  {buckets.map(b => (
+                    <div key={b.key} title={`${b.label}: ${fmtPct(b.n / totRfb * 100)}`} style={{ width: `${(b.n / totRfb * 100).toFixed(2)}%`, background: b.cor }} />
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginTop: 16 }}>
+                  {buckets.map(b => (
+                    <div key={b.key} onClick={() => selecionarRfb({ bucket: b.key, label: b.label })}
+                      style={{ cursor: 'pointer', background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: 3, background: b.cor, flex: 'none' }} />
+                        <span style={{ fontSize: 11, color: '#5b6477' }}>{b.label}</span>
+                      </div>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: '#1f2a44', marginTop: 6 }}>{fmtInt(b.n)}</div>
+                      <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(b.n / totRfb * 100)} do total</div>
                     </div>
                   ))}
                 </div>
-                <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>% do motivo é sobre o total de indeferidas.</div>
-              </div>
-            ) : null}
+
+                {rfb.porMotivo.length ? (
+                  <div style={{ marginTop: 20 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Motivo do indeferimento</div>
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {rfb.porMotivo.map((m, i) => (
+                        <div key={m.motivo} onClick={() => selecionarRfb({ bucket: 'indeferidas', motivo: m.motivo, label: m.label })} style={{ cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, color: '#3a4256' }}>{m.label}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(m.n)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(m.pct)})</span></span>
+                          </div>
+                          <div style={{ height: 12, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${(m.n / maxMotivo * 100).toFixed(1)}%`, background: SEG_CORES[i % SEG_CORES.length], borderRadius: 5 }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 10 }}>% do motivo é sobre o total de indeferidas. Clique num bucket ou motivo para ver as empresas.</div>
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
         )
       })()}
