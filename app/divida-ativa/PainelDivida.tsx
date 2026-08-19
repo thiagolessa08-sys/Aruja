@@ -110,6 +110,7 @@ function geomBars(d: { ano: number; valor: number }[]) {
 
 export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?: number; onAnos?: (anos: number[]) => void } = {}) {
   const [d, setD] = useState<Resumo | null>(null)
+  const [dKpi, setDKpi] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; valor: number } | null>(null)
   const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
@@ -124,8 +125,8 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [devedoresSituacao, setDevedoresSituacao] = useState<Devedor[] | null>(null)
   const [devedoresSituacaoErro, setDevedoresSituacaoErro] = useState(false)
 
-  // Os filtros de Exercício/Mês (ano/mes) ainda não restringem os dados desta tela —
-  // ela sempre mostra o histórico completo acumulado, como antes de os filtros existirem.
+  // Gráficos/tabelas seguem mostrando o histórico completo acumulado (sem ano/mes) —
+  // só os KPIs do topo são filtrados (ver dKpi abaixo).
   useEffect(() => {
     fetch('/api/divida/resumo').then(r => r.ok ? r.json() : null)
       .then(x => {
@@ -136,6 +137,15 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
       }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // KPIs do topo: filtrados por Exercício/Mês quando selecionados.
+  useEffect(() => {
+    const qs = new URLSearchParams()
+    if (ano) qs.set('ano', String(ano))
+    if (mes) qs.set('mes', String(mes))
+    const q = qs.toString()
+    fetch(`/api/divida/resumo${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && typeof x.total === 'number') setDKpi(x) }).catch(() => {})
+  }, [ano, mes])
   useEffect(() => {
     fetch('/api/divida/devedores?limite=200').then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.devedores)) setDevedores(x.devedores) }).catch(() => {})
@@ -160,8 +170,11 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   }
 
   const g = d ?? FALLBACK
+  const gk = dKpi ?? g
   const pctJud = g.total ? (g.judicial / g.total) * 100 : 0
   const pctAdm = g.total ? (g.administrativa / g.total) * 100 : 0
+  const pctJudK = gk.total ? (gk.judicial / gk.total) * 100 : 0
+  const pctAdmK = gk.total ? (gk.administrativa / gk.total) * 100 : 0
   const maxTrib = Math.max(1, ...g.porTributo.map(t => t.valor))
   const gb = geomBars(g.porExercicio)
   const gr = geomBarsPar(g.recuperacao?.porExercicio ?? [])
@@ -195,11 +208,11 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   ].filter(Boolean)
 
   const kpis = [
-    { label: 'Dívida Ativa Total', value: fmtMoney(g.total), subLabel: 'estoque inscrito', subValue: '', pct: '', dir: 'flat' as const },
-    { label: 'Administrativa', value: fmtMoney(g.administrativa), subLabel: 'do total', subValue: fmtPct(pctAdm), pct: fmtPct(pctAdm), dir: 'flat' as const },
-    { label: 'Judicial (ajuizada)', value: fmtMoney(g.judicial), subLabel: 'do total', subValue: fmtPct(pctJud), pct: fmtPct(pctJud), dir: 'down' as const },
-    { label: 'Em Ajuizamento', value: fmtMoney(g.ajuizamento), subLabel: 'do total', subValue: fmtPct(g.total ? g.ajuizamento / g.total * 100 : 0), pct: '', dir: 'flat' as const },
-    { label: 'Maior Tributo', value: g.porTributo[0] ? fmtMoney(g.porTributo[0].valor) : '—', subLabel: g.porTributo[0]?.nome ?? '', subValue: '', pct: '', dir: 'flat' as const },
+    { label: 'Dívida Ativa Total', value: fmtMoney(gk.total), subLabel: 'estoque inscrito', subValue: '', pct: '', dir: 'flat' as const },
+    { label: 'Administrativa', value: fmtMoney(gk.administrativa), subLabel: 'do total', subValue: fmtPct(pctAdmK), pct: fmtPct(pctAdmK), dir: 'flat' as const },
+    { label: 'Judicial (ajuizada)', value: fmtMoney(gk.judicial), subLabel: 'do total', subValue: fmtPct(pctJudK), pct: fmtPct(pctJudK), dir: 'down' as const },
+    { label: 'Em Ajuizamento', value: fmtMoney(gk.ajuizamento), subLabel: 'do total', subValue: fmtPct(gk.total ? gk.ajuizamento / gk.total * 100 : 0), pct: '', dir: 'flat' as const },
+    { label: 'Maior Tributo', value: gk.porTributo[0] ? fmtMoney(gk.porTributo[0].valor) : '—', subLabel: gk.porTributo[0]?.nome ?? '', subValue: '', pct: '', dir: 'flat' as const },
   ]
 
   // Relatório (PDF/Excel): cards = KPIs da tela; tabela = Estoque por Tributo.
