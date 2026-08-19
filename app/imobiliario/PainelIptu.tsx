@@ -260,7 +260,14 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
     if (bairroSel) p.set('bairro', bairroSel)
     if (bairroSel && ruaSel) p.set('rua', ruaSel)
     fetchJson(`/api/imobiliario/iptu-bairros?${p}`)
-      .then(d => { if (!vivo) return; if (d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) } else setBairrosErro(true) })
+      .then(d => {
+        if (!vivo) return
+        if (d && !d.error) { setBairros(d.itens ?? []); setNivelBairro(d.nivel) }
+        // Limpa a lista antiga ao falhar — sem isso, uma métrica que dá erro (ex.: Isento,
+        // que depende de tabela hoje sem permissão de SELECT) ficava mostrando em silêncio
+        // os valores da métrica anterior, com o rótulo trocado para a nova métrica.
+        else { setBairros([]); setBairrosErro(true) }
+      })
       .finally(() => { if (vivo) setCarregandoBairros(false) })
     return () => { vivo = false }
   }, [ano, espolio, semNumero, bairroSel, ruaSel, metricaBairro, obsBairros.visible, recarregarBairros])
