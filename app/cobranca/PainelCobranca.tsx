@@ -401,56 +401,154 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       {/* Análise de Conversão — arrecadado ÷ lançado sob 3 lentes selecionáveis: por tributo,
           por período (exercício de lançamento) e por operador (cd_usuario_gerador da guia,
           pesando o valor $ em vez da contagem — revela se guias autoemitidas têm conversão
-          pior do que as trabalhadas por atendentes). */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Análise de Conversão</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Arrecadado ÷ lançado — {(analise ?? FALLBACK_ANALISE).ano}, sob 3 lentes.</div>
+          pior do que as trabalhadas por atendentes). Painel ao lado: DAMs geradas por data,
+          tributo e operador (tb_dsod_guias, dt_geracao). */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, marginTop: 18, alignItems: 'start' }}>
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Análise de Conversão</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Arrecadado ÷ lançado — {(analise ?? FALLBACK_ANALISE).ano}, sob 3 lentes.</div>
+            </div>
+            <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
+              {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setConversaoDim(key)}
+                  style={{
+                    border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                    background: conversaoDim === key ? '#283e93' : 'transparent',
+                    color: conversaoDim === key ? '#fff' : '#5b6477',
+                    transition: 'background .15s, color .15s',
+                  }}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
-            {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-              <button key={key} onClick={() => setConversaoDim(key)}
-                style={{
-                  border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
-                  background: conversaoDim === key ? '#283e93' : 'transparent',
-                  color: conversaoDim === key ? '#fff' : '#5b6477',
-                  transition: 'background .15s, color .15s',
-                }}>
-                {label}
-              </button>
-            ))}
-          </div>
+
+          {(() => {
+            const an = analise ?? FALLBACK_ANALISE
+            const itens = conversaoDim === 'tributo' ? an.porTributo : conversaoDim === 'periodo' ? an.porPeriodo : an.porOperador
+            if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados para esta visão.</div>
+            const maxLanc = Math.max(1, ...itens.map(i => i.lancado))
+            return (
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
+                {itens.map(item => {
+                  const cor = convCor(item.conversao)
+                  const w = Math.max(3, 100 * item.lancado / maxLanc)
+                  return (
+                    <div key={item.nome}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
+                        <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: cor, flex: 'none', textAlign: 'right' }}>
+                          {fmtPct(item.conversao)}
+                          <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>{fmtAbrev(item.arrecadado)} de {fmtAbrev(item.lancado)} lançado</span>
+                        </span>
+                      </div>
+                      <div style={{ height: 13, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
 
-        {(() => {
-          const an = analise ?? FALLBACK_ANALISE
-          const itens = conversaoDim === 'tributo' ? an.porTributo : conversaoDim === 'periodo' ? an.porPeriodo : an.porOperador
-          if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados para esta visão.</div>
-          const maxLanc = Math.max(1, ...itens.map(i => i.lancado))
-          return (
-            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
-              {itens.map(item => {
-                const cor = convCor(item.conversao)
-                const w = Math.max(3, 100 * item.lancado / maxLanc)
-                return (
-                  <div key={item.nome}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
-                      <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
-                      <span style={{ fontSize: 11.5, fontWeight: 700, color: cor, flex: 'none', textAlign: 'right' }}>
-                        {fmtPct(item.conversao)}
-                        <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>{fmtAbrev(item.arrecadado)} de {fmtAbrev(item.lancado)} lançado</span>
-                      </span>
+        {/* Companion panel — Documentos de Arrecadação Municipal (DAM) gerados, por data
+            (mês), tributo e operador. "Internet" = autoatendimento pelo portal; "Schedule" =
+            geração automática agendada. */}
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div>
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Documentos de Arrecadação Municipal (DAM)</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Guias geradas por data, tributo e operador — {(dams ?? FALLBACK_DAMS).ano}.</div>
+            </div>
+            <span style={reportBadge}>Geradas</span>
+          </div>
+
+          {(() => {
+            const dm = dams ?? FALLBACK_DAMS
+            const maxMes = Math.max(1, ...dm.porMes.map(m => m.qt))
+            const mesPico = [...dm.porMes].sort((a, b) => b.qt - a.qt)[0]
+            const operPico = dm.porOperador[0]
+            const pctMesPico = dm.total ? (mesPico.qt / dm.total) * 100 : 0
+            const pctOperPico = dm.total && operPico ? (operPico.qt / dm.total) * 100 : 0
+            return (
+              <>
+                <div style={{ marginTop: 12, background: '#283e93', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total de DAMs geradas em {dm.ano}</span>
+                  <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtInt(dm.total)}</span>
+                </div>
+                {!dams ? null : (
+                  <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
+                    {MESES_ABREV[mesPico.mes - 1]}/{dm.ano} concentra {fmtInt(mesPico.qt)} guias ({fmtPct(pctMesPico)} do ano){operPico ? ` · ${operPico.nome} gerou ${fmtInt(operPico.qt)} (${fmtPct(pctOperPico)} do total)` : ''}.
+                  </div>
+                )}
+
+                <div style={{ marginTop: 16, fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por mês</div>
+                <div style={{ height: 180, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDam(null)}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+                      <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={1} />
+                      <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+                      <Bar dataKey="qt" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
+                        onMouseEnter={(data: BarRectangleItem) => setTipDam({ left: data.x + data.width / 2, top: data.y, label: String((data.payload as { label: string }).label), qt: (data.payload as DamMes).qt })}
+                        onMouseLeave={() => setTipDam(null)} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  {tipDam ? (
+                    <div style={{ position: 'absolute', left: tipDam.left, top: tipDam.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                      {tipBox(tipDam.label, [{ texto: `Geradas: ${fmtInt(tipDam.qt)} guias` }])}
                     </div>
-                    <div style={{ height: 13, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
+                  ) : null}
+                </div>
+
+                <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por tributo</div>
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                      {(() => {
+                        const maxTrib = Math.max(1, ...dm.porTributo.map(t => t.qt))
+                        return dm.porTributo.map((t, i) => (
+                          <div key={t.nome}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
+                              <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(t.qt)}</span>
+                            </div>
+                            <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.max(3, 100 * t.qt / maxTrib).toFixed(1)}%`, borderRadius: 5, background: /^Demais tributos/.test(t.nome) ? '#c2c9d6' : DAM_CORES[i % DAM_CORES.length] }} />
+                            </div>
+                          </div>
+                        ))
+                      })()}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )
-        })()}
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por operador</div>
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                      {(() => {
+                        const maxOper = Math.max(1, ...dm.porOperador.map(o => o.qt))
+                        return dm.porOperador.map((o, i) => (
+                          <div key={o.nome}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
+                              <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.nome}</span>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)}</span>
+                            </div>
+                            <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.max(3, 100 * o.qt / maxOper).toFixed(1)}%`, borderRadius: 5, background: o.nome === 'Demais operadores' ? '#c2c9d6' : CANAL_CORES[i % CANAL_CORES.length] }} />
+                            </div>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )
+          })()}
+        </div>
       </div>
 
       {/* Potencial de Arrecadação — painel: do saldo devedor, quanto já VENCEU (inadimplência
@@ -648,101 +746,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
           ) : null}
         </div>
-      </div>
-
-      {/* Documentos de Arrecadação Municipal (DAM) gerados — por data (mês), tributo e
-          operador. tb_dsod_guias, dt_geracao = quando a guia/DAM foi emitida (não confundir
-          com o exercício fiscal a que pertence). */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Documentos de Arrecadação Municipal (DAM)</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Guias geradas por data, tributo e operador — {(dams ?? FALLBACK_DAMS).ano}. &quot;Internet&quot; = autoatendimento pelo portal; &quot;Schedule&quot; = geração automática agendada.</div>
-          </div>
-          <span style={reportBadge}>Geradas</span>
-        </div>
-
-        {(() => {
-          const dm = dams ?? FALLBACK_DAMS
-          const maxMes = Math.max(1, ...dm.porMes.map(m => m.qt))
-          const mesPico = [...dm.porMes].sort((a, b) => b.qt - a.qt)[0]
-          const operPico = dm.porOperador[0]
-          const pctMesPico = dm.total ? (mesPico.qt / dm.total) * 100 : 0
-          const pctOperPico = dm.total && operPico ? (operPico.qt / dm.total) * 100 : 0
-          return (
-            <>
-              <div style={{ marginTop: 12, background: '#283e93', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total de DAMs geradas em {dm.ano}</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtInt(dm.total)}</span>
-              </div>
-              {!dams ? null : (
-                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
-                  {MESES_ABREV[mesPico.mes - 1]}/{dm.ano} concentra {fmtInt(mesPico.qt)} guias ({fmtPct(pctMesPico)} do ano){operPico ? ` · ${operPico.nome} gerou ${fmtInt(operPico.qt)} (${fmtPct(pctOperPico)} do total)` : ''} — provável geração em lote, não trabalho manual individual.
-                </div>
-              )}
-
-              <div style={{ marginTop: 16, fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por mês</div>
-              <div style={{ height: 200, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDam(null)}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
-                    <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
-                    <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
-                    <Bar dataKey="qt" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={34}
-                      onMouseEnter={(data: BarRectangleItem) => setTipDam({ left: data.x + data.width / 2, top: data.y, label: String((data.payload as { label: string }).label), qt: (data.payload as DamMes).qt })}
-                      onMouseLeave={() => setTipDam(null)} />
-                  </BarChart>
-                </ResponsiveContainer>
-                {tipDam ? (
-                  <div style={{ position: 'absolute', left: tipDam.left, top: tipDam.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
-                    {tipBox(tipDam.label, [{ texto: `Geradas: ${fmtInt(tipDam.qt)} guias` }])}
-                  </div>
-                ) : null}
-              </div>
-
-              <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 18 }}>
-                <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por tributo</div>
-                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
-                    {(() => {
-                      const maxTrib = Math.max(1, ...dm.porTributo.map(t => t.qt))
-                      return dm.porTributo.map((t, i) => (
-                        <div key={t.nome}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
-                            <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
-                            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(t.qt)}</span>
-                          </div>
-                          <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${Math.max(3, 100 * t.qt / maxTrib).toFixed(1)}%`, borderRadius: 5, background: /^Demais tributos/.test(t.nome) ? '#c2c9d6' : DAM_CORES[i % DAM_CORES.length] }} />
-                          </div>
-                        </div>
-                      ))
-                    })()}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por operador</div>
-                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
-                    {(() => {
-                      const maxOper = Math.max(1, ...dm.porOperador.map(o => o.qt))
-                      return dm.porOperador.map((o, i) => (
-                        <div key={o.nome}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
-                            <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.nome}</span>
-                            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)}</span>
-                          </div>
-                          <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${Math.max(3, 100 * o.qt / maxOper).toFixed(1)}%`, borderRadius: 5, background: o.nome === 'Demais operadores' ? '#c2c9d6' : CANAL_CORES[i % CANAL_CORES.length] }} />
-                          </div>
-                        </div>
-                      ))
-                    })()}
-                  </div>
-                </div>
-              </div>
-            </>
-          )
-        })()}
       </div>
 
       {/* Resultado Mensal da Arrecadação — DAM Geradas × DAM Recebidas pelo setor de
