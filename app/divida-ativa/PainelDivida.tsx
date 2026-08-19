@@ -124,10 +124,19 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [devedoresSituacao, setDevedoresSituacao] = useState<Devedor[] | null>(null)
   const [devedoresSituacaoErro, setDevedoresSituacaoErro] = useState(false)
 
-  // Os filtros de Exercício/Mês (ano/mes) ainda não restringem os dados desta tela —
-  // ela sempre mostra o histórico completo acumulado, como antes de os filtros existirem.
+  // Os filtros de Exercício/Mês (ano/mes) restringem todos os KPIs e gráficos desta tela —
+  // ambas as rotas já aceitavam ano/mes (repassados a resumoDivida/iptuDividaResumo/
+  // debitosPassiveisDivida/situacaoParcelas/maioresDevedores), só faltava o front enviar.
   useEffect(() => {
-    fetch('/api/divida/resumo').then(r => r.ok ? r.json() : null)
+    setD(null)
+    setSituacaoSel(null)
+    setDevedoresSituacao(null)
+    setDevedoresSituacaoErro(false)
+    const qs = new URLSearchParams()
+    if (ano) qs.set('ano', String(ano))
+    if (mes) qs.set('mes', String(mes))
+    const q = qs.toString()
+    fetch(`/api/divida/resumo${q ? `?${q}` : ''}`).then(r => r.ok ? r.json() : null)
       .then(x => {
         if (x && !x.error && typeof x.total === 'number') {
           setD(x)
@@ -135,15 +144,22 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         }
       }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [ano, mes])
   useEffect(() => {
-    fetch('/api/divida/devedores?limite=200').then(r => r.ok ? r.json() : null)
+    setDevedores(null)
+    const qs = new URLSearchParams({ limite: '200' })
+    if (ano) qs.set('ano', String(ano))
+    if (mes) qs.set('mes', String(mes))
+    fetch(`/api/divida/devedores?${qs.toString()}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.devedores)) setDevedores(x.devedores) }).catch(() => {})
-  }, [])
+  }, [ano, mes])
   function buscarDevedoresSituacao(codigo: string) {
     setDevedoresSituacao(null)
     setDevedoresSituacaoErro(false)
-    fetch(`/api/divida/devedores?limite=15&situacao=${encodeURIComponent(codigo)}`).then(r => r.ok ? r.json() : null)
+    const qs = new URLSearchParams({ limite: '15', situacao: codigo })
+    if (ano) qs.set('ano', String(ano))
+    if (mes) qs.set('mes', String(mes))
+    fetch(`/api/divida/devedores?${qs.toString()}`).then(r => r.ok ? r.json() : null)
       .then(x => {
         if (x && !x.error && Array.isArray(x.devedores)) setDevedoresSituacao(x.devedores)
         else setDevedoresSituacaoErro(true)
@@ -569,7 +585,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         return (
           <div style={{ ...card, marginTop: 18 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação das Parcelas</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral, no universo completo (todos os tributos e exercícios). Clique numa situação para ver o detalhe.</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral, todos os tributos{ano ? ` — exercício ${ano}` : ' (todos os exercícios)'}{mes ? ` até o mês ${mes}` : ''}. Clique numa situação para ver o detalhe.</div>
             <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
               {g.situacoes.map(s => {
                 const w = (s.quantidade / maxSit) * 100
