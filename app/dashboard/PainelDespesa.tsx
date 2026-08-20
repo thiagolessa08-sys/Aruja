@@ -488,9 +488,9 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
             return (
               <>
                 {subElemDrill ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 10, fontSize: 11 }}>
-                    <span style={{ color: '#283e93', fontWeight: 600 }}>Elemento:</span>
-                    <span title={subElemDrill} style={{ color: '#5b6477', fontWeight: 600, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subElemDrill}</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 10, fontSize: 11 }}>
+                    <span style={{ color: '#283e93', fontWeight: 600, flex: 'none' }}>Elemento:</span>
+                    <span style={{ color: '#5b6477', fontWeight: 600 }}>{subElemDrill}</span>
                   </div>
                 ) : null}
                 {itens.length === 0 ? (
