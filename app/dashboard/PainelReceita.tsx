@@ -560,7 +560,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                         <g transform="rotate(-90 100 100)">
                           {segN.map((s, i) => (
                             <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
-                              onMouseEnter={() => setTip({ chart: 'divida', title: s.nat, l1: `${fmtReais(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
+                              onMouseEnter={() => setTip({ chart: 'divida', title: s.nat, l1: `${fmtAbrev(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
                               style={{ cursor: 'pointer' }} />
                           ))}
                         </g>
@@ -590,7 +590,7 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                       return (
                         <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30"
                           strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
-                          onMouseEnter={() => setTip({ chart: 'divida', title: s.nome, l1: `${fmtReais(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
+                          onMouseEnter={() => setTip({ chart: 'divida', title: s.nome, l1: `${fmtAbrev(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
                           onClick={() => { if (temNat) setDaDrill(s.nome) }} style={{ cursor: temNat ? 'pointer' : 'default' }} />
                       )
                     })}
