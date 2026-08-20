@@ -152,10 +152,19 @@ function geomBar(d: PorMes[]) {
     // aparecia no tooltip), dando a impressão de "coluna sumida".
     const antTop = antNeg ? bottom : bottom - hAnt
     const atuTop = atuNeg ? bottom : bottom - hAtu
+    // Posição do rótulo de valor de cada barra (acima quando positiva, abaixo quando
+    // negativa). Quando as duas barras do mês têm alturas quase iguais (ano atual ~= ano
+    // anterior, ex.: variação perto de 0%), os dois rótulos ficavam colados e ilegíveis —
+    // afasta o rótulo do ano atual verticalmente quando a distância entre eles é menor que
+    // ~1 linha de texto (14px) e os dois estão do mesmo lado da base (ambos positivos).
+    const labelAntY = antNeg ? antTop + hAnt + 16 : antTop - 6
+    let labelAtuY = atuNeg ? atuTop + hAtu + 16 : atuTop - 6
+    if (!antNeg && !atuNeg && Math.abs(labelAtuY - labelAntY) < 14) labelAtuY = labelAntY - 14
     return {
       cx, nome: m.nome, pct: fmtPct(m.pct), vAnt: m.anoAnterior, vAtu: m.anoAtual,
       ant: { x: cx - 28, y: antTop, h: hAnt, neg: antNeg },
       atu: m.anoAtual !== 0 ? { x: cx + 4, y: atuTop, h: hAtu, neg: atuNeg } : null,
+      labelAntY, labelAtuY,
       tip: { chart: 'arrec' as const, title: `${m.nome} · ${fmtPct(m.pct)}`, l1: `Ano Anterior: ${fmtAbrev(m.anoAnterior)}`, l1c: '#283e93', l2: `Ano Atual: ${fmtAbrev(m.anoAtual)}`, l2c: '#e8962e', left: `${(cx / W * 100).toFixed(1)}%`, top: `${(Math.min(antTop, atuTop) / H * 100).toFixed(1)}%` },
     }
   })
@@ -505,10 +514,10 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
                 <g key={i}>
                   <rect x={b.ant.x.toFixed(1)} y={b.ant.y.toFixed(1)} width="24" height={b.ant.h.toFixed(1)} rx="6" fill={b.ant.neg ? 'url(#arrAtuNeg)' : 'url(#arrAnt)'} />
                   {b.atu ? <rect x={b.atu.x.toFixed(1)} y={b.atu.y.toFixed(1)} width="24" height={b.atu.h.toFixed(1)} rx="6" fill={b.atu.neg ? 'url(#arrAtuNeg)' : 'url(#arrAtu)'} /> : null}
-                  {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
-                  {b.ant.neg ? <text x={(b.ant.x + 12).toFixed(1)} y={(b.ant.y + b.ant.h + 16).toFixed(1)} fontSize="11" fontWeight="600" fill="#d64545" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
-                  {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y - 6).toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
-                  {b.atu && b.atu.neg ? <text x={(b.atu.x + 12).toFixed(1)} y={(b.atu.y + b.atu.h + 16).toFixed(1)} fontSize="11" fontWeight="600" fill="#d64545" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
+                  {b.vAnt > 0 ? <text x={(b.ant.x + 12).toFixed(1)} y={b.labelAntY.toFixed(1)} fontSize="11" fontWeight="600" fill="#283e93" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
+                  {b.ant.neg ? <text x={(b.ant.x + 12).toFixed(1)} y={b.labelAntY.toFixed(1)} fontSize="11" fontWeight="600" fill="#d64545" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAnt)}</text> : null}
+                  {b.atu && b.vAtu > 0 ? <text x={(b.atu.x + 12).toFixed(1)} y={b.labelAtuY.toFixed(1)} fontSize="11" fontWeight="600" fill="#c0612a" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
+                  {b.atu && b.atu.neg ? <text x={(b.atu.x + 12).toFixed(1)} y={b.labelAtuY.toFixed(1)} fontSize="11" fontWeight="600" fill="#d64545" style={axisFont} textAnchor="middle">{fmtAbrev(b.vAtu)}</text> : null}
                   <text x={b.cx.toFixed(1)} y="324" fontSize="13" fill="#3a4256" style={axisFont} textAnchor="middle">{b.nome}</text>
                   <text x={b.cx.toFixed(1)} y="350" fontSize="12" fill="#5b6477" style={axisFont} textAnchor="middle">{b.pct}</text>
                 </g>
