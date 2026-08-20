@@ -91,6 +91,37 @@ function geomBarsPar(d: { ano: number; lancado: number; pago: number }[]) {
   return { bars, ticks, W, H, bottom, bw }
 }
 
+// Barras empilhadas (Saldo em Dívida Ativa + Total Inscrito/Lançado) — evolução por
+// exercício, a pedido do usuário: soma das duas séries já existentes (porExercicio e
+// recuperacao.porExercicio.lancado) num único gráfico, com o total do gráfico = soma das
+// duas. Une os anos das duas séries (uma pode ter um ano que a outra não tem).
+function geomBarsStack(saldoPorAno: { ano: number; valor: number }[], lancPorAno: { ano: number; lancado: number }[]) {
+  const anos = Array.from(new Set([...saldoPorAno.map(x => x.ano), ...lancPorAno.map(x => x.ano)])).sort((a, b) => a - b)
+  const d = anos.map(ano => ({
+    ano,
+    saldo: saldoPorAno.find(x => x.ano === ano)?.valor ?? 0,
+    lancado: lancPorAno.find(x => x.ano === ano)?.lancado ?? 0,
+  }))
+  const W = 960, H = 300, top = 26, bottom = 250
+  const span = bottom - top - 8
+  const max = Math.max(1, ...d.map(x => x.saldo + x.lancado))
+  const n = Math.max(1, d.length)
+  const gw = W / n
+  const bw = Math.min(40, gw * 0.5)
+  const bars = d.map((x, i) => {
+    const cx = i * gw + gw / 2
+    const hLanc = (x.lancado / max) * span, hSaldo = (x.saldo / max) * span
+    return {
+      cx, ano: x.ano, saldo: x.saldo, lancado: x.lancado,
+      lanc: { x: cx - bw / 2, y: bottom - hLanc, h: hLanc },
+      saldoTop: { x: cx - bw / 2, y: bottom - hLanc - hSaldo, h: hSaldo },
+    }
+  })
+  const total = d.reduce((s, x) => s + x.saldo + x.lancado, 0)
+  const ticks = [max, max / 2, 0].map(v => ({ v: Math.round(v / 1e6), y: bottom - (v / max) * span }))
+  return { bars, ticks, W, H, bottom, bw, total }
+}
+
 // Barras verticais aging
 function geomBars(d: { ano: number; valor: number }[]) {
   const W = 960, H = 300, top = 26, bottom = 250
@@ -113,6 +144,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [dKpi, setDKpi] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; valor: number } | null>(null)
   const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
+  const [tipEvol, setTipEvol] = useState<{ left: string; top: string; ano: number; saldo: number; lancado: number } | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
@@ -178,6 +210,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const maxTrib = Math.max(1, ...g.porTributo.map(t => t.valor))
   const gb = geomBars(g.porExercicio)
   const gr = geomBarsPar(g.recuperacao?.porExercicio ?? [])
+  const ge = geomBarsStack(g.porExercicio, g.recuperacao?.porExercicio ?? [])
 
   // Tendências: direção (regressão linear) das novas inscrições e da taxa de recuperação
   // nos últimos exercícios, mais a variação do último exercício vs o anterior.
@@ -420,6 +453,55 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
               </div>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      {/* Evolução da Dívida Ativa (Total + Lançado) — pedido do usuário: combina o saldo
+          em dívida ativa por exercício (mesma série de "Idade dos Débitos") com o total
+          historicamente inscrito (mesma série de "Taxa de Recuperação"), empilhados, com o
+          total do gráfico = soma das duas. São duas métricas distintas (saldo em aberto
+          hoje × total já lançado ao longo do tempo, que já inclui o que foi pago) — o rótulo
+          e o tooltip deixam essa composição explícita. */}
+      {ge.bars.length ? (
+        <div style={{ ...card, marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Evolução da Dívida Ativa (Total + Lançado)</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo em dívida ativa hoje + total historicamente inscrito, por exercício de origem — total do gráfico: {fmtMoney(ge.total)}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Total Inscrito (Lançado)</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#d64545' }}></span>Dívida Ativa (saldo hoje)</span>
+            </div>
+          </div>
+
+          <div onMouseLeave={() => setTipEvol(null)} style={{ position: 'relative', marginTop: 18, cursor: 'pointer' }}>
+            <svg viewBox={`0 0 ${ge.W} ${ge.H}`} width="100%" style={{ display: 'block' }}>
+              <defs>
+                <linearGradient id="evolLanc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#7d8fce" /></linearGradient>
+                <linearGradient id="evolSaldo" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d64545" /><stop offset="100%" stopColor="#eeaeae" /></linearGradient>
+              </defs>
+              {ge.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(ge.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v} mi</text></g>))}
+              <line x1="0" y1={ge.bottom} x2={String(ge.W)} y2={ge.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+              {ge.bars.map((b, i) => (
+                <g key={i}>
+                  <rect x={b.lanc.x.toFixed(1)} y={b.lanc.y.toFixed(1)} width={ge.bw.toFixed(1)} height={b.lanc.h.toFixed(1)} fill="url(#evolLanc)" />
+                  <rect x={b.saldoTop.x.toFixed(1)} y={b.saldoTop.y.toFixed(1)} width={ge.bw.toFixed(1)} height={b.saldoTop.h.toFixed(1)} rx="4" fill="url(#evolSaldo)" />
+                  <text x={b.cx.toFixed(1)} y={String(ge.H - 6)} fontSize="9" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
+                </g>
+              ))}
+              {ge.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTipEvol({ left: `${(b.cx / ge.W * 100).toFixed(1)}%`, top: `${(b.saldoTop.y / ge.H * 100).toFixed(1)}%`, ano: b.ano, saldo: b.saldo, lancado: b.lancado })} x={(b.cx - ge.bw).toFixed(1)} y="0" width={(ge.bw * 2).toFixed(1)} height={String(ge.H - 20)} fill="transparent" pointerEvents="all" />))}
+            </svg>
+            {tipEvol ? (
+              <div style={{ position: 'absolute', left: tipEvol.left, top: tipEvol.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '9px 12px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tipEvol.ano}</div>
+                <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 4 }}>Lançado: {fmtAbrev(tipEvol.lancado)}</div>
+                <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 2 }}>Saldo hoje: {fmtAbrev(tipEvol.saldo)}</div>
+                <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 2 }}>Total: {fmtAbrev(tipEvol.lancado + tipEvol.saldo)}</div>
+              </div>
+            ) : null}
+          </div>
+          <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>O total inscrito (lançado) já inclui o que foi pago desde então — não é uma métrica independente do saldo, e sim o histórico bruto de inscrições; some as duas por exercício de origem, a pedido.</div>
         </div>
       ) : null}
 
