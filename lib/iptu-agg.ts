@@ -44,13 +44,17 @@ function queryMetricaBairro(f: FiltrosBairro, grupo: string): string {
         WHERE ${b.where}${semRV} AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
           AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
         GROUP BY ${grupo}`
-    case 'isento': // item 8
+    case 'isento': // item 8 — mesma regra do KPI "Total Isento" do topo da tela (o fallback
+      // de isentoIptu() em lib/tributo-engine.ts, usado sempre que tb_extr_isencoes não
+      // está acessível — o que é o caso hoje, -121): movimento 12/5, lançamento 1, setor de
+      // origem da baixa = 'Isencao'. Antes esta consulta só usava tb_extr_isencoes (sem
+      // fallback) e por isso sempre falhava, mostrando em silêncio o valor da métrica
+      // anterior no gráfico (ver correção em app/imobiliario/PainelIptu.tsx).
       return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
         ${b.from}
-        WHERE ${b.where}${semRV} AND pm.cd_tipo_movimento <= 3
-          AND g.cd_devedor IN (SELECT e.cd_origem FROM ${S}.tb_extr_isencoes e
-            WHERE datepart(year, e.dt_fim) >= ${f.ano}
-              AND (e.ds_isencao NOT IN ('TCA','Não Incidência de ITBI','TCA - Imóvel Locado a Órgão Público') OR e.ds_isencao IS NULL))
+        JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+        WHERE ${b.where} AND pm.cd_tipo_movimento IN (12,5) AND pm.cd_tipo_lancamento IN (1)
+          AND pb.ds_setor_origem_baixa = 'Isencao'
         GROUP BY ${grupo}`
     case 'suspenso': // item 9 — mesma fórmula (flat, por sinal) do card "Total Suspenso" do
       // topo da tela (lib/tributo-engine.ts) — antes esta consulta usava uma variação
