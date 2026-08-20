@@ -65,6 +65,11 @@ interface RankingImovel {
   faixas: { um: number; dois: number; tresCinco: number; seisMais: number }
   abaixoVenal: number
 }
+type FaixaTransmissao = 'um' | 'dois' | 'tresCinco' | 'seisMais' | 'abaixoVenal'
+interface ItemFaixa { cd: number; qt?: number; venal: number; aquisicao?: number; inscricao: string; endereco: string; idItbi: number }
+const FAIXA_LABEL: Record<FaixaTransmissao, string> = {
+  um: '1 transmissão', dois: '2 transmissões', tresCinco: '3 a 5 transmissões', seisMais: '6 ou mais transmissões', abaixoVenal: 'Valor de aquisição ≤ venal',
+}
 interface MatchImovel { cd: number; inscricao: string; numero: string; endereco: string; proprietario: string; noPeriodo?: boolean }
 interface Transmissao {
   cdItbi: number; data: string; dtVencimento: string; natureza: string; valorVenal: number; valorTransacao: number; aliquota: number; situacao: string
@@ -129,6 +134,11 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
   // Item 6 — ranking de imóveis por nº de transmissões
   const [ranking, setRanking] = useState<RankingImovel | null>(null)
   const [buscaRanking, setBuscaRanking] = useState('') // filtra a lista de "Imóveis mais transmitidos"
+  // Drill por faixa (clique num KPI de "Imóveis mais transmitidos" → lista de imóveis daquela faixa)
+  const [faixaSel, setFaixaSel] = useState<FaixaTransmissao | null>(null)
+  const [imoveisFaixa, setImoveisFaixa] = useState<ItemFaixa[] | null>(null)
+  const [faixaErro, setFaixaErro] = useState(false)
+  const [buscaFaixa, setBuscaFaixa] = useState('')
   // Itens 2/3 — busca e detalhe de imóvel (histórico de transmissões / valor venal)
   const [busca, setBusca] = useState('')
   const [matches, setMatches] = useState<MatchImovel[]>([])
@@ -179,6 +189,24 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
     fetchJson(`/api/itbi/ranking-imovel?${p}`).then(d => { if (vivo && d) setRanking(d) })
     return () => { vivo = false }
   }, [ano, mes])
+
+  function selecionarFaixa(faixa: FaixaTransmissao) {
+    setFaixaSel(prev => prev === faixa ? null : faixa)
+    setBuscaFaixa('')
+  }
+
+  // Drill por faixa — busca a lista de imóveis quando uma faixa está selecionada
+  useEffect(() => {
+    if (!faixaSel) { setImoveisFaixa(null); setFaixaErro(false); return }
+    let vivo = true
+    setImoveisFaixa(null); setFaixaErro(false)
+    const p = new URLSearchParams({ faixa: faixaSel })
+    if (ano) p.set('ano', String(ano))
+    if (mes) p.set('mes', String(mes))
+    fetchJson(`/api/itbi/transmissoes-faixa?${p}`)
+      .then(d => { if (!vivo) return; if (d && Array.isArray(d.itens)) setImoveisFaixa(d.itens); else setFaixaErro(true) })
+    return () => { vivo = false }
+  }, [faixaSel, ano, mes])
 
   // Busca de imóvel (itens 2/3) — debounce simples; destaca imóveis c/ ITBI no ano/mês selecionado
   useEffect(() => {
@@ -597,12 +625,12 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                 const fx = ranking.faixas
                 const totalImoveis = fx.um + fx.dois + fx.tresCinco + fx.seisMais
                 const totFx = Math.max(1, totalImoveis)
-                const distr = [
-                  { l: '1 transmissão', n: fx.um, c: '#aab8e3' },
-                  { l: '2 transmissões', n: fx.dois, c: '#7d8fce' },
-                  { l: '3 a 5', n: fx.tresCinco, c: '#3f5bb5' },
-                  { l: '6 ou mais', n: fx.seisMais, c: '#283e93' },
-                  { l: 'Valor ≤ venal', n: ranking.abaixoVenal, c: '#d64545' },
+                const distr: { key: FaixaTransmissao; l: string; n: number; c: string }[] = [
+                  { key: 'um', l: '1 transmissão', n: fx.um, c: '#aab8e3' },
+                  { key: 'dois', l: '2 transmissões', n: fx.dois, c: '#7d8fce' },
+                  { key: 'tresCinco', l: '3 a 5', n: fx.tresCinco, c: '#3f5bb5' },
+                  { key: 'seisMais', l: '6 ou mais', n: fx.seisMais, c: '#283e93' },
+                  { key: 'abaixoVenal', l: 'Valor ≤ venal', n: ranking.abaixoVenal, c: '#d64545' },
                 ]
                 const q = buscaRanking.trim().toLowerCase()
                 const itensFiltrados = q ? ranking.itens.filter(it => it.inscricao.toLowerCase().includes(q) || it.endereco.toLowerCase().includes(q)) : ranking.itens
@@ -616,16 +644,20 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                     </div>
                     {/* Distribuição */}
                     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                      {distr.map(d => (
-                        <div key={d.l} title={d.l === 'Valor ≤ venal' ? 'Imóveis cujo valor de aquisição declarado é menor ou igual ao valor venal' : undefined}
-                          style={{ flex: '1 1 0', minWidth: 90, background: '#f7f9fd', borderRadius: 10, padding: '8px 10px' }}>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: d.c }}>{fmtInt(d.n)}</div>
-                          <div style={{ fontSize: 10, color: '#5b6477' }}>{d.l}</div>
-                          <div style={{ fontSize: 9.5, color: '#aeb6c6' }}>{(100 * d.n / totFx).toFixed(1).replace('.', ',')}%</div>
-                        </div>
-                      ))}
+                      {distr.map(d => {
+                        const ativo = faixaSel === d.key
+                        return (
+                          <div key={d.l} onClick={() => selecionarFaixa(d.key)}
+                            title={d.l === 'Valor ≤ venal' ? 'Imóveis cujo valor de aquisição declarado é menor ou igual ao valor venal — clique para ver a lista' : 'Clique para ver a lista de imóveis desta faixa'}
+                            style={{ flex: '1 1 0', minWidth: 90, background: ativo ? '#eef1fb' : '#f7f9fd', border: ativo ? `1.5px solid ${d.c}` : '1.5px solid transparent', borderRadius: 10, padding: '8px 10px', cursor: 'pointer' }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: d.c }}>{fmtInt(d.n)}</div>
+                            <div style={{ fontSize: 10, color: '#5b6477' }}>{d.l}</div>
+                            <div style={{ fontSize: 9.5, color: '#aeb6c6' }}>{(100 * d.n / totFx).toFixed(1).replace('.', ',')}%</div>
+                          </div>
+                        )
+                      })}
                     </div>
-                    <div style={{ fontSize: 9.5, color: '#aeb6c6', marginTop: 4 }}>"Valor ≤ venal": imóveis com valor de aquisição declarado abaixo ou igual ao valor venal (ITBI provavelmente calculado sobre o venal).</div>
+                    <div style={{ fontSize: 9.5, color: '#aeb6c6', marginTop: 4 }}>"Valor ≤ venal": imóveis com valor de aquisição declarado abaixo ou igual ao valor venal (ITBI provavelmente calculado sobre o venal). Clique num KPI acima para ver a lista de imóveis da faixa.</div>
                     {/* Top imóveis (respeita a busca por inscrição/endereço) */}
                     <div style={{ marginTop: 14, maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
                       {!itensFiltrados.length ? (
@@ -823,6 +855,68 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
               })() : null}
             </div>
           </div>
+
+          {/* Painel de detalhe da faixa selecionada em "Imóveis mais transmitidos" — lista os
+              imóveis daquela faixa (a agregação original só devolve a contagem). */}
+          {faixaSel ? (
+            <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Imóveis · {FAIXA_LABEL[faixaSel]}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                    <input value={buscaFaixa} onChange={e => setBuscaFaixa(e.target.value)} placeholder="Buscar inscrição ou endereço…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 180, fontFamily: 'inherit' }} />
+                  </div>
+                  <button onClick={() => setFaixaSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Fechar</button>
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+                {faixaSel === 'abaixoVenal'
+                  ? 'Imóveis cujo valor de aquisição declarado é menor ou igual ao valor venal (ITBI provavelmente calculado sobre o venal).'
+                  : `Imóveis com ${FAIXA_LABEL[faixaSel].toLowerCase()} de ITBI${ano ? `, exercício ${ano}` : ''}${mes ? ` até ${MESES_LONGO[Number(mes) - 1]}` : ''}.`}
+                {' '}Clique num imóvel para ver o histórico (abre em Consultar Imóvel, acima).
+              </div>
+
+              {(() => {
+                if (faixaErro) return (
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar a lista.</div>
+                    <button onClick={() => { const f = faixaSel; setFaixaSel(null); setTimeout(() => setFaixaSel(f), 0) }} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                  </div>
+                )
+                if (!imoveisFaixa) return <Spinner label="Carregando imóveis…" padding={24} />
+                const q = buscaFaixa.trim().toLowerCase()
+                const itensF = q ? imoveisFaixa.filter(it => it.inscricao.toLowerCase().includes(q) || it.endereco.toLowerCase().includes(q)) : imoveisFaixa
+                if (!itensF.length) return <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>{q ? 'Nenhum imóvel encontrado para a busca.' : 'Nenhum imóvel nesta faixa.'}</div>
+                const mxV = Math.max(1, ...itensF.map(it => it.venal))
+                return (
+                  <>
+                    <div style={{ marginTop: 14, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
+                      {itensF.map((it, i) => (
+                        <div key={it.cd} onClick={() => abrirImovel(it.cd)} style={{ cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 2 }}>
+                            <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {i + 1}. {it.inscricao || `Imóvel ${it.cd}`} <span style={{ color: '#9098a8', fontWeight: 500 }}>{it.endereco ? `· ${it.endereco}` : ''}</span>
+                            </span>
+                            <span style={{ color: faixaSel === 'abaixoVenal' ? '#d64545' : '#283e93', fontWeight: 700, flex: 'none' }}>
+                              {faixaSel === 'abaixoVenal' ? fmtAbrev(it.venal) : `${it.qt}×`}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 10, color: '#aeb6c6', marginBottom: 4 }}>
+                            {faixaSel === 'abaixoVenal' ? `Aquisição ${fmtAbrev(it.aquisicao ?? 0)} · Venal ${fmtAbrev(it.venal)}` : `Venal total ${fmtAbrev(it.venal)}${it.idItbi ? ` · ID ITBI ${it.idItbi}` : ''}`}
+                          </div>
+                          <div style={{ height: 12, borderRadius: 6, background: '#eef1f7', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.max(3, 100 * it.venal / mxV).toFixed(1)}%`, borderRadius: 6, background: faixaSel === 'abaixoVenal' ? '#d64545' : '#3f5bb5' }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {imoveisFaixa.length >= 600 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 8 }}>Mostrando os 600 primeiros — refine a busca para ver mais.</div> : null}
+                  </>
+                )
+              })()}
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>
