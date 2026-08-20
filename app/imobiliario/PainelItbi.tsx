@@ -56,7 +56,7 @@ interface Visao {
   anoRef: number
   mesRef: number | null
   cards: {
-    lancado: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; suspenso: Cmp; transmissoes: Cmp
+    lancado: Cmp; lancadoAtivo: Cmp; arrecadado: Cmp; inadimplencia: Cmp; emAberto: Cmp; isento: Cmp; transmissoes: Cmp
   }
   evolucao: { ano: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; cancelado: number; previsto: boolean; arrecPct: number; inadPct: number }[]
 }
@@ -309,7 +309,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           { rotulo: 'Em aberto', valor: money(c.emAberto.atual) },
           { rotulo: 'Inadimplência', valor: money(c.inadimplencia.atual) },
           { rotulo: 'Isento', valor: money(c.isento.atual) },
-          { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
+          { rotulo: 'Lançado (Guias Ativas)', valor: money(c.lancadoAtivo.atual) },
         ],
         colunas: ['Seção', 'Item', 'Valor 1', 'Valor 2', 'Valor 3', 'Valor 4', 'Valor 5', 'Valor 6', 'Valor 7'],
         linhas,
@@ -363,7 +363,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
     { label: 'Total em Aberto', cmp: v.cards.emAberto, cor: '#e8962e', sub: 'a receber (total)', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>) },
     { label: 'Total Inadimplência', cmp: v.cards.inadimplencia, cor: '#d64545', sub: 'vencido (atrasado)', icon: svg(<><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>) },
     { label: 'Total Isento', cmp: v.cards.isento, cor: '#8094d6', sub: 'não incidência', icon: svg(<><path d="M12 3l7 3v5c0 4-3 7-7 9-4-2-7-5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>) },
-    { label: 'Total Suspenso', cmp: v.cards.suspenso, cor: '#5b6477', sub: '', icon: svg(<><rect x="7" y="6" width="3.2" height="12" rx="1" /><rect x="13.8" y="6" width="3.2" height="12" rx="1" /></>) },
+    { label: 'Lançado (Guias Ativas)', cmp: v.cards.lancadoAtivo, cor: '#3f5bb5', sub: 'exclui Cancelada/Recálculo', icon: svg(<><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 12l2 2 4-4" /></>) },
   ] : []
 
   const serie = (v?.evolucao ?? []).map(e => ({ ...e, rot: e.previsto ? `${e.ano}*` : String(e.ano) }))

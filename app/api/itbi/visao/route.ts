@@ -41,10 +41,11 @@ export async function GET(req: NextRequest) {
     const anoAnt = anoRef - 1
     const proximo = anoMax + 1
 
-    const zero: BucketsItbiAno = { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0, cancelado: 0 }
+    const zero: BucketsItbiAno = { lancado: 0, lancadoAtivo: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0, cancelado: 0 }
     const bRef = buckets.get(anoRef) ?? zero
     const bAnt = buckets.get(anoAnt) ?? zero
     const lancMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.lancado ?? 0) : (buckets.get(a)?.lancado ?? 0)
+    const lancAtivoMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.lancadoAtivo ?? 0) : (buckets.get(a)?.lancadoAtivo ?? 0)
     const arrecMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.arrecadado ?? 0) : (buckets.get(a)?.arrecadado ?? 0)
     const abertoMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.emAberto ?? 0) : (buckets.get(a)?.emAberto ?? 0)
     const inadMes = (a: number) => usaAteMes ? (ateMes!.get(a)?.inadimplente ?? 0) : (buckets.get(a)?.inadimplente ?? 0)
@@ -52,11 +53,11 @@ export async function GET(req: NextRequest) {
     const cmp = (atual: number, ant: number) => ({ atual, ant, pct: ant ? ((atual - ant) / ant) * 100 : (atual > 0 ? 100 : 0) })
     const cards = {
       lancado: cmp(lancMes(anoRef), lancMes(anoAnt)),
+      lancadoAtivo: cmp(lancAtivoMes(anoRef), lancAtivoMes(anoAnt)),
       arrecadado: cmp(arrecMes(anoRef), arrecMes(anoAnt)),
       inadimplencia: cmp(inadMes(anoRef), inadMes(anoAnt)),
       emAberto: cmp(abertoMes(anoRef), abertoMes(anoAnt)),
       isento: cmp(bRef.isento, bAnt.isento),
-      suspenso: cmp(bRef.suspenso, bAnt.suspenso),
       transmissoes: cmp(transm.get(anoRef) ?? 0, transm.get(anoAnt) ?? 0),
     }
 

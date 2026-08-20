@@ -5,6 +5,8 @@
 //
 // Métricas por exercício de lançamento (no_exercicio_lancamento), consistente com o IPTU:
 //   • lancado      = SUM(vl_movimento) mov 1,2,3, parcela<>0, guia fora de Recalculo/Validacao
+//   • lancadoAtivo = idem, mas só guia com ds_situacao = 'Ativa' (o "lancado" acima ainda
+//                    inclui Cancelada — quase metade do total histórico, validado ao vivo)
 //   • arrecadado   = baixas 11,14 · lanc 0,4,7,10 · exclui Estorno de Baixa e Cancelada
 //   • emAberto     = net (vl_movimento*no_sinal) por (devedor,vencimento) HAVING net>0
 //   • inadimplente = idem, só vencidos (dt_vencimento < hoje-1) HAVING net>1
@@ -25,6 +27,9 @@ const LANC_ABERTO = '0,4,7,10,1'
 
 export interface BucketsItbiAno {
   lancado: number
+  lancadoAtivo: number    // lançado (mov 1,2,3) só de guias com ds_situacao = 'Ativa' — o
+                          // "lancado" acima inclui Cancelada (só exclui Recalculo/Validacao),
+                          // que no ITBI é quase a metade do total lançado historicamente
   arrecadado: number
   emAberto: number        // a receber (todos net>0)
   inadimplente: number    // vencido (net>1)
@@ -33,7 +38,7 @@ export interface BucketsItbiAno {
   cancelado: number       // guias com ds_situacao = 'Cancelada' (valor que seria lançado)
 }
 
-const zeroBucket = (): BucketsItbiAno => ({ lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0, cancelado: 0 })
+const zeroBucket = (): BucketsItbiAno => ({ lancado: 0, lancadoAtivo: 0, arrecadado: 0, emAberto: 0, inadimplente: 0, isento: 0, suspenso: 0, cancelado: 0 })
 
 // Piso de exercício para os cálculos "net" (em aberto/inadimplência) — limita custo. Os
 // KPIs e a evolução mostram os últimos ~5 anos, então 2019 cobre com folga.
@@ -57,7 +62,7 @@ async function bucketsItbiRaw(): Promise<Map<number, BucketsItbiAno>> {
       HAVING SUM(pm.vl_movimento*pm.no_sinal) > ${vencido ? '1' : '0'}
     ) t GROUP BY ex`
 
-  const [lancR, arrecR, abertoR, inadR, suspR, cancR] = await Promise.all([
+  const [lancR, lancAtivoR, arrecR, abertoR, inadR, suspR, cancR] = await Promise.all([
     // Lançado — mov 1,2,3
     agentQuery(`
       SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
@@ -66,6 +71,16 @@ async function bucketsItbiRaw(): Promise<Map<number, BucketsItbiAno>> {
       JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
       WHERE g.cd_tributo = ${ITBI} AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela <> 0
         AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND it.vl_total > 0
+      GROUP BY g.no_exercicio_lancamento`, 200),
+    // Lançado (guias Ativas) — mesma métrica, restrita a ds_situacao = 'Ativa' (exclui
+    // Cancelada, Pago/Cancelada, além de Recalculo/Validacao já excluídas no lançado acima)
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
+      FROM ${S}.tb_dsod_guias g ${JITBI}
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo = ${ITBI} AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela <> 0
+        AND g.ds_situacao = 'Ativa' AND it.vl_total > 0
       GROUP BY g.no_exercicio_lancamento`, 200),
     // Arrecadado — baixas 11,14 · lanc 0,4,7,10 · exclui Estorno de Baixa e guia Cancelada
     agentQuery(`
@@ -107,6 +122,7 @@ async function bucketsItbiRaw(): Promise<Map<number, BucketsItbiAno>> {
   const okEx = (ex: number) => ex >= 2005 && ex <= 2035
 
   for (const r of lancR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.lancado = num(r[1]); map.set(ex, b) }
+  for (const r of lancAtivoR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.lancadoAtivo = num(r[1]); map.set(ex, b) }
   for (const r of arrecR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.arrecadado = num(r[1]); map.set(ex, b) }
   for (const r of abertoR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
   for (const r of inadR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
@@ -149,7 +165,7 @@ async function isentoItbiPorExercicio(): Promise<Map<number, number> | null> {
  * por exercício. Espelha bucketsIptuAteMes (lib/tributo-engine.ts). Isento/suspenso NÃO usam
  * mês (mesma convenção do IPTU — são buckets anuais/posição, não fluxo acumulável).
  */
-export interface BucketAteMesItbi { lancado: number; arrecadado: number; emAberto: number; inadimplente: number }
+export interface BucketAteMesItbi { lancado: number; lancadoAtivo: number; arrecadado: number; emAberto: number; inadimplente: number }
 
 export async function bucketsItbiAteMes(mes: number): Promise<Map<number, BucketAteMesItbi>> {
   return cached(`bucketsItbiAteMes:${mes}`, TTL_15MIN, async () => {
@@ -165,7 +181,7 @@ export async function bucketsItbiAteMes(mes: number): Promise<Map<number, Bucket
         GROUP BY g.no_exercicio_lancamento, g.cd_devedor, p.dt_vencimento
         HAVING SUM(pm.vl_movimento*pm.no_sinal) > ${vencido ? '1' : '0'}
       ) t GROUP BY ex`
-    const [lancR, arrecR, abertoR, inadR] = await Promise.all([
+    const [lancR, lancAtivoR, arrecR, abertoR, inadR] = await Promise.all([
       agentQuery(`
         SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
         FROM ${S}.tb_dsod_guias g ${JITBI}
@@ -173,6 +189,15 @@ export async function bucketsItbiAteMes(mes: number): Promise<Map<number, Bucket
         JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
         WHERE g.cd_tributo = ${ITBI} AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela <> 0
           AND g.ds_situacao NOT IN ('Recalculo','Validacao') AND it.vl_total > 0
+          AND MONTH(p.dt_vencimento) <= ${mes}
+        GROUP BY g.no_exercicio_lancamento`, 200),
+      agentQuery(`
+        SELECT g.no_exercicio_lancamento ex, SUM(pm.vl_movimento) vl
+        FROM ${S}.tb_dsod_guias g ${JITBI}
+        JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo = ${ITBI} AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela <> 0
+          AND g.ds_situacao = 'Ativa' AND it.vl_total > 0
           AND MONTH(p.dt_vencimento) <= ${mes}
         GROUP BY g.no_exercicio_lancamento`, 200),
       agentQuery(`
@@ -191,9 +216,10 @@ export async function bucketsItbiAteMes(mes: number): Promise<Map<number, Bucket
       agentQuery(qAteMes(true), 200),
     ])
     const map = new Map<number, BucketAteMesItbi>()
-    const get = (ex: number) => map.get(ex) ?? { lancado: 0, arrecadado: 0, emAberto: 0, inadimplente: 0 }
+    const get = (ex: number) => map.get(ex) ?? { lancado: 0, lancadoAtivo: 0, arrecadado: 0, emAberto: 0, inadimplente: 0 }
     const okEx = (ex: number) => ex >= 2005 && ex <= 2035
     for (const r of lancR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.lancado = num(r[1]); map.set(ex, b) }
+    for (const r of lancAtivoR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.lancadoAtivo = num(r[1]); map.set(ex, b) }
     for (const r of arrecR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.arrecadado = num(r[1]); map.set(ex, b) }
     for (const r of abertoR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.emAberto = Math.max(0, num(r[1])); map.set(ex, b) }
     for (const r of inadR.rows) { const ex = num(r[0]); if (!okEx(ex)) continue; const b = get(ex); b.inadimplente = Math.max(0, num(r[1])); map.set(ex, b) }
