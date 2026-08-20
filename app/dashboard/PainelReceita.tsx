@@ -307,6 +307,9 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
     _off += len
     return seg
   })
+  // Total do nível atual do drill "Arrecadação Dívida Ativa" (soma das naturezas da espécie
+  // selecionada) — null quando não há drill ativo, caindo pro total geral (da.total).
+  const daDrillTotalN = daDrill ? (da.tree ?? []).filter(n => n.bucket === daDrill).reduce((s, n) => s + n.v, 0) : null
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -535,10 +538,10 @@ export default function PainelReceita({ filtros }: { filtros: FiltrosReceita }) 
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Arrecadação Dívida Ativa</span>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(da.total)}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(daDrillTotalN ?? da.total)}</div>
           {daDrill ? (() => {
             const nats = (da.tree ?? []).filter(n => n.bucket === daDrill).sort((a, b) => b.v - a.v)
-            const totalN = nats.reduce((s, n) => s + n.v, 0)
+            const totalN = daDrillTotalN!
             const paleta = ['#283e93', '#1fa463', '#e8962e', '#8094d6', '#aab8e3', '#5870c4', '#d6a24a']
             let offN = 0
             const segN = nats.map((n, i) => {
