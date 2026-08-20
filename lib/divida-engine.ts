@@ -23,9 +23,25 @@ export interface ResumoDivida {
     lancado: number; pago: number; taxa: number
     porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[]
   }
+  composicao: { principal: number; correcao: number; juros: number; multa: number; honorarios: number }
 }
 
 const num = (v: unknown) => Number(v) || 0
+
+// Valor legal da dívida ativa (Lei 6.830/80): principal + atualização monetária + juros de
+// mora + multa (de mora ou punitiva) + encargos legais (honorários, quando ajuizada) —
+// tb_dsod_parcelas_atualizadas já traz essa composição pré-calculada por parcela (recarga
+// diária, dt_atualizacao = hoje). ⚠️ cd_parcelas NÃO é único nessa tabela — uma parcela pode
+// ter várias linhas (fatias por cd_tributo/padrão de correção diferentes dentro da mesma
+// parcela, ex.: uma parcela com 5 linhas somando o vl_total correto); por isso o lookup
+// pré-agrega por cd_parcelas ANTES de entrar em qualquer JOIN com uma query já agrupada —
+// sem isso, o JOIN direto multiplica linhas e infla até colunas que não vêm dessa tabela
+// (ex.: vl_saldo/vl_lancto da própria query principal). Cobertura ~98-99,6% das parcelas em
+// aberto nas 3 situações de dívida; o COALESCE cai para vl_saldo (só principal) no restante.
+const ATUALIZADA_LOOKUP = `SELECT cd_parcelas,
+  SUM(vl_parcela) vl_parcela, SUM(vl_correcao) vl_correcao, SUM(vl_juros) vl_juros,
+  SUM(vl_multa) vl_multa, SUM(vl_honorarios) vl_honorarios, SUM(vl_total) vl_total
+  FROM ${SCHEMA}.tb_dsod_parcelas_atualizadas GROUP BY cd_parcelas`
 
 // Data de atualização dos dados = MAX(dt_alter_ods) das guias (cross-tributo).
 export async function dataAtualizacaoDivida(): Promise<string | null> {
@@ -46,24 +62,32 @@ export async function resumoDivida(ano?: number, mes?: number): Promise<ResumoDi
 
 async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida> {
   // Uma passada: situação × tributo × exercício. Agregações feitas em JS. vl_lancto/vl_pagto
-  // (além de vl_saldo, já usado) dão a Taxa de Recuperação: de tudo que foi inscrito em
-  // dívida ativa (lançado), quanto já foi efetivamente pago.
+  // dão a Taxa de Recuperação (histórico de inscrição/pagamento — conceito diferente, não
+  // muda com a composição legal abaixo). "saldo" é o valor de dívida ativa considerado nos
+  // KPIs/gráficos: principal + atualização monetária + juros + multa + honorários, via
+  // tb_dsod_parcelas_atualizadas (fallback pro saldo puro nos ~1-2% sem cobertura).
   const cond: string[] = []
   if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
   if (mes) cond.push(`MONTH(p.dt_vencimento) <= ${mes}`)
   const filtro = cond.length ? ` WHERE ${cond.join(' AND ')}` : ''
   const r = await agentQuery(`
     SELECT p.ds_situacao AS sit, t.ds_tributo AS nome, g.no_exercicio_lancamento AS ex,
-           SUM(pp.vl_lancto) AS lancto, SUM(pp.vl_pagto) AS pagto, SUM(pp.vl_saldo) AS saldo
+           SUM(pp.vl_lancto) AS lancto, SUM(pp.vl_pagto) AS pagto,
+           SUM(COALESCE(pa.vl_total, pp.vl_saldo)) AS saldo,
+           SUM(CASE WHEN pa.cd_parcelas IS NOT NULL THEN pa.vl_parcela ELSE pp.vl_saldo END) AS principal,
+           SUM(COALESCE(pa.vl_correcao, 0)) AS correcao, SUM(COALESCE(pa.vl_juros, 0)) AS juros,
+           SUM(COALESCE(pa.vl_multa, 0)) AS multa, SUM(COALESCE(pa.vl_honorarios, 0)) AS honorarios
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+    LEFT JOIN (${ATUALIZADA_LOOKUP}) pa ON pa.cd_parcelas = p.cd_parcelas
     ${filtro}
     GROUP BY p.ds_situacao, t.ds_tributo, g.no_exercicio_lancamento`, 8000)
 
   let administrativa = 0, judicial = 0, ajuizamento = 0
   let lancadoTotal = 0, pagoTotal = 0
+  let cPrincipal = 0, cCorrecao = 0, cJuros = 0, cMulta = 0, cHonorarios = 0
   const trib = new Map<string, number>()
   const exerc = new Map<number, number>()
   const exercRec = new Map<number, { lancado: number; pago: number }>()
@@ -89,6 +113,8 @@ async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida
     else if (tipo === 'judicial') judicial += saldo
     else ajuizamento += saldo
 
+    cPrincipal += num(row[6]); cCorrecao += num(row[7]); cJuros += num(row[8]); cMulta += num(row[9]); cHonorarios += num(row[10])
+
     trib.set(nome, (trib.get(nome) ?? 0) + saldo)
     if (exAno >= 2005 && exAno <= 2030) exerc.set(exAno, (exerc.get(exAno) ?? 0) + saldo)
   }
@@ -113,6 +139,7 @@ async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida
       lancado: lancadoTotal, pago: pagoTotal, taxa: lancadoTotal ? (pagoTotal / lancadoTotal) * 100 : 0,
       porExercicio: recPorExercicio,
     },
+    composicao: { principal: cPrincipal, correcao: cCorrecao, juros: cJuros, multa: cMulta, honorarios: cHonorarios },
   }
 }
 
@@ -137,11 +164,12 @@ async function maioresDevedoresRaw(limite: number, ano?: number, mes?: number, s
   if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
   if (mes) cond.push(`MONTH(p.dt_vencimento) <= ${mes}`)
   const r = await agentQuery(`
-    SELECT TOP ${limite} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pp.vl_saldo) saldo
+    SELECT TOP ${limite} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(COALESCE(pa.vl_total, pp.vl_saldo)) saldo
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
+    LEFT JOIN (${ATUALIZADA_LOOKUP}) pa ON pa.cd_parcelas = p.cd_parcelas
     WHERE ${cond.join(' AND ')}
     GROUP BY g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj
     ORDER BY saldo DESC`, limite)
@@ -171,10 +199,11 @@ async function iptuDividaResumoRaw(ano?: number, mes?: number): Promise<IptuDivi
   const [totR, divR] = await Promise.all([
     agentQuery(`SELECT COUNT(DISTINCT g.cd_devedor) FROM ${SCHEMA}.tb_dsod_guias g${joinMes} WHERE ${condTot.join(' AND ')}`, 1),
     agentQuery(`
-      SELECT COUNT(DISTINCT g.cd_devedor) qt, SUM(pp.vl_saldo) saldo
+      SELECT COUNT(DISTINCT g.cd_devedor) qt, SUM(COALESCE(pa.vl_total, pp.vl_saldo)) saldo
       FROM ${SCHEMA}.tb_dsod_guias g
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
+      LEFT JOIN (${ATUALIZADA_LOOKUP}) pa ON pa.cd_parcelas = p.cd_parcelas
       WHERE ${condDiv.join(' AND ')}`, 1),
   ])
   return {
