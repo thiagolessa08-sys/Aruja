@@ -445,10 +445,12 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
           )}
         </div>
 
-        {/* Liquidado por SubElemento */}
+        {/* Liquidado por Elemento / SubElemento — a visão inicial (sem drill) já agrupa por
+            Elemento; só ao clicar num item é que desce para o SubElemento (ver nivel0/nivel1
+            abaixo), então o nome refletia só a metade de baixo da hierarquia. */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>{ind} por SubElemento</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>{ind} por Elemento / SubElemento</span>
             {subElemDrill ? (
               <button onClick={() => setSubElemDrill(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
             ) : null}
