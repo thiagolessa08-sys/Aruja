@@ -474,7 +474,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                     // coordenadas de viewport para o tooltip não ser cortado pelo clip do scroll.
                     const rowRect = e.currentTarget.getBoundingClientRect()
                     const left = rowRect.left + rowRect.width * (pct / 100)
-                    setTip({ chart: 'subelemento', title: it.label, l1: fmtReais(it.v), l1c: '#283e93', left: `${left.toFixed(0)}px`, top: `${rowRect.top.toFixed(0)}px`, fixed: true })
+                    setTip({ chart: 'subelemento', title: it.label, l1: fmtAbrev(it.v), l1c: '#283e93', left: `${left.toFixed(0)}px`, top: `${rowRect.top.toFixed(0)}px`, fixed: true })
                   }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !subElemDrill ? 'pointer' : 'default' }}>
                   <span style={{ width: 140, flex: 'none', fontSize: 10.5, color: '#3a4256', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.label}</span>
