@@ -343,7 +343,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         ].filter(p => p.v > 0)
         return (
           <div style={{ ...card, marginTop: 18 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Composição da Dívida Ativa</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Composição da Dívida Ativa</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{fmtMoney(totC)}</span>
+            </div>
             <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Principal + atualização monetária + juros de mora + multa + encargos legais previstos na legislação (Lei 6.830/80)</div>
             <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden', display: 'flex', marginTop: 16 }}>
               {partes.map(p => (<div key={p.l} title={p.l} style={{ width: `${(100 * p.v / totC).toFixed(2)}%`, background: p.cor }} />))}
