@@ -210,7 +210,11 @@ export interface FiltrosResumo { ano: number; bairro: string | null; rua?: strin
 // de imóveis (sem passar pela guia) — usado no "Total de imóveis" e nas subconsultas IN(...).
 function filtroImovelDireto(f: FiltrosResumo, aliasI = 'i', aliasC = 'c', aliasCp = 'cp') {
   let from = `${S}.tb_dsod_imovel_urbano ${aliasI}`
-  let where = ''
+  // Exclui a linha-sentinela do cadastro (cd_imovel_urbano=-1, no_inscricao_imovel='Não
+  // Informado', tudo -1) — sem isso, o total do "Resumo de Imóveis" ficava 1 unidade acima
+  // do valor correto (ela nunca entrava nos totais filtrados por bairro/rua/espólio, só no
+  // total geral sem filtro).
+  let where = ` AND ${aliasI}.cd_imovel_urbano > 0`
   if (f.bairro || f.rua) {
     from += ` JOIN ${S}.tb_dsod_cep ${aliasC} ON ${aliasI}.cd_cep=${aliasC}.cd_cep`
     if (f.bairro) where += ` AND ${aliasC}.nm_bairro='${f.bairro.replace(/'/g, "''")}'`
