@@ -516,6 +516,73 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
       </div>
 
+      {/* Resultado Mensal da Arrecadação — DAM Geradas × DAM Recebidas pelo setor de
+          Cobrança, por mês. São eventos independentes (data de geração da guia vs. data da
+          baixa/pagamento); uma guia gerada num mês só "vira" recebida quando o contribuinte
+          efetivamente paga, meses depois. Sobe pra ficar logo abaixo de "Análise de Conversão",
+          a pedido do usuário. */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Resultado Mensal da Arrecadação</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas × DAM Recebidas pelo setor de Cobrança, por mês — {(resultado ?? FALLBACK_RESULTADO).ano}.</div>
+          </div>
+          <span style={reportBadge}>Geradas × Recebidas</span>
+        </div>
+
+        {(() => {
+          const rm = resultado ?? FALLBACK_RESULTADO
+          const pctRecebidas = rm.totalGeradas ? (rm.totalRecebidas / rm.totalGeradas) * 100 : 0
+          const mesDestaque = [...rm.porMes].sort((a, b) => (b.geradas - b.recebidas) - (a.geradas - a.recebidas))[0]
+          return (
+            <>
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
+                <div style={{ background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>DAM Geradas em {rm.ano}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalGeradas)}</div>
+                </div>
+                <div style={{ background: '#fdf3e6', border: '1px solid #f2ddb8', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#c07a2e' }}>DAM Recebidas em {rm.ano}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalRecebidas)}</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctRecebidas)} das geradas no ano</div>
+                </div>
+              </div>
+
+              {!resultado ? null : (
+                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
+                  {MESES_ABREV[mesDestaque.mes - 1]}/{rm.ano} tem o maior descompasso: {fmtInt(mesDestaque.geradas)} geradas × {fmtInt(mesDestaque.recebidas)} recebidas — geração e recebimento são eventos independentes (guia gerada num mês só é recebida quando o contribuinte paga, meses depois).
+                </div>
+              )}
+
+              <div style={{ height: 220, marginTop: 16, position: 'relative' }} onMouseLeave={() => setTipResultado(null)}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={rm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 48, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                    <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                    <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
+                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas }) }}
+                      onMouseLeave={() => setTipResultado(null)} />
+                    <Bar dataKey="recebidas" name="Recebidas" fill="#e8962e" radius={[4, 4, 0, 0]} maxBarSize={26}
+                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas }) }}
+                      onMouseLeave={() => setTipResultado(null)} />
+                  </BarChart>
+                </ResponsiveContainer>
+                {tipResultado ? (
+                  <div style={{ position: 'absolute', left: tipResultado.left, top: tipResultado.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                    {tipBox(tipResultado.label, [
+                      { texto: `Geradas: ${fmtInt(tipResultado.geradas)} DAMs`, cor: '#283e93' },
+                      { texto: `Recebidas: ${fmtInt(tipResultado.recebidas)} DAMs`, cor: '#e8962e' },
+                    ])}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )
+        })()}
+      </div>
+
       {/* ROW 1 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.8fr', gap: 18, marginTop: 20, alignItems: 'start' }}>
         {/* Insights */}
@@ -761,72 +828,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
           ) : null}
         </div>
-      </div>
-
-      {/* Resultado Mensal da Arrecadação — DAM Geradas × DAM Recebidas pelo setor de
-          Cobrança, por mês. São eventos independentes (data de geração da guia vs. data da
-          baixa/pagamento); uma guia gerada num mês só "vira" recebida quando o contribuinte
-          efetivamente paga, meses depois. */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Resultado Mensal da Arrecadação</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas × DAM Recebidas pelo setor de Cobrança, por mês — {(resultado ?? FALLBACK_RESULTADO).ano}.</div>
-          </div>
-          <span style={reportBadge}>Geradas × Recebidas</span>
-        </div>
-
-        {(() => {
-          const rm = resultado ?? FALLBACK_RESULTADO
-          const pctRecebidas = rm.totalGeradas ? (rm.totalRecebidas / rm.totalGeradas) * 100 : 0
-          const mesDestaque = [...rm.porMes].sort((a, b) => (b.geradas - b.recebidas) - (a.geradas - a.recebidas))[0]
-          return (
-            <>
-              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
-                <div style={{ background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 14, padding: '14px 16px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>DAM Geradas em {rm.ano}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalGeradas)}</div>
-                </div>
-                <div style={{ background: '#fdf3e6', border: '1px solid #f2ddb8', borderRadius: 14, padding: '14px 16px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#c07a2e' }}>DAM Recebidas em {rm.ano}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalRecebidas)}</div>
-                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctRecebidas)} das geradas no ano</div>
-                </div>
-              </div>
-
-              {!resultado ? null : (
-                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
-                  {MESES_ABREV[mesDestaque.mes - 1]}/{rm.ano} tem o maior descompasso: {fmtInt(mesDestaque.geradas)} geradas × {fmtInt(mesDestaque.recebidas)} recebidas — geração e recebimento são eventos independentes (guia gerada num mês só é recebida quando o contribuinte paga, meses depois).
-                </div>
-              )}
-
-              <div style={{ height: 220, marginTop: 16, position: 'relative' }} onMouseLeave={() => setTipResultado(null)}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 48, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
-                    <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
-                    <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
-                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas }) }}
-                      onMouseLeave={() => setTipResultado(null)} />
-                    <Bar dataKey="recebidas" name="Recebidas" fill="#e8962e" radius={[4, 4, 0, 0]} maxBarSize={26}
-                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas }) }}
-                      onMouseLeave={() => setTipResultado(null)} />
-                  </BarChart>
-                </ResponsiveContainer>
-                {tipResultado ? (
-                  <div style={{ position: 'absolute', left: tipResultado.left, top: tipResultado.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
-                    {tipBox(tipResultado.label, [
-                      { texto: `Geradas: ${fmtInt(tipResultado.geradas)} DAMs`, cor: '#283e93' },
-                      { texto: `Recebidas: ${fmtInt(tipResultado.recebidas)} DAMs`, cor: '#e8962e' },
-                    ])}
-                  </div>
-                ) : null}
-              </div>
-            </>
-          )
-        })()}
       </div>
 
       {/* Tabela por tributo */}
