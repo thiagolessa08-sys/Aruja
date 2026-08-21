@@ -545,7 +545,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-              <svg viewBox="0 0 200 200" width="260" height="260" style={{ maxWidth: '100%' }}>
+              <svg viewBox="0 0 200 200" width="220" height="220" style={{ maxWidth: '100%' }}>
                 <g transform="rotate(-90 100 100)">
                   {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
                 </g>
