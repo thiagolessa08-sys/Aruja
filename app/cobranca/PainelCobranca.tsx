@@ -351,62 +351,13 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         })}
       </div>
 
-      {/* ROW 1 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, marginTop: 20 }}>
-        {/* Insights */}
-        <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
-            </div>
-            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Cobrança</span>
-          </div>
-          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de Cobrança</div>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {insights.map((t, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
-                <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Canais donut */}
-        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Canais de Arrecadação</span>
-            <span style={dots}>···</span>
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-              <svg viewBox="0 0 200 200" width="260" height="260" style={{ maxWidth: '100%' }}>
-                <g transform="rotate(-90 100 100)">
-                  {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
-                </g>
-                <text x="100" y="98" fontSize="13" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtInt(g.totalBaixas).replace(/\.\d+$/, '')}</text>
-                <text x="100" y="113" fontSize="8" fill="#9098a8" textAnchor="middle" style={axisFont}>baixas</text>
-              </svg>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
-              {donut.slice(0, 5).map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                  <span style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nome}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtPct(s.pct)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Análise de Conversão — arrecadado ÷ lançado sob 3 lentes selecionáveis: por tributo,
           por período (exercício de lançamento) e por operador (cd_usuario_gerador da guia,
           pesando o valor $ em vez da contagem — revela se guias autoemitidas têm conversão
           pior do que as trabalhadas por atendentes). Painel ao lado: DAMs geradas por data,
-          tributo e operador (tb_dsod_guias, dt_geracao). */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, marginTop: 18, alignItems: 'start' }}>
+          tributo e operador (tb_dsod_guias, dt_geracao). Sobe pra ficar logo abaixo dos KPIs,
+          a pedido do usuário. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, marginTop: 20, alignItems: 'start' }}>
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div>
@@ -562,6 +513,56 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
               </>
             )
           })()}
+        </div>
+      </div>
+
+      {/* ROW 1 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, marginTop: 20 }}>
+        {/* Insights */}
+        <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
+            </div>
+            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Cobrança</span>
+          </div>
+          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de Cobrança</div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {insights.map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Canais donut */}
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Canais de Arrecadação</span>
+            <span style={dots}>···</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+              <svg viewBox="0 0 200 200" width="260" height="260" style={{ maxWidth: '100%' }}>
+                <g transform="rotate(-90 100 100)">
+                  {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
+                </g>
+                <text x="100" y="98" fontSize="13" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtInt(g.totalBaixas).replace(/\.\d+$/, '')}</text>
+                <text x="100" y="113" fontSize="8" fill="#9098a8" textAnchor="middle" style={axisFont}>baixas</text>
+              </svg>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
+              {donut.slice(0, 5).map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                  <span style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nome}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtPct(s.pct)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
