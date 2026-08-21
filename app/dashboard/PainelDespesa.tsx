@@ -346,6 +346,9 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
     _off += len
     return seg
   })
+  // Total do nível atual do drill "por Categoria / Grupo" (soma dos grupos da categoria
+  // selecionada) — null quando não há drill ativo, caindo pro total geral (catTotal).
+  const catDrillTotalG = catDrill ? catTree.filter(n => n.cat === catDrill).reduce((s, n) => s + n.v, 0) : null
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -562,10 +565,10 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>{ind} por Categoria / Grupo</span>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(catTotal)}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#283e93', marginTop: 4 }}>{fmtReais(catDrillTotalG ?? catTotal)}</div>
           {catDrill ? (() => {
             const grupos = catTree.filter(n => n.cat === catDrill).sort((a, b) => b.v - a.v)
-            const totalG = grupos.reduce((s, n) => s + n.v, 0)
+            const totalG = catDrillTotalG!
             const paleta = ['#283e93', '#e8962e', '#1fa463', '#8094d6', '#aab8e3', '#5870c4', '#d6a24a']
             let offG = 0
             const segG = grupos.map((n, i) => {
