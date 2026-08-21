@@ -517,7 +517,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       </div>
 
       {/* ROW 1 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, marginTop: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 18, marginTop: 20 }}>
         {/* Insights */}
         <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
