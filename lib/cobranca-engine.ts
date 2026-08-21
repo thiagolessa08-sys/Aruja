@@ -157,16 +157,31 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
   return { ano, total, porMes, porTributo, porOperador }
 }
 
-export interface ResultadoMes { mes: number; geradas: number; recebidas: number }
-export interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; porMes: ResultadoMes[] }
+export interface ResultadoMes { mes: number; geradas: number; recebidas: number; pagas: number }
+export interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; totalPagas: number; porMes: ResultadoMes[] }
+
+// tb_dsod_tipo_baixa.ds_tipo_baixa cujo evento é efetivamente um RECEBIMENTO em dinheiro
+// (Pgto/Pago/depósito bancário/Simples Nacional pago). O restante das baixas — cancelamento,
+// estorno, compensação, isenção, "sem movimento", etc. — está incluído em "recebidas" (todas
+// as baixas do período) mas NÃO representa dinheiro efetivamente pago pelo contribuinte.
+const TIPOS_BAIXA_PAGO = [
+  'Pgto Normal (Prefeitura)', 'Pgto em Atraso (Tesouraria)', 'Pgto em Banco',
+  'Pago pela parcela Unica', 'Pago pela parcela Normal',
+  'Pago pela parcela Unica, MAS nao tem uma unica, conversao',
+  'Pagamento efetuado por deposito bancario',
+  'Simples Nacional - Pagto Matriz x Filial', 'Simples Nacional - Pagto PGFN',
+]
+const TIPOS_BAIXA_PAGO_SQL = TIPOS_BAIXA_PAGO.map(t => `'${t.replace(/'/g, "''")}'`).join(',')
 
 /**
  * Resultado mensal da arrecadação: DAM GERADAS (tb_dsod_guias.dt_geracao — emitidas) × DAM
  * RECEBIDAS pelo setor de Cobrança (tb_dsod_parcela_baixas.dt_baixa — mesma fonte/conceito
- * de baixasPorAno em resumoCobranca, aqui quebrado por mês em vez de por ano). Datas de
- * geração e de baixa são eventos independentes — uma guia gerada em dezembro (ex.: lote de
- * IPTU do próximo exercício) só é "recebida" quando o contribuinte efetivamente paga, meses
- * depois; por isso os dois volumes mensais não precisam (e tipicamente não vão) bater.
+ * de baixasPorAno em resumoCobranca, aqui quebrado por mês em vez de por ano) × DAM PAGAS
+ * (subconjunto de "recebidas" cujo tipo de baixa é um recebimento em dinheiro — ver
+ * TIPOS_BAIXA_PAGO; o restante das baixas é cancelamento/estorno/compensação/etc., não paga).
+ * Datas de geração e de baixa são eventos independentes — uma guia gerada em dezembro (ex.:
+ * lote de IPTU do próximo exercício) só é "recebida"/"paga" quando o contribuinte efetivamente
+ * paga, meses depois; por isso os volumes mensais não precisam (e tipicamente não vão) bater.
  */
 export async function resultadoMensalArrecadacao(ano = 2025, mes?: number): Promise<ResultadoMensal> {
   return cached(`resultadoMensal:${ano}:${mes ?? ''}`, TTL_15MIN, () => resultadoMensalRaw(ano, mes))
@@ -174,8 +189,8 @@ export async function resultadoMensalArrecadacao(ano = 2025, mes?: number): Prom
 
 async function resultadoMensalRaw(ano: number, mes?: number): Promise<ResultadoMensal> {
   const filtroMes = mes ? ` AND MONTH(dt_geracao) <= ${mes}` : ''
-  const filtroMesBaixa = mes ? ` AND MONTH(dt_baixa) <= ${mes}` : ''
-  const [geradasR, recebidasR] = await Promise.all([
+  const filtroMesBaixa = mes ? ` AND MONTH(pb.dt_baixa) <= ${mes}` : ''
+  const [geradasR, recebidasR, pagasR] = await Promise.all([
     agentQuery(`
       SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
@@ -186,20 +201,29 @@ async function resultadoMensalRaw(ano: number, mes?: number): Promise<ResultadoM
       FROM ${SCHEMA}.tb_dsod_parcela_baixas
       WHERE YEAR(dt_baixa) = ${ano}${filtroMesBaixa}
       GROUP BY MONTH(dt_baixa)`, 20),
+    agentQuery(`
+      SELECT MONTH(pb.dt_baixa) AS mes, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      WHERE YEAR(pb.dt_baixa) = ${ano}${filtroMesBaixa} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
+      GROUP BY MONTH(pb.dt_baixa)`, 20),
   ])
 
   const geradasMap = new Map<number, number>()
   for (const row of geradasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) geradasMap.set(m, num(row[1])) }
   const recebidasMap = new Map<number, number>()
   for (const row of recebidasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) recebidasMap.set(m, num(row[1])) }
+  const pagasMap = new Map<number, number>()
+  for (const row of pagasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) pagasMap.set(m, num(row[1])) }
 
   const porMes: ResultadoMes[] = []
-  for (let m = 1; m <= 12; m++) porMes.push({ mes: m, geradas: geradasMap.get(m) ?? 0, recebidas: recebidasMap.get(m) ?? 0 })
+  for (let m = 1; m <= 12; m++) porMes.push({ mes: m, geradas: geradasMap.get(m) ?? 0, recebidas: recebidasMap.get(m) ?? 0, pagas: pagasMap.get(m) ?? 0 })
 
   return {
     ano,
     totalGeradas: porMes.reduce((s, x) => s + x.geradas, 0),
     totalRecebidas: porMes.reduce((s, x) => s + x.recebidas, 0),
+    totalPagas: porMes.reduce((s, x) => s + x.pagas, 0),
     porMes,
   }
 }
