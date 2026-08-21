@@ -363,9 +363,8 @@ async function analiseConversaoRaw(ano: number, mes?: number): Promise<AnaliseCo
       const bruto = String(row[0] ?? '').trim()
       // cd_usuario_gerador mistura formatos: login de atendente ("CalebeAM"), rótulo especial
       // ("Internet"/"Schedule") e, para registros mais antigos, um código numérico interno sem
-      // nome cadastrado em nenhuma tabela do catálogo — nesses casos, rotula como "Operador
-      // <código>" em vez de exibir o número sozinho, sem nome ao lado.
-      const nome = !bruto ? 'Não identificado' : /^\d+$/.test(bruto) ? `Operador ${bruto}` : bruto
+      // nome cadastrado em nenhuma tabela do catálogo — nesses casos exibe só o número.
+      const nome = bruto || 'Não identificado'
       return { nome, lancado: num(row[1]), pago: num(row[2]) }
     })
     .filter(x => x.lancado > 0)
