@@ -228,6 +228,64 @@ async function resultadoMensalRaw(ano: number, mes?: number): Promise<ResultadoM
   }
 }
 
+export interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
+export interface ComparativoDamId { ano: number; totalGeradas: number; totalPagas: number; porMes: ComparativoDamIdMes[] }
+
+/**
+ * Comparativo de DAM por ID (documento) — GERADAS (tb_dsod_guias, 1 linha = 1 cd_guia = 1 DAM)
+ * × PAGAS, contando DAMs DISTINTAS (COUNT DISTINCT cd_guia), não eventos de baixa como em
+ * resultadoMensalArrecadacao. Diferença real: uma guia com várias parcelas (ex.: IPTU
+ * parcelado) gera uma baixa "paga" por parcela — em 2025 são ~268 mil eventos pagos mas só
+ * ~247 mil DAMs distintas por trás deles, porque parte dessas guias teve mais de uma parcela
+ * paga no período. cd_guia = -1 é a linha sentinela ("Não Informado") de tb_dsod_parcelas — só
+ * ~250 baixas pagas caem nela no ano e são excluídas do COUNT DISTINCT (senão contam como 1 DAM
+ * fantasma). Uma DAM com parcelas pagas em meses diferentes aparece em mais de um mês aqui —
+ * por isso a soma dos meses pode superar o total anual (que é DISTINCT sobre o ano inteiro).
+ */
+export async function comparativoDamPorId(ano = 2025, mes?: number): Promise<ComparativoDamId> {
+  return cached(`comparativoDamId:${ano}:${mes ?? ''}`, TTL_15MIN, () => comparativoDamPorIdRaw(ano, mes))
+}
+
+async function comparativoDamPorIdRaw(ano: number, mes?: number): Promise<ComparativoDamId> {
+  const filtroMes = mes ? ` AND MONTH(dt_geracao) <= ${mes}` : ''
+  const filtroMesBaixa = mes ? ` AND MONTH(pb.dt_baixa) <= ${mes}` : ''
+  const [geradasR, pagasR, totalPagasR] = await Promise.all([
+    agentQuery(`
+      SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias
+      WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
+      GROUP BY MONTH(dt_geracao)`, 20),
+    agentQuery(`
+      SELECT MONTH(pb.dt_baixa) AS mes, COUNT(DISTINCT p.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      WHERE YEAR(pb.dt_baixa) = ${ano}${filtroMesBaixa} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
+      GROUP BY MONTH(pb.dt_baixa)`, 20),
+    agentQuery(`
+      SELECT COUNT(DISTINCT p.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      WHERE YEAR(pb.dt_baixa) = ${ano}${filtroMesBaixa} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0`, 1),
+  ])
+
+  const geradasMap = new Map<number, number>()
+  for (const row of geradasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) geradasMap.set(m, num(row[1])) }
+  const pagasMap = new Map<number, number>()
+  for (const row of pagasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) pagasMap.set(m, num(row[1])) }
+
+  const porMes: ComparativoDamIdMes[] = []
+  for (let m = 1; m <= 12; m++) porMes.push({ mes: m, geradas: geradasMap.get(m) ?? 0, pagas: pagasMap.get(m) ?? 0 })
+
+  return {
+    ano,
+    totalGeradas: porMes.reduce((s, x) => s + x.geradas, 0),
+    totalPagas: num(totalPagasR.rows[0]?.[0]),
+    porMes,
+  }
+}
+
 export interface ConversaoItem { nome: string; lancado: number; arrecadado: number; conversao: number }
 export interface AnaliseConversao {
   ano: number

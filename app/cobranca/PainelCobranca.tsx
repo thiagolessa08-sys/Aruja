@@ -17,6 +17,8 @@ interface DamOperador { nome: string; qt: number }
 interface DamsGeradas { ano: number; total: number; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
 interface ResultadoMes { mes: number; geradas: number; recebidas: number; pagas: number }
 interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; totalPagas: number; porMes: ResultadoMes[] }
+interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
+interface ComparativoDamId { ano: number; totalGeradas: number; totalPagas: number; porMes: ComparativoDamIdMes[] }
 interface ConversaoItem { nome: string; lancado: number; arrecadado: number; conversao: number }
 interface AnaliseConversao { ano: number; porTributo: ConversaoItem[]; porPeriodo: ConversaoItem[]; porOperador: ConversaoItem[] }
 interface Resumo {
@@ -105,6 +107,18 @@ const FALLBACK_RESULTADO: ResultadoMensal = {
   ],
 }
 
+const FALLBACK_COMP_DAM_ID: ComparativoDamId = {
+  ano: 2025, totalGeradas: 1240924, totalPagas: 247272,
+  porMes: [
+    { mes: 1, geradas: 73192, pagas: 13894 }, { mes: 2, geradas: 43244, pagas: 28583 },
+    { mes: 3, geradas: 44118, pagas: 27506 }, { mes: 4, geradas: 30754, pagas: 25113 },
+    { mes: 5, geradas: 22646, pagas: 24119 }, { mes: 6, geradas: 42330, pagas: 23982 },
+    { mes: 7, geradas: 23636, pagas: 23929 }, { mes: 8, geradas: 23447, pagas: 23123 },
+    { mes: 9, geradas: 24308, pagas: 23499 }, { mes: 10, geradas: 23563, pagas: 23066 },
+    { mes: 11, geradas: 42396, pagas: 19145 }, { mes: 12, geradas: 847290, pagas: 10238 },
+  ],
+}
+
 const FALLBACK_ANALISE: AnaliseConversao = {
   ano: 2025,
   porTributo: [
@@ -171,6 +185,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [tipQV, setTipQV] = useState<{ left: number; top: number; label: string; saldo: number } | null>(null)
   const [tipDam, setTipDam] = useState<{ left: number; top: number; label: string; qt: number } | null>(null)
   const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; recebidas: number; pagas: number } | null>(null)
+  const [tipCompDamId, setTipCompDamId] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number } | null>(null)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
   const [potMensal, setPotMensal] = useState<PotMes[] | null>(null)
@@ -179,6 +194,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [devedoresMesErro, setDevedoresMesErro] = useState(false)
   const [dams, setDams] = useState<DamsGeradas | null>(null)
   const [resultado, setResultado] = useState<ResultadoMensal | null>(null)
+  const [compDamId, setCompDamId] = useState<ComparativoDamId | null>(null)
   const [analise, setAnalise] = useState<AnaliseConversao | null>(null)
   // null = usuário ainda não escolheu uma lente — a Análise de Conversão exibe "Por Tributo"
   // como padrão visual, mas o painel de DAM ao lado só detalha por tributo/período/operador
@@ -192,6 +208,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setPotencial(null)
     setDams(null)
     setResultado(null)
+    setCompDamId(null)
     setAnalise(null)
     setPotSel(null)
     setPotMensal(null)
@@ -210,6 +227,8 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
     fetch(`/api/cobranca/resultado-mensal?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.totalGeradas === 'number') setResultado(x) }).catch(() => {})
+    fetch(`/api/cobranca/comparativo-dam-id?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && typeof x.totalGeradas === 'number') setCompDamId(x) }).catch(() => {})
     fetch(`/api/cobranca/analise-conversao?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && Array.isArray(x.porTributo)) setAnalise(x) }).catch(() => {})
   }, [ano, mes])
@@ -584,6 +603,66 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                       { texto: `Geradas: ${fmtInt(tipResultado.geradas)} DAMs`, cor: '#283e93' },
                       { texto: `Recebidas: ${fmtInt(tipResultado.recebidas)} DAMs`, cor: '#e8962e' },
                       { texto: `Pagas: ${fmtInt(tipResultado.pagas)} DAMs`, cor: '#1fa463' },
+                    ])}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )
+        })()}
+      </div>
+
+      {/* Comparativo de DAM por ID — GERADAS × PAGAS contando DOCUMENTOS distintos (COUNT
+          DISTINCT cd_guia), não eventos de baixa como no gráfico anterior. Uma guia parcelada
+          (ex.: IPTU em várias cotas) gera uma baixa "paga" por parcela — por isso o número de
+          eventos pagos (gráfico acima) é sempre maior que o número de DAMs distintas pagas
+          (aqui). Uma DAM com parcelas pagas em meses diferentes conta em mais de um mês. */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Comparativo de DAM por ID — Geradas × Pagas</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de documentos (DAM) distintos, não de eventos de baixa — {(compDamId ?? FALLBACK_COMP_DAM_ID).ano}.</div>
+          </div>
+          <span style={reportBadge}>Por documento (ID)</span>
+        </div>
+
+        {(() => {
+          const cd = compDamId ?? FALLBACK_COMP_DAM_ID
+          const pctPagas = cd.totalGeradas ? (cd.totalPagas / cd.totalGeradas) * 100 : 0
+          return (
+            <>
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
+                <div style={{ background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>DAM Geradas (IDs distintos) em {cd.ano}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(cd.totalGeradas)}</div>
+                </div>
+                <div style={{ background: '#eafaf0', border: '1px solid #bfe8d1', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#1fa463' }}>DAM Pagas (IDs distintos) em {cd.ano}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(cd.totalPagas)}</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctPagas)} das geradas no ano</div>
+                </div>
+              </div>
+
+              <div style={{ height: 220, marginTop: 16, position: 'relative' }} onMouseLeave={() => setTipCompDamId(null)}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={cd.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 48, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                    <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                    <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
+                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ComparativoDamIdMes & { label: string }; setTipCompDamId({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas }) }}
+                      onMouseLeave={() => setTipCompDamId(null)} />
+                    <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={26}
+                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ComparativoDamIdMes & { label: string }; setTipCompDamId({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas }) }}
+                      onMouseLeave={() => setTipCompDamId(null)} />
+                  </BarChart>
+                </ResponsiveContainer>
+                {tipCompDamId ? (
+                  <div style={{ position: 'absolute', left: tipCompDamId.left, top: tipCompDamId.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                    {tipBox(tipCompDamId.label, [
+                      { texto: `Geradas: ${fmtInt(tipCompDamId.geradas)} DAMs`, cor: '#283e93' },
+                      { texto: `Pagas: ${fmtInt(tipCompDamId.pagas)} DAMs`, cor: '#1fa463' },
                     ])}
                   </div>
                 ) : null}
