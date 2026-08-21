@@ -11,10 +11,10 @@ interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; en
 interface PotTrib { nome: string; codigos: number[]; vencido: number; aVencer: number }
 interface Potencial { vencido: number; aVencer: number; porTributo: PotTrib[] }
 interface PotMes { ano: number; mes: number; saldo: number; vencido: boolean }
-interface DamMes { mes: number; qt: number }
-interface DamTributo { nome: string; codigos: number[]; qt: number }
-interface DamOperador { nome: string; qt: number }
-interface DamsGeradas { ano: number; total: number; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
+interface DamMes { mes: number; qt: number; pagas: number }
+interface DamTributo { nome: string; codigos: number[]; qt: number; pagas: number }
+interface DamOperador { nome: string; qt: number; pagas: number }
+interface DamsGeradas { ano: number; total: number; totalPagas: number; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
 interface ResultadoMes { mes: number; geradas: number; recebidas: number; pagas: number }
 interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; totalPagas: number; porMes: ResultadoMes[] }
 interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
@@ -74,24 +74,24 @@ const FALLBACK_POTENCIAL: Potencial = {
 }
 
 const FALLBACK_DAMS: DamsGeradas = {
-  ano: 2025, total: 1240924,
+  ano: 2025, total: 1240924, totalPagas: 247272,
   porMes: [
-    { mes: 1, qt: 73192 }, { mes: 2, qt: 43244 }, { mes: 3, qt: 44118 }, { mes: 4, qt: 30754 },
-    { mes: 5, qt: 22646 }, { mes: 6, qt: 42330 }, { mes: 7, qt: 23636 }, { mes: 8, qt: 23447 },
-    { mes: 9, qt: 24308 }, { mes: 10, qt: 23563 }, { mes: 11, qt: 42396 }, { mes: 12, qt: 847290 },
+    { mes: 1, qt: 73192, pagas: 13894 }, { mes: 2, qt: 43244, pagas: 28583 }, { mes: 3, qt: 44118, pagas: 27506 }, { mes: 4, qt: 30754, pagas: 25113 },
+    { mes: 5, qt: 22646, pagas: 24119 }, { mes: 6, qt: 42330, pagas: 23982 }, { mes: 7, qt: 23636, pagas: 23929 }, { mes: 8, qt: 23447, pagas: 23123 },
+    { mes: 9, qt: 24308, pagas: 23499 }, { mes: 10, qt: 23563, pagas: 23066 }, { mes: 11, qt: 42396, pagas: 19145 }, { mes: 12, qt: 847290, pagas: 10238 },
   ],
   porTributo: [
-    { nome: 'Documento de Arrecadacao', codigos: [20], qt: 1033997 },
-    { nome: 'ISS - Simples Nacional', codigos: [301], qt: 66095 },
-    { nome: 'IPTU', codigos: [1], qt: 31689 },
-    { nome: 'Taxa de Contribuição Ambiental (TCA)', codigos: [67], qt: 30786 },
-    { nome: 'ISS - Simples Nacional Dívida Ativa', codigos: [303], qt: 24434 },
-    { nome: 'I.S.S.Q.N.', codigos: [3], qt: 10390 },
-    { nome: 'Taxa de Fiscalização de Estabelecimento', codigos: [2002], qt: 10051 },
+    { nome: 'Documento de Arrecadacao', codigos: [20], qt: 1033997, pagas: 206799 },
+    { nome: 'ISS - Simples Nacional', codigos: [301], qt: 66095, pagas: 13219 },
+    { nome: 'IPTU', codigos: [1], qt: 31689, pagas: 6338 },
+    { nome: 'Taxa de Contribuição Ambiental (TCA)', codigos: [67], qt: 30786, pagas: 6157 },
+    { nome: 'ISS - Simples Nacional Dívida Ativa', codigos: [303], qt: 24434, pagas: 4887 },
+    { nome: 'I.S.S.Q.N.', codigos: [3], qt: 10390, pagas: 2078 },
+    { nome: 'Taxa de Fiscalização de Estabelecimento', codigos: [2002], qt: 10051, pagas: 2010 },
   ],
   porOperador: [
-    { nome: 'CalebeAM', qt: 827806 }, { nome: 'Schedule', qt: 107300 }, { nome: 'Internet', qt: 48198 },
-    { nome: 'KellyCPS', qt: 41174 }, { nome: 'BeatrizPS', qt: 33249 }, { nome: 'Arquimedes', qt: 18910 },
+    { nome: 'CalebeAM', qt: 827806, pagas: 165561 }, { nome: 'Schedule', qt: 107300, pagas: 21460 }, { nome: 'Internet', qt: 48198, pagas: 9640 },
+    { nome: 'KellyCPS', qt: 41174, pagas: 8235 }, { nome: 'BeatrizPS', qt: 33249, pagas: 6650 }, { nome: 'Arquimedes', qt: 18910, pagas: 3782 },
   ],
 }
 
@@ -183,7 +183,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [d, setD] = useState<Resumo | null>(null)
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
   const [tipQV, setTipQV] = useState<{ left: number; top: number; label: string; saldo: number } | null>(null)
-  const [tipDam, setTipDam] = useState<{ left: number; top: number; label: string; qt: number } | null>(null)
+  const [tipDam, setTipDam] = useState<{ left: number; top: number; label: string; qt: number; pagas: number } | null>(null)
   const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; recebidas: number; pagas: number } | null>(null)
   const [tipCompDamId, setTipCompDamId] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number } | null>(null)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
@@ -438,9 +438,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div>
               <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Documentos de Arrecadação Municipal (DAM)</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Guias geradas — {(dams ?? FALLBACK_DAMS).ano}. Detalhe por tributo, período ou operador conforme a lente escolhida em Análise de Conversão.</div>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Guias geradas × pagas (DAM distintas) — {(dams ?? FALLBACK_DAMS).ano}. Detalhe por tributo, período ou operador conforme a lente escolhida em Análise de Conversão.</div>
             </div>
-            <span style={reportBadge}>Geradas</span>
+            <span style={reportBadge}>Geradas × Pagas</span>
           </div>
 
           {(() => {
@@ -449,11 +449,16 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             const operPico = dm.porOperador[0]
             const pctMesPico = dm.total ? (mesPico.qt / dm.total) * 100 : 0
             const pctOperPico = dm.total && operPico ? (operPico.qt / dm.total) * 100 : 0
+            const pctPagasTotal = dm.total ? (dm.totalPagas / dm.total) * 100 : 0
             return (
               <>
                 <div style={{ marginTop: 12, background: '#283e93', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                   <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total de DAMs geradas em {dm.ano}</span>
                   <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtInt(dm.total)}</span>
+                </div>
+                <div style={{ marginTop: 8, background: '#1fa463', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total de DAMs pagas em {dm.ano}</span>
+                  <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtInt(dm.totalPagas)} <span style={{ fontSize: 11, fontWeight: 600 }}>({fmtPct(pctPagasTotal)})</span></span>
                 </div>
                 {!dams ? null : (
                   <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
@@ -476,14 +481,21 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                           <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={1} />
                           <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                           <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
-                          <Bar dataKey="qt" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
-                            onMouseEnter={(data: BarRectangleItem) => setTipDam({ left: data.x + data.width / 2, top: data.y, label: String((data.payload as { label: string }).label), qt: (data.payload as DamMes).qt })}
+                          <Legend wrapperStyle={{ fontSize: 10.5 }} />
+                          <Bar dataKey="qt" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={22}
+                            onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDam({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
+                            onMouseLeave={() => setTipDam(null)} />
+                          <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={22}
+                            onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDam({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
                             onMouseLeave={() => setTipDam(null)} />
                         </BarChart>
                       </ResponsiveContainer>
                       {tipDam ? (
                         <div style={{ position: 'absolute', left: tipDam.left, top: tipDam.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
-                          {tipBox(tipDam.label, [{ texto: `Geradas: ${fmtInt(tipDam.qt)} guias` }])}
+                          {tipBox(tipDam.label, [
+                            { texto: `Geradas: ${fmtInt(tipDam.qt)} guias`, cor: '#283e93' },
+                            { texto: `Pagas: ${fmtInt(tipDam.pagas)} guias`, cor: '#1fa463' },
+                          ])}
                         </div>
                       ) : null}
                     </div>
@@ -498,7 +510,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                           <div key={t.nome}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
                               <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
-                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(t.qt)}</span>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(t.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(t.pagas)} pagas)</span></span>
                             </div>
                             <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: `${Math.max(3, 100 * t.qt / maxTrib).toFixed(1)}%`, borderRadius: 5, background: /^Demais tributos/.test(t.nome) ? '#c2c9d6' : DAM_CORES[i % DAM_CORES.length] }} />
@@ -518,7 +530,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                           <div key={o.nome}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
                               <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.nome}</span>
-                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)}</span>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(o.pagas)} pagas)</span></span>
                             </div>
                             <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: `${Math.max(3, 100 * o.qt / maxOper).toFixed(1)}%`, borderRadius: 5, background: o.nome === 'Demais operadores' ? '#c2c9d6' : CANAL_CORES[i % CANAL_CORES.length] }} />

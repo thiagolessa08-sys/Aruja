@@ -6,6 +6,20 @@ import { cached, TTL_15MIN } from '@/lib/cache'
 const SCHEMA = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 
+// tb_dsod_tipo_baixa.ds_tipo_baixa cujo evento é efetivamente um RECEBIMENTO em dinheiro
+// (Pgto/Pago/depósito bancário/Simples Nacional pago). O restante das baixas — cancelamento,
+// estorno, compensação, isenção, "sem movimento", etc. — NÃO representa dinheiro efetivamente
+// pago pelo contribuinte. Usado por damsGeradas, resultadoMensalArrecadacao e
+// comparativoDamPorId.
+const TIPOS_BAIXA_PAGO = [
+  'Pgto Normal (Prefeitura)', 'Pgto em Atraso (Tesouraria)', 'Pgto em Banco',
+  'Pago pela parcela Unica', 'Pago pela parcela Normal',
+  'Pago pela parcela Unica, MAS nao tem uma unica, conversao',
+  'Pagamento efetuado por deposito bancario',
+  'Simples Nacional - Pagto Matriz x Filial', 'Simples Nacional - Pagto PGFN',
+]
+const TIPOS_BAIXA_PAGO_SQL = TIPOS_BAIXA_PAGO.map(t => `'${t.replace(/'/g, "''")}'`).join(',')
+
 export interface ResumoCobranca {
   ano: number
   lancado: number
@@ -74,12 +88,13 @@ async function resumoCobrancaRaw(ano: number, mes?: number): Promise<ResumoCobra
   }
 }
 
-export interface DamMes { mes: number; qt: number }
-export interface DamTributo { nome: string; codigos: number[]; qt: number }
-export interface DamOperador { nome: string; qt: number }
+export interface DamMes { mes: number; qt: number; pagas: number }
+export interface DamTributo { nome: string; codigos: number[]; qt: number; pagas: number }
+export interface DamOperador { nome: string; qt: number; pagas: number }
 export interface DamsGeradas {
   ano: number
   total: number
+  totalPagas: number
   porMes: DamMes[]
   porTributo: DamTributo[]
   porOperador: DamOperador[]
@@ -104,7 +119,17 @@ export async function damsGeradas(ano = 2025, mes?: number): Promise<DamsGeradas
 
 async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
   const filtroMes = mes ? ` AND MONTH(dt_geracao) <= ${mes}` : ''
-  const [totalR, mesR, tribR, operR] = await Promise.all([
+  const filtroMesBaixa = mes ? ` AND MONTH(pb.dt_baixa) <= ${mes}` : ''
+  // Pagas conta DAMs (documentos) distintas — COUNT DISTINCT cd_guia via baixa de tipo
+  // pagamento (ver TIPOS_BAIXA_PAGO), não eventos de baixa. cd_guia = -1 é a linha sentinela
+  // ("Não Informado") de tb_dsod_parcelas — excluída do COUNT DISTINCT.
+  const juncaoPagas = `
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(pb.dt_baixa) = ${ano}${filtroMesBaixa} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0`
+  const [totalR, mesR, tribR, operR, totalPagasR, mesPagasR, tribPagasR] = await Promise.all([
     agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_guias WHERE YEAR(dt_geracao) = ${ano}${filtroMes}`, 1),
     agentQuery(`
       SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
@@ -126,52 +151,63 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
       WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
       GROUP BY cd_usuario_gerador
       ORDER BY qt DESC`, TOP_N_DAM_OPER),
+    agentQuery(`SELECT COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagas}`, 1),
+    agentQuery(`SELECT MONTH(pb.dt_baixa) AS mes, COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagas} GROUP BY MONTH(pb.dt_baixa)`, 20),
+    agentQuery(`SELECT g.cd_tributo AS cd, COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagas} GROUP BY g.cd_tributo`, 200),
   ])
 
   const total = num(totalR.rows[0]?.[0])
+  const totalPagas = num(totalPagasR.rows[0]?.[0])
 
+  const porMesPagasMap = new Map<number, number>()
+  for (const row of mesPagasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) porMesPagasMap.set(m, num(row[1])) }
   const porMesMap = new Map<number, number>()
   for (const row of mesR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) porMesMap.set(m, num(row[1])) }
   const porMes: DamMes[] = []
-  for (let m = 1; m <= 12; m++) porMes.push({ mes: m, qt: porMesMap.get(m) ?? 0 })
+  for (let m = 1; m <= 12; m++) porMes.push({ mes: m, qt: porMesMap.get(m) ?? 0, pagas: porMesPagasMap.get(m) ?? 0 })
 
+  const tribPagasMap = new Map<number, number>()
+  for (const row of tribPagasR.rows) tribPagasMap.set(num(row[0]), num(row[1]))
   const tribList = tribR.rows
     .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim() || `Tributo ${num(row[0])}`, qt: num(row[2]) }))
     .filter(x => x.qt > 0)
     .sort((a, b) => b.qt - a.qt)
   const topTrib = tribList.slice(0, TOP_N_DAM_TRIB)
   const restoTrib = tribList.slice(TOP_N_DAM_TRIB)
-  const porTributo: DamTributo[] = topTrib.map(t => ({ nome: t.nome, codigos: [t.cd], qt: t.qt }))
+  const porTributo: DamTributo[] = topTrib.map(t => ({ nome: t.nome, codigos: [t.cd], qt: t.qt, pagas: tribPagasMap.get(t.cd) ?? 0 }))
   if (restoTrib.length) {
-    porTributo.push({ nome: `Demais tributos (${restoTrib.length})`, codigos: restoTrib.map(t => t.cd), qt: restoTrib.reduce((s, t) => s + t.qt, 0) })
+    porTributo.push({
+      nome: `Demais tributos (${restoTrib.length})`, codigos: restoTrib.map(t => t.cd),
+      qt: restoTrib.reduce((s, t) => s + t.qt, 0),
+      pagas: restoTrib.reduce((s, t) => s + (tribPagasMap.get(t.cd) ?? 0), 0),
+    })
   }
 
+  const operBrutoNomes = operR.rows.map(row => String(row[0] ?? '').trim()).filter(Boolean)
+  const operPagasR = operBrutoNomes.length
+    ? await agentQuery(`
+        SELECT g.cd_usuario_gerador AS nome, COUNT(DISTINCT p.cd_guia) AS qt
+        ${juncaoPagas} AND g.cd_usuario_gerador IN (${operBrutoNomes.map(n => `'${n.replace(/'/g, "''")}'`).join(',')})
+        GROUP BY g.cd_usuario_gerador`, 50)
+    : { rows: [] as unknown[][] }
+  const operPagasMap = new Map<string, number>()
+  for (const row of operPagasR.rows) operPagasMap.set(String(row[0] ?? '').trim(), num(row[1]))
+
   const operList = operR.rows
-    .map(row => ({ nome: String(row[0] ?? '').trim() || 'Não identificado', qt: num(row[1]) }))
+    .map(row => { const bruto = String(row[0] ?? '').trim(); return { nome: bruto || 'Não identificado', qt: num(row[1]), pagas: operPagasMap.get(bruto) ?? 0 } })
     .filter(x => x.qt > 0)
   const somaTopOper = operList.reduce((s, x) => s + x.qt, 0)
+  const somaTopOperPagas = operList.reduce((s, x) => s + x.pagas, 0)
   const porOperador: DamOperador[] = [...operList]
   const restoOper = total - somaTopOper
-  if (restoOper > 0) porOperador.push({ nome: 'Demais operadores', qt: restoOper })
+  const restoOperPagas = Math.max(0, totalPagas - somaTopOperPagas)
+  if (restoOper > 0) porOperador.push({ nome: 'Demais operadores', qt: restoOper, pagas: restoOperPagas })
 
-  return { ano, total, porMes, porTributo, porOperador }
+  return { ano, total, totalPagas, porMes, porTributo, porOperador }
 }
 
 export interface ResultadoMes { mes: number; geradas: number; recebidas: number; pagas: number }
 export interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; totalPagas: number; porMes: ResultadoMes[] }
-
-// tb_dsod_tipo_baixa.ds_tipo_baixa cujo evento é efetivamente um RECEBIMENTO em dinheiro
-// (Pgto/Pago/depósito bancário/Simples Nacional pago). O restante das baixas — cancelamento,
-// estorno, compensação, isenção, "sem movimento", etc. — está incluído em "recebidas" (todas
-// as baixas do período) mas NÃO representa dinheiro efetivamente pago pelo contribuinte.
-const TIPOS_BAIXA_PAGO = [
-  'Pgto Normal (Prefeitura)', 'Pgto em Atraso (Tesouraria)', 'Pgto em Banco',
-  'Pago pela parcela Unica', 'Pago pela parcela Normal',
-  'Pago pela parcela Unica, MAS nao tem uma unica, conversao',
-  'Pagamento efetuado por deposito bancario',
-  'Simples Nacional - Pagto Matriz x Filial', 'Simples Nacional - Pagto PGFN',
-]
-const TIPOS_BAIXA_PAGO_SQL = TIPOS_BAIXA_PAGO.map(t => `'${t.replace(/'/g, "''")}'`).join(',')
 
 /**
  * Resultado mensal da arrecadação: DAM GERADAS (tb_dsod_guias.dt_geracao — emitidas) × DAM
