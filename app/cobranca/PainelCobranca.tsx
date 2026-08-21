@@ -684,38 +684,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         })()}
       </div>
 
-      {/* Canais de Arrecadação — Insights de Cobrança saiu daqui e foi pra junto de "Baixas
-          Processadas por Ano", a pedido do usuário. */}
-      <div style={{ marginTop: 20 }}>
-        {/* Canais donut */}
-        <div style={{ ...card, display: 'flex', flexDirection: 'column', maxWidth: 380 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Canais de Arrecadação</span>
-            <span style={dots}>···</span>
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-              <svg viewBox="0 0 200 200" width="220" height="220" style={{ maxWidth: '100%' }}>
-                <g transform="rotate(-90 100 100)">
-                  {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
-                </g>
-                <text x="100" y="98" fontSize="13" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtInt(g.totalBaixas).replace(/\.\d+$/, '')}</text>
-                <text x="100" y="113" fontSize="8" fill="#9098a8" textAnchor="middle" style={axisFont}>baixas</text>
-              </svg>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
-              {donut.slice(0, 5).map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                  <span style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nome}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtPct(s.pct)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Potencial de Arrecadação — painel: do saldo devedor, quanto já VENCEU (inadimplência
           genuína, ação de cobrança já cabível) × quanto ainda NÃO VENCEU (potencial futuro,
           não cobrável ainda), por tributo analítico. Ao clicar num tributo, abre um painel ao
@@ -936,33 +904,64 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
       </div>
 
-      {/* Tabela por tributo */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Conversão por Tributo · {g.ano}</span>
-        <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Tributo', 'Lançado', 'Arrecadado', 'A Recuperar', 'Conversão'].map((h, i) => (
-                  <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {g.tributos.map((row, ri) => {
-                const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
-                return (
-                  <tr key={row.nome}>
-                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.nome}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.lancado)}</td>
-                    <td style={{ background: cellBg, color: '#1fa463', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.arrecadado)}</td>
-                    <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.saldo)}</td>
-                    <td style={{ background: cellBg, color: convCor(row.conversao), fontSize: 12, fontWeight: 700, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(row.conversao)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      {/* Tabela por tributo, com Canais de Arrecadação ao lado (largura menor, mesma altura
+          da tabela) a pedido do usuário. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+        <div style={card}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Conversão por Tributo · {g.ano}</span>
+          <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Tributo', 'Lançado', 'Arrecadado', 'A Recuperar', 'Conversão'].map((h, i) => (
+                    <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {g.tributos.map((row, ri) => {
+                  const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
+                  return (
+                    <tr key={row.nome}>
+                      <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.nome}</td>
+                      <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.lancado)}</td>
+                      <td style={{ background: cellBg, color: '#1fa463', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.arrecadado)}</td>
+                      <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.saldo)}</td>
+                      <td style={{ background: cellBg, color: convCor(row.conversao), fontSize: 12, fontWeight: 700, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(row.conversao)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Canais donut */}
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Canais de Arrecadação</span>
+            <span style={dots}>···</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+              <svg viewBox="0 0 200 200" width="220" height="220" style={{ maxWidth: '100%' }}>
+                <g transform="rotate(-90 100 100)">
+                  {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
+                </g>
+                <text x="100" y="98" fontSize="13" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtInt(g.totalBaixas).replace(/\.\d+$/, '')}</text>
+                <text x="100" y="113" fontSize="8" fill="#9098a8" textAnchor="middle" style={axisFont}>baixas</text>
+              </svg>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
+              {donut.slice(0, 5).map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                  <span style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nome}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtPct(s.pct)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
