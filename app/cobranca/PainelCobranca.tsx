@@ -538,7 +538,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
 
         {/* Canais donut */}
-        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ ...card, display: 'flex', flexDirection: 'column', maxWidth: 380, justifySelf: 'start' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Canais de Arrecadação</span>
             <span style={dots}>···</span>
