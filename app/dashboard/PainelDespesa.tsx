@@ -587,7 +587,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                         <g transform="rotate(-90 100 100)">
                           {segG.map((s, i) => (
                             <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
-                              onMouseEnter={() => setTip({ chart: 'categoria', title: s.grupo, l1: `${fmtReais(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
+                              onMouseEnter={() => setTip({ chart: 'categoria', title: s.grupo, l1: `${fmtAbrev(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
                               style={{ cursor: 'pointer' }} />
                           ))}
                         </g>
@@ -617,7 +617,7 @@ export default function PainelDespesa({ filtros }: { filtros: FiltrosDespesa }) 
                       return (
                         <circle key={i} cx="100" cy="100" r="66" fill="none" stroke={s.cor} strokeWidth="30"
                           strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)}
-                          onMouseEnter={() => setTip({ chart: 'categoria', title: s.nome, l1: `${fmtReais(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
+                          onMouseEnter={() => setTip({ chart: 'categoria', title: s.nome, l1: `${fmtAbrev(s.v)} (${fmtPct(s.pct)})`, l1c: s.cor, ...donutPos(-s.off, s.len) })}
                           onClick={() => { if (temGrupo) setCatDrill(s.nome) }} style={{ cursor: temGrupo ? 'pointer' : 'default' }} />
                       )
                     })}
