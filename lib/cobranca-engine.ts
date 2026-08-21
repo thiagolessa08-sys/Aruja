@@ -328,16 +328,18 @@ async function analiseConversaoRaw(ano: number, mes?: number): Promise<AnaliseCo
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}${filtroMes}`, 1),
-    // Milhares de operadores distintos (mesma situação de damsGeradas) — TOP + ORDER BY
-    // direto no SQL, "Demais operadores" calculado por diferença do total do ano.
+    // Milhares de operadores distintos (mesma situação de damsGeradas) — busca um universo bem
+    // maior que o TOP_N final (200) pra poder somar os códigos numéricos ao balde "Internet"
+    // (ver abaixo) ANTES de recortar o top 10 exibido; "Demais operadores" continua calculado
+    // por diferença do total do ano.
     agentQuery(`
-      SELECT TOP ${TOP_N_CONV_OPER} g.cd_usuario_gerador, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      SELECT TOP 200 g.cd_usuario_gerador, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}${filtroMes}
       GROUP BY g.cd_usuario_gerador
-      ORDER BY lancado DESC`, TOP_N_CONV_OPER),
+      ORDER BY lancado DESC`, 200),
   ])
 
   const porTributo: ConversaoItem[] = rank
@@ -358,19 +360,26 @@ async function analiseConversaoRaw(ano: number, mes?: number): Promise<AnaliseCo
   const totalLancadoAno = num(totalAnoR.rows[0]?.[0])
   const totalPagoAno = num(totalAnoR.rows[0]?.[1])
 
-  const operList = operR.rows
-    .map(row => {
-      const bruto = String(row[0] ?? '').trim()
-      // cd_usuario_gerador mistura formatos: login de atendente ("CalebeAM"), rótulo especial
-      // ("Internet"/"Schedule") e, para registros mais antigos, um código numérico interno sem
-      // nome cadastrado em nenhuma tabela do catálogo — nesses casos exibe só o número.
-      const nome = bruto || 'Não identificado'
-      return { nome, lancado: num(row[1]), pago: num(row[2]) }
-    })
+  const operBruto = operR.rows
+    .map(row => ({ nome: String(row[0] ?? '').trim() || 'Não identificado', lancado: num(row[1]), pago: num(row[2]) }))
     .filter(x => x.lancado > 0)
+
+  // cd_usuario_gerador mistura formatos: login de atendente ("CalebeAM"), rótulo especial
+  // ("Internet"/"Schedule") e, para registros mais antigos, um código numérico interno sem
+  // nome cadastrado em nenhuma tabela do catálogo — esses códigos puramente numéricos são
+  // autoemissão pelo portal e são somados ao balde "Internet" em vez de aparecerem soltos.
+  const operMap = new Map<string, { lancado: number; pago: number }>()
+  for (const x of operBruto) {
+    const chave = /^\d+$/.test(x.nome) ? 'Internet' : x.nome
+    const acc = operMap.get(chave) ?? { lancado: 0, pago: 0 }
+    acc.lancado += x.lancado
+    acc.pago += x.pago
+    operMap.set(chave, acc)
+  }
+  const operList = Array.from(operMap, ([nome, v]) => ({ nome, ...v })).sort((a, b) => b.lancado - a.lancado)
   const somaLancadoTop = operList.reduce((s, x) => s + x.lancado, 0)
   const somaPagoTop = operList.reduce((s, x) => s + x.pago, 0)
-  const porOperador: ConversaoItem[] = operList.map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
+  const porOperador: ConversaoItem[] = operList.slice(0, TOP_N_CONV_OPER).map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
   const restoLancado = totalLancadoAno - somaLancadoTop
   const restoPago = totalPagoAno - somaPagoTop
   if (restoLancado > 0) {
