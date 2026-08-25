@@ -229,4 +229,63 @@ Modelo (bairros mais inadimplentes, exercício 2026):
   JOIN pref_aruja_sp.tb_dsod_imovel_urbano iu ON iu.cd_imovel_urbano = t.cd_origem
   JOIN pref_aruja_sp.tb_dsod_cep c ON c.cd_cep = iu.cd_cep
   GROUP BY c.nm_bairro ORDER BY inadimplencia DESC
+
+## REGRA 9 — BASE DE SERVIÇOS (Reforma Tributária / IBS) — regra ÚNICA e OBRIGATÓRIA
+
+Quando a pergunta envolver BASE DE SERVIÇOS, base de cálculo do IBS, base da reforma
+tributária, ou o valor de serviços que sustenta a simulação do IBS, o valor OFICIAL é
+EXATAMENTE o do KPI "Base de Serviços" da tela de Reforma Tributária. NÃO calcule de outra
+forma e NÃO invente variação de filtro.
+
+FONTE: pref_aruja_sp.tb_dsod_nfse (uma linha = uma NFS-e).
+  • base (base de serviços) = SUM(vl_servicos)
+  • ISS sobre serviços      = SUM(vl_imposto)
+  • qt (nº de NFS-e)        = COUNT(*)
+  • ano                     = YEAR(dt_emissao)   (data de EMISSÃO da nota)
+
+OS DOIS FILTROS SÃO OBRIGATÓRIOS — sem eles o número sai errado:
+
+  1) JANELA DE ANOS: YEAR(dt_emissao) BETWEEN 2020 AND 2026
+     A coluna dt_emissao tem datas digitadas erradas que criam anos-lixo (verificado ao vivo:
+     1997, 2031, 2069, 2077, 2085, 2088, 2100, 2102, 2103, 2201, 2207, 2208, 2209, 2910, 2911,
+     3010, 3011, 3012, 3013). Sem a janela eles entram no resultado.
+
+  2) DESCARTE DE ANO-OUTLIER: HAVING SUM(vl_servicos) / COUNT(*) < 50000
+     Anos cujo valor MÉDIO por nota é implausível são erro de carga e devem ser descartados
+     INTEIROS. Caso real: 2021 tem base R$ 30,39 bi com média de R$ 107.777 por nota (o normal
+     é R$ 3 mil a R$ 5 mil). 2021 NÃO ENTRA em nenhum total, série, média ou comparação.
+
+QUERY OFICIAL (série por ano — reproduz a tela exatamente):
+  SELECT YEAR(dt_emissao) AS ano, COUNT(*) AS qt,
+         SUM(vl_servicos) AS base, SUM(vl_imposto) AS iss
+  FROM pref_aruja_sp.tb_dsod_nfse
+  WHERE YEAR(dt_emissao) BETWEEN 2020 AND 2026
+  GROUP BY YEAR(dt_emissao)
+  HAVING SUM(vl_servicos) / COUNT(*) < 50000
+  ORDER BY ano
+
+Para UM ano específico (só se o ano passar nos dois filtros acima):
+  SELECT COUNT(*) AS qt, SUM(vl_servicos) AS base, SUM(vl_imposto) AS iss
+  FROM pref_aruja_sp.tb_dsod_nfse WHERE YEAR(dt_emissao) = <ano>
+
+QUAL ANO O KPI MOSTRA: o KPI "Base de Serviços" da tela exibe SEMPRE o ANO MAIS RECENTE que
+passa nos dois filtros (hoje = 2026). Se o usuário não disser o ano, use esse — e diga qual ano
+está sendo usado. Alíquota ISS Efetiva = ISS ÷ base (é o que a tela chama de "Alíquota ISS
+Efetiva"), e o IBS Municipal Potencial da tela é uma SIMULAÇÃO paramétrica (base × alíquota
+escolhida no slider), não um valor apurado — nunca apresente o IBS como valor real/arrecadado.
+
+SANIDADE (validado na base do IQ em 25/08/2026):
+  2020 = 657,01 mi (224.982 NFS-e) · 2022 = 1,73 bi (341.507) · 2023 = 1,59 bi (466.597)
+  2024 = 1,86 bi (533.714) · 2025 = 1,96 bi (639.010) · 2026 = 2,01 bi (455.332)
+  KPI atual (2026): base R$ 2.011.054.412,99 · ISS R$ 68.332.902,99 · alíq. efetiva 3,40%
+  ⚠️ 2021 está AUSENTE da série de propósito (outlier). A série tem esse buraco — não
+  interpole, não estime e não avise que "faltou dado": explique que 2021 foi descartado por
+  inconsistência de carga.
+
+SE O USUÁRIO PEDIR 2021 EXPLICITAMENTE: não devolva o valor bruto (R$ 30,39 bi) como se fosse
+válido. Diga que o ano está descartado por erro de carga (média de R$ 107.777 por nota) e ofereça
+os anos válidos ao redor.
+
+NUNCA use para base de serviços: tb_dsod_nfse_item, tb_dsod_nfse_parcela, FATO_BIORC_* nem o
+lançado/arrecadado de ISS da REGRA 4. São outras métricas e vão divergir do KPI da tela.
 `

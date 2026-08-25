@@ -181,12 +181,45 @@ interno e `no_logr` é o número da casa. Fazer JOIN com `tb_dsod_cep` (por `cd_
 
 **Implementação:** `app/api/contribuinte/*`.
 
-## 9. Reforma Tributária
+## 9. Reforma Tributária — Base de Serviços (valor oficial, vale no chat)
 
-**Regra:** calculadora paramétrica do IBS sobre a base de serviços (`tb_dsod_nfse.vl_servicos`).
-⚠️ 2021 é outlier de dado (base R$30 bi) → filtrado.
+**Regra:** o valor de **Base de Serviços** é sempre o do KPI da tela de Reforma Tributária —
+não existe cálculo alternativo. Fonte `pref_aruja_sp.tb_dsod_nfse` (1 linha = 1 NFS-e):
+`base = SUM(vl_servicos)` · `ISS = SUM(vl_imposto)` · `qt = COUNT(*)` · ano = `YEAR(dt_emissao)`.
 
-**Implementação:** `app/api/reforma/base/route.ts`, `app/reforma-tributaria/page.tsx`.
+Os **dois filtros são obrigatórios** — sem eles o número sai errado:
+
+1. **Janela de anos:** `YEAR(dt_emissao) BETWEEN 2020 AND 2026`. A coluna `dt_emissao` tem datas
+   digitadas erradas que criam anos-lixo (verificado ao vivo: 1997, 2031, 2069, 2077, 2085, 2088,
+   2100, 2102, 2103, 2201, 2207–2209, 2910, 2911, 3010–3013).
+2. **Descarte de ano-outlier:** `HAVING SUM(vl_servicos) / COUNT(*) < 50000`. Ano com valor médio
+   por nota implausível é erro de carga e sai **inteiro**. ⚠️ Caso real: **2021** tem base
+   R$ 30,39 bi com média de R$ 107.777/nota (normal é R$ 3–5 mil) → descartado. A série fica com
+   buraco em 2021 de propósito; não interpolar nem estimar.
+
+```sql
+SELECT YEAR(dt_emissao) AS ano, COUNT(*) AS qt,
+       SUM(vl_servicos) AS base, SUM(vl_imposto) AS iss
+FROM pref_aruja_sp.tb_dsod_nfse
+WHERE YEAR(dt_emissao) BETWEEN 2020 AND 2026
+GROUP BY YEAR(dt_emissao)
+HAVING SUM(vl_servicos) / COUNT(*) < 50000
+ORDER BY ano
+```
+
+O KPI exibe sempre o **ano mais recente que passa nos dois filtros** (hoje = 2026).
+`Alíquota ISS Efetiva = ISS ÷ base`. O **IBS Municipal Potencial** é *simulação* paramétrica
+(base × alíquota do slider) — nunca apresentar como valor apurado/arrecadado.
+
+**Sanidade (base do IQ, 25/08/2026):** 2020 = 657,01 mi (224.982 NFS-e) · 2022 = 1,73 bi (341.507) ·
+2023 = 1,59 bi (466.597) · 2024 = 1,86 bi (533.714) · 2025 = 1,96 bi (639.010) ·
+**2026 = 2,01 bi (455.332), ISS 68,33 mi, alíq. efetiva 3,40%**.
+
+Não usar para base de serviços: `tb_dsod_nfse_item`, `tb_dsod_nfse_parcela`, `FATO_BIORC_*` nem o
+lançado/arrecadado de ISS da REGRA 4 — são outras métricas e divergem do KPI.
+
+**Implementação:** `app/api/reforma/base/route.ts`, `app/reforma-tributaria/page.tsx`,
+`lib/regras-negocio.ts` (REGRA 9 — injetada no system prompt do chat).
 
 ---
 
