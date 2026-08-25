@@ -140,7 +140,7 @@ const FALLBACK_ANALISE: AnaliseConversao = {
     { nome: 'BeatrizPS', lancado: 21721801.66, arrecadado: 6879338.74, conversao: 31.7 },
     { nome: 'Schedule', lancado: 8996615.25, arrecadado: 6967863.25, conversao: 77.4 },
     { nome: 'JoaoRSN', lancado: 5419757.08, arrecadado: 3645521.15, conversao: 67.3 },
-    { nome: 'Demais operadores', lancado: 98290260.28, arrecadado: 75503551.26, conversao: 76.8 },
+    { nome: 'Internet', lancado: 98290260.28, arrecadado: 75503551.26, conversao: 76.8 },
   ],
 }
 
@@ -404,8 +404,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             const itens = dimAtual === 'tributo' ? an.porTributo : dimAtual === 'periodo' ? an.porPeriodo : an.porOperador
             if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados para esta visão.</div>
             const maxLanc = Math.max(1, ...itens.map(i => i.lancado))
+            // "Por Operador" traz todos os atendentes nomeados (sem cortar num "Demais") — pode
+            // passar de 80 linhas. Altura travada com scroll interno pra não esticar o card;
+            // Por Tributo/Por Período (poucos itens) cabem inteiros aqui, sem barra de rolagem.
             return (
-              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13, maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
                 {itens.map(item => {
                   const cor = convCor(item.conversao)
                   const w = Math.max(3, 100 * item.lancado / maxLanc)
