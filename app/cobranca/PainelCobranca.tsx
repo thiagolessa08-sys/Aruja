@@ -210,6 +210,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [damDrillMesData, setDamDrillMesData] = useState<DamMes[] | null>(null)
   const [tipDamDrill, setTipDamDrill] = useState<{ left: number; top: number; label: string; qt: number; pagas: number } | null>(null)
   const [buscaDam, setBuscaDam] = useState('')
+  // Ao clicar num ano em "Por Período" (Análise de Conversão), o gráfico "Por período (mês)"
+  // do painel DAM passa a mostrar os meses DAQUELE ano em vez do exercício global da tela.
+  const [conversaoPeriodoAno, setConversaoPeriodoAno] = useState<number | null>(null)
+  const [damsPeriodo, setDamsPeriodo] = useState<DamsGeradas | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
@@ -229,6 +233,8 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setDamDrillOperador(null)
     setDamDrillMesData(null)
     setBuscaDam('')
+    setConversaoPeriodoAno(null)
+    setDamsPeriodo(null)
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => {
@@ -296,6 +302,15 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     const qs = new URLSearchParams({ tipo: 'operador', nome: o.nome, ano: String(ano), ...(mes ? { mes: String(mes) } : {}) })
     fetch(`/api/cobranca/dams-drill-mes?${qs}`).then(r => r.ok ? r.json() : null)
       .then(res => { if (res && !res.error && Array.isArray(res.porMes)) setDamDrillMesData(res.porMes) }).catch(() => {})
+  }
+
+  function selecionarPeriodoAno(anoSel: number) {
+    if (conversaoPeriodoAno === anoSel) { setConversaoPeriodoAno(null); setDamsPeriodo(null); return }
+    setConversaoPeriodoAno(anoSel)
+    setDamsPeriodo(null)
+    const sufMes = mes ? `&mes=${mes}` : ''
+    fetch(`/api/cobranca/dams?ano=${anoSel}${sufMes}`).then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && typeof x.total === 'number') setDamsPeriodo(x) }).catch(() => {})
   }
 
   const g = d ?? FALLBACK
@@ -419,7 +434,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam('') }}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null) }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',
@@ -472,10 +487,14 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 {itensFiltrados.map(item => {
                   const cor = convCor(item.conversao)
                   const w = Math.max(3, 100 * item.lancado / maxLanc)
+                  const selecionado = dimAtual === 'periodo' && conversaoPeriodoAno === Number(item.nome)
                   return (
-                    <div key={item.nome}>
+                    <div key={item.nome}
+                      onClick={dimAtual === 'periodo' ? () => selecionarPeriodoAno(Number(item.nome)) : undefined}
+                      title={dimAtual === 'periodo' ? 'Clique para ver os meses deste ano no gráfico DAM' : undefined}
+                      style={dimAtual === 'periodo' ? { cursor: 'pointer', padding: 6, margin: -6, borderRadius: 8, background: selecionado ? '#eef1fb' : 'transparent' } : undefined}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
-                        <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
+                        <span style={{ fontSize: 11.5, color: selecionado ? '#283e93' : '#3a4256', fontWeight: selecionado ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
                         <span style={{ fontSize: 11.5, fontWeight: 700, color: cor, flex: 'none', textAlign: 'right' }}>
                           {fmtPct(item.conversao)}
                           <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>{fmtAbrev(item.arrecadado)} de {fmtAbrev(item.lancado)} lançado</span>
@@ -537,35 +556,50 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                       Selecione uma lente em &quot;Análise de Conversão&quot; (Por Tributo, Por Período ou Por Operador) para detalhar as DAMs geradas.
                     </div>
                   </div>
-                ) : conversaoDim === 'periodo' ? (
-                  <>
-                    <div style={{ marginTop: 18, fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por período (mês)</div>
-                    <div style={{ height: 180, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDam(null)}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={dm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
-                          <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={1} />
-                          <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                          <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
-                          <Legend wrapperStyle={{ fontSize: 10.5 }} />
-                          <Bar dataKey="qt" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={22}
-                            onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDam({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
-                            onMouseLeave={() => setTipDam(null)} />
-                          <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={22}
-                            onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDam({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
-                            onMouseLeave={() => setTipDam(null)} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                      {tipDam ? (
-                        <div style={{ position: 'absolute', left: tipDam.left, top: tipDam.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
-                          {tipBox(tipDam.label, [
-                            { texto: `Geradas: ${fmtInt(tipDam.qt)} guias`, cor: '#283e93' },
-                            { texto: `Pagas: ${fmtInt(tipDam.pagas)} guias`, cor: '#1fa463' },
-                          ])}
+                ) : conversaoDim === 'periodo' ? (() => {
+                  // Selecionar um ano em "Por Período" (Análise de Conversão) troca os meses
+                  // exibidos aqui pelos daquele ano, em vez do exercício global da tela.
+                  const anoAtivo = conversaoPeriodoAno ?? dm.ano
+                  const dmPeriodo = conversaoPeriodoAno ? damsPeriodo : dm
+                  return (
+                    <>
+                      <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por período (mês) — {anoAtivo}</span>
+                        {conversaoPeriodoAno ? (
+                          <button onClick={() => { setConversaoPeriodoAno(null); setDamsPeriodo(null) }} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
+                        ) : null}
+                      </div>
+                      {!dmPeriodo ? (
+                        <div style={{ height: 180, marginTop: 10, borderRadius: 12, background: '#eef1f7' }} />
+                      ) : (
+                        <div style={{ height: 180, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDam(null)}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={dmPeriodo.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+                              <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={1} />
+                              <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                              <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+                              <Legend wrapperStyle={{ fontSize: 10.5 }} />
+                              <Bar dataKey="qt" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={22}
+                                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDam({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
+                                onMouseLeave={() => setTipDam(null)} />
+                              <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={22}
+                                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDam({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
+                                onMouseLeave={() => setTipDam(null)} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                          {tipDam ? (
+                            <div style={{ position: 'absolute', left: tipDam.left, top: tipDam.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                              {tipBox(tipDam.label, [
+                                { texto: `Geradas: ${fmtInt(tipDam.qt)} guias`, cor: '#283e93' },
+                                { texto: `Pagas: ${fmtInt(tipDam.pagas)} guias`, cor: '#1fa463' },
+                              ])}
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  </>
-                ) : conversaoDim === 'tributo' ? (
+                      )}
+                    </>
+                  )
+                })() : conversaoDim === 'tributo' ? (
                   damDrillTributo ? (
                     <div style={{ marginTop: 18 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
