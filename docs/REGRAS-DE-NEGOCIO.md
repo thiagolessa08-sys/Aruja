@@ -148,6 +148,45 @@ por regex em JS. Arrecadado/inadimplência do motor; transmissões/movimentado/t
 
 **Implementação:** `lib/itbi-filtros.ts`, `app/api/itbi/*`.
 
+### 7a. ITBI — Lançado (valor oficial, vale no chat)
+
+**Regra:** o valor de **Lançado de ITBI** é sempre o do KPI **"Total Lançado"** da tela de ITBI
+(Imobiliário) — não adaptar a regra do IPTU por conta própria, o ITBI tem ponte própria e um
+filtro a mais.
+
+```sql
+SELECT g.no_exercicio_lancamento AS ex, SUM(pm.vl_movimento) AS lancado
+FROM pref_aruja_sp.tb_dsod_guias g
+JOIN pref_aruja_sp.tb_dsod_itbi it ON it.cd_itbi = g.cd_origem   -- ponte 1:1 (NÃO existe g.cd_itbi)
+JOIN pref_aruja_sp.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+JOIN pref_aruja_sp.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+WHERE g.cd_tributo = 10
+  AND pm.cd_tipo_movimento IN (1,2,3)
+  AND p.no_parcela <> 0
+  AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+  AND it.vl_total > 0                                            -- só ITBI COM imposto
+GROUP BY g.no_exercicio_lancamento
+```
+
+Obrigatórios: ponte por `cd_origem`; `it.vl_total > 0` (filtro exclusivo do ITBI); ano =
+`no_exercicio_lancamento` (**nunca** `dt_geracao` — guia de 2025 pode ser reemitida em 2026);
+**nunca** juntar `tb_dsod_itbi_imovel_urbano` em agregado de valor (é 1:N e infla).
+Mês/YTD: `AND MONTH(p.dt_vencimento) <= <mês>`.
+
+⚠️ **O lançado oficial INCLUI guias Canceladas** (só exclui Recalculo/Validacao) — e no ITBI isso
+é enorme. Verificado ao vivo em 2026: **Cancelada R$ 16,89 mi (56,7%) × Ativa R$ 12,89 mi (43,3%)**,
+ou seja mais da metade do "lançado" é guia cancelada. Por isso a tela mostra **dois** KPIs, e o chat
+deve fazer o mesmo: `Total Lançado` (oficial) + `Lançado (Guias Ativas)` (mesma query com
+`AND g.ds_situacao = 'Ativa'`). Nunca entregar só o número cheio sem a ressalva.
+
+**Sanidade (base do IQ, 25/08/2026)** — Total Lançado / Lançado Ativas:
+2022 = 39,03 / 12,05 mi · 2023 = 54,77 / 17,46 mi · 2024 = 64,30 / 28,49 mi ·
+2025 = 46,86 / 31,46 mi · **2026 = 29,77 / 12,89 mi** (−36,5% vs 2025).
+
+**Implementação:** `lib/itbi-engine.ts` (`bucketsItbi`/`bucketsItbiAteMes`),
+`app/api/itbi/visao/route.ts`, `app/imobiliario/PainelItbi.tsx`,
+`lib/regras-negocio.ts` (REGRA 10 — injetada no system prompt do chat).
+
 ## 7b. Chat — busca por texto e anti-alucinação (Regra 5 do prompt)
 
 **Contexto:** o chat gerou uma análise falsa sobre um contribuinte ("Robinson Simões": CPF e

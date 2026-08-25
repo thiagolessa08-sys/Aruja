@@ -288,4 +288,66 @@ os anos válidos ao redor.
 
 NUNCA use para base de serviços: tb_dsod_nfse_item, tb_dsod_nfse_parcela, FATO_BIORC_* nem o
 lançado/arrecadado de ISS da REGRA 4. São outras métricas e vão divergir do KPI da tela.
+
+## REGRA 10 — LANÇADO DE ITBI — regra ÚNICA e OBRIGATÓRIA
+
+Quando a pergunta envolver VALOR LANÇADO DE ITBI ("quanto foi lançado de ITBI", "ITBI lançado",
+"lançamento de ITBI"), o valor OFICIAL é EXATAMENTE o do KPI "Total Lançado" da tela de ITBI
+(Imobiliário). NÃO calcule de outra forma e NÃO adapte a REGRA 4 do IPTU por conta própria — o
+ITBI tem uma PONTE PRÓPRIA e um filtro a mais.
+
+QUERY OFICIAL (reproduz o KPI exatamente — validada ao vivo):
+  SELECT g.no_exercicio_lancamento AS ex, SUM(pm.vl_movimento) AS lancado
+  FROM pref_aruja_sp.tb_dsod_guias g
+  JOIN pref_aruja_sp.tb_dsod_itbi it ON it.cd_itbi = g.cd_origem
+  JOIN pref_aruja_sp.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+  JOIN pref_aruja_sp.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+  WHERE g.cd_tributo = 10
+    AND pm.cd_tipo_movimento IN (1,2,3)
+    AND p.no_parcela <> 0
+    AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+    AND it.vl_total > 0
+  GROUP BY g.no_exercicio_lancamento
+
+TODOS os elementos abaixo são OBRIGATÓRIOS:
+  • cd_tributo = 10 (ITBI).
+  • PONTE 1:1 guia→itbi: JOIN tb_dsod_itbi it ON it.cd_itbi = g.cd_origem. A tb_dsod_guias NÃO
+    tem coluna cd_itbi (dá "Column not found"). A ponte é por cd_origem, igual ao imóvel no IPTU.
+  • it.vl_total > 0 — só ITBI COM imposto. Filtro exclusivo do ITBI, não existe no IPTU.
+  • pm.cd_tipo_movimento IN (1,2,3) e p.no_parcela <> 0.
+  • g.ds_situacao NOT IN ('Recalculo','Validacao').
+  • ANO = g.no_exercicio_lancamento (exercício de lançamento). NUNCA use dt_geracao da guia:
+    uma guia de exercício 2025 pode ter sido gerada/reemitida em 2026.
+  • NUNCA junte tb_dsod_itbi_imovel_urbano nos agregados de valor — é 1:N e INFLA o total.
+    Ela só serve para detalhar imóveis de uma transmissão, nunca para somar valor.
+
+FILTRO DE MÊS (quando o usuário pedir acumulado até um mês / YTD): acrescente
+  AND MONTH(p.dt_vencimento) <= <mês>
+(é por VENCIMENTO da parcela, mesma convenção do IPTU).
+
+⚠️ ATENÇÃO CRÍTICA — O LANÇADO OFICIAL INCLUI GUIAS CANCELADAS:
+O KPI "Total Lançado" exclui apenas Recalculo/Validacao, então CANCELADA ENTRA no total — e no
+ITBI isso é enorme, não é detalhe. Verificado ao vivo no exercício 2026:
+  Cancelada = R$ 16.885.985,11 (56,7%)  ·  Ativa = R$ 12.887.989,51 (43,3%)
+Ou seja: MAIS DA METADE do "lançado" de 2026 é guia cancelada.
+
+Por isso a tela mostra DOIS KPIs, e você deve fazer o mesmo:
+  • "Total Lançado"            = a query acima (inclui Cancelada) → é o valor OFICIAL.
+  • "Lançado (Guias Ativas)"   = a MESMA query trocando a linha de situação por
+                                 AND g.ds_situacao = 'Ativa'
+Ao responder sobre lançado de ITBI, apresente o OFICIAL e, SEMPRE que a diferença for relevante,
+cite também o de Guias Ativas explicando que o oficial inclui canceladas. NUNCA entregue só o
+número cheio sem essa ressalva — induz o usuário a superestimar o lançamento efetivo.
+
+QUAL ANO: se o usuário não disser, use o exercício mais recente com lançado > 0 (hoje = 2026) e
+diga qual ano está usando.
+
+SANIDADE (validado na base do IQ em 25/08/2026) — Total Lançado / Lançado Ativas:
+  2022 = 39,03 mi / 12,05 mi · 2023 = 54,77 mi / 17,46 mi · 2024 = 64,30 mi / 28,49 mi
+  2025 = 46,86 mi / 31,46 mi · 2026 = 29,77 mi / 12,89 mi
+  KPI atual (2026): Total Lançado R$ 29.773.974,62 · Guias Ativas R$ 12.887.989,51 (-36,5% vs 2025)
+
+As demais métricas de ITBI (arrecadado, em aberto, inadimplência, isento, suspenso) seguem a mesma
+base/ponte deste bloco com os filtros da REGRA 4 — mas sempre mantendo o JOIN tb_dsod_itbi e o
+it.vl_total > 0.
 `
