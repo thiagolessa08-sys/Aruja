@@ -209,6 +209,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [damDrillOperador, setDamDrillOperador] = useState<DamOperador | null>(null)
   const [damDrillMesData, setDamDrillMesData] = useState<DamMes[] | null>(null)
   const [tipDamDrill, setTipDamDrill] = useState<{ left: number; top: number; label: string; qt: number; pagas: number } | null>(null)
+  const [buscaDam, setBuscaDam] = useState('')
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
@@ -227,6 +228,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setDamDrillTributo(null)
     setDamDrillOperador(null)
     setDamDrillMesData(null)
+    setBuscaDam('')
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => {
@@ -417,7 +419,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null) }}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam('') }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',
@@ -603,22 +605,34 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   <div style={{ marginTop: 18 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por tributo</div>
                     <div style={{ fontSize: 10, color: '#9098a8', marginTop: 2 }}>Clique num tributo pra detalhar por mês.</div>
-                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
-                      {(() => {
-                        const maxTrib = Math.max(1, ...dm.porTributo.map(t => t.qt))
-                        return dm.porTributo.map((t, i) => (
-                          <div key={t.nome} onClick={() => selecionarDamTributo(t)} style={{ cursor: 'pointer' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
-                              <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
-                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(t.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(t.pagas)} pagas)</span></span>
-                            </div>
-                            <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${Math.max(3, 100 * t.qt / maxTrib).toFixed(1)}%`, borderRadius: 5, background: /^Demais tributos/.test(t.nome) ? '#c2c9d6' : DAM_CORES[i % DAM_CORES.length] }} />
-                            </div>
-                          </div>
-                        ))
-                      })()}
+                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '6px 12px' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                      <input value={buscaDam} onChange={e => setBuscaDam(e.target.value)} placeholder="Buscar por tributo…"
+                        style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 11.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+                      {buscaDam ? (
+                        <button onClick={() => setBuscaDam('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', fontSize: 12, padding: 0, flex: 'none', lineHeight: 1 }}>✕</button>
+                      ) : null}
                     </div>
+                    {(() => {
+                      const itens = dm.porTributo.filter(t => t.nome.toLowerCase().includes(buscaDam.trim().toLowerCase()))
+                      if (!itens.length) return <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '20px 0' }}>Nenhum resultado para &quot;{buscaDam}&quot;.</div>
+                      const maxTrib = Math.max(1, ...itens.map(t => t.qt))
+                      return (
+                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                          {itens.map((t, i) => (
+                            <div key={t.nome} onClick={() => selecionarDamTributo(t)} style={{ cursor: 'pointer' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
+                                <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(t.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(t.pagas)} pagas)</span></span>
+                              </div>
+                              <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.max(3, 100 * t.qt / maxTrib).toFixed(1)}%`, borderRadius: 5, background: /^Demais tributos/.test(t.nome) ? '#c2c9d6' : DAM_CORES[i % DAM_CORES.length] }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </div>
                   )
                 ) : (
@@ -661,24 +675,36 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   <div style={{ marginTop: 18 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por operador</div>
                     <div style={{ fontSize: 10, color: '#9098a8', marginTop: 2 }}>Clique num operador pra detalhar por mês.</div>
+                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '6px 12px' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                      <input value={buscaDam} onChange={e => setBuscaDam(e.target.value)} placeholder="Buscar por operador…"
+                        style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 11.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+                      {buscaDam ? (
+                        <button onClick={() => setBuscaDam('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', fontSize: 12, padding: 0, flex: 'none', lineHeight: 1 }}>✕</button>
+                      ) : null}
+                    </div>
                     {/* Traz todos os atendentes nomeados (sem cortar num "Demais") — pode passar
                         de 70 linhas. Altura travada com scroll interno pra não esticar o card. */}
-                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
-                      {(() => {
-                        const maxOper = Math.max(1, ...dm.porOperador.map(o => o.qt))
-                        return dm.porOperador.map((o, i) => (
-                          <div key={o.nome} onClick={() => selecionarDamOperador(o)} style={{ cursor: 'pointer' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
-                              <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.nome}</span>
-                              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(o.pagas)} pagas)</span></span>
+                    {(() => {
+                      const itens = dm.porOperador.filter(o => o.nome.toLowerCase().includes(buscaDam.trim().toLowerCase()))
+                      if (!itens.length) return <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '20px 0' }}>Nenhum resultado para &quot;{buscaDam}&quot;.</div>
+                      const maxOper = Math.max(1, ...itens.map(o => o.qt))
+                      return (
+                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+                          {itens.map((o, i) => (
+                            <div key={o.nome} onClick={() => selecionarDamOperador(o)} style={{ cursor: 'pointer' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
+                                <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.nome}</span>
+                                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(o.pagas)} pagas)</span></span>
+                              </div>
+                              <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.max(3, 100 * o.qt / maxOper).toFixed(1)}%`, borderRadius: 5, background: o.nome === 'Internet' ? '#c2c9d6' : CANAL_CORES[i % CANAL_CORES.length] }} />
+                              </div>
                             </div>
-                            <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${Math.max(3, 100 * o.qt / maxOper).toFixed(1)}%`, borderRadius: 5, background: o.nome === 'Internet' ? '#c2c9d6' : CANAL_CORES[i % CANAL_CORES.length] }} />
-                            </div>
-                          </div>
-                        ))
-                      })()}
-                    </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </div>
                   )
                 )}
