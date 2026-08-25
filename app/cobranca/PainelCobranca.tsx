@@ -202,6 +202,13 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [conversaoDim, setConversaoDim] = useState<'tributo' | 'periodo' | 'operador' | null>(null)
   const [buscaConversao, setBuscaConversao] = useState('')
   const [ordemConversao, setOrdemConversao] = useState<'desc' | 'asc'>('desc')
+  // Drill de 2º nível do painel DAM — ao clicar num tributo/operador em "Por Tributo"/"Por
+  // Operador", mostra geradas × pagas por mês só daquele item (não os 3 podem coexistir: um
+  // exclui o outro, e trocar de lente ou de ano/mês limpa a seleção).
+  const [damDrillTributo, setDamDrillTributo] = useState<DamTributo | null>(null)
+  const [damDrillOperador, setDamDrillOperador] = useState<DamOperador | null>(null)
+  const [damDrillMesData, setDamDrillMesData] = useState<DamMes[] | null>(null)
+  const [tipDamDrill, setTipDamDrill] = useState<{ left: number; top: number; label: string; qt: number; pagas: number } | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
@@ -217,6 +224,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setPotMesSel(null)
     setDevedoresMes(null)
     setDevedoresMesErro(false)
+    setDamDrillTributo(null)
+    setDamDrillOperador(null)
+    setDamDrillMesData(null)
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => {
@@ -264,6 +274,26 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     if (potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes) { setPotMesSel(null); setDevedoresMes(null); setDevedoresMesErro(false); return }
     setPotMesSel(m)
     buscarDevedoresMes(m)
+  }
+
+  function selecionarDamTributo(t: DamTributo) {
+    if (damDrillTributo?.nome === t.nome) { setDamDrillTributo(null); setDamDrillMesData(null); return }
+    setDamDrillOperador(null)
+    setDamDrillTributo(t)
+    setDamDrillMesData(null)
+    const qs = new URLSearchParams({ tipo: 'tributo', codigos: t.codigos.join(','), ano: String(ano), ...(mes ? { mes: String(mes) } : {}) })
+    fetch(`/api/cobranca/dams-drill-mes?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => { if (res && !res.error && Array.isArray(res.porMes)) setDamDrillMesData(res.porMes) }).catch(() => {})
+  }
+
+  function selecionarDamOperador(o: DamOperador) {
+    if (damDrillOperador?.nome === o.nome) { setDamDrillOperador(null); setDamDrillMesData(null); return }
+    setDamDrillTributo(null)
+    setDamDrillOperador(o)
+    setDamDrillMesData(null)
+    const qs = new URLSearchParams({ tipo: 'operador', nome: o.nome, ano: String(ano), ...(mes ? { mes: String(mes) } : {}) })
+    fetch(`/api/cobranca/dams-drill-mes?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => { if (res && !res.error && Array.isArray(res.porMes)) setDamDrillMesData(res.porMes) }).catch(() => {})
   }
 
   const g = d ?? FALLBACK
@@ -387,7 +417,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao('') }}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null) }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',
@@ -534,13 +564,50 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                     </div>
                   </>
                 ) : conversaoDim === 'tributo' ? (
+                  damDrillTributo ? (
+                    <div style={{ marginTop: 18 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span title={damDrillTributo.nome} style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{damDrillTributo.nome} — por mês</span>
+                        <button onClick={() => { setDamDrillTributo(null); setDamDrillMesData(null) }} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
+                      </div>
+                      {!damDrillMesData ? (
+                        <div style={{ height: 180, marginTop: 10, borderRadius: 12, background: '#eef1f7' }} />
+                      ) : (
+                        <div style={{ height: 180, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDamDrill(null)}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={damDrillMesData.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+                              <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={1} />
+                              <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                              <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+                              <Legend wrapperStyle={{ fontSize: 10.5 }} />
+                              <Bar dataKey="qt" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={22}
+                                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDamDrill({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
+                                onMouseLeave={() => setTipDamDrill(null)} />
+                              <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={22}
+                                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDamDrill({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
+                                onMouseLeave={() => setTipDamDrill(null)} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                          {tipDamDrill ? (
+                            <div style={{ position: 'absolute', left: tipDamDrill.left, top: tipDamDrill.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                              {tipBox(tipDamDrill.label, [
+                                { texto: `Geradas: ${fmtInt(tipDamDrill.qt)} guias`, cor: '#283e93' },
+                                { texto: `Pagas: ${fmtInt(tipDamDrill.pagas)} guias`, cor: '#1fa463' },
+                              ])}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
                   <div style={{ marginTop: 18 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por tributo</div>
+                    <div style={{ fontSize: 10, color: '#9098a8', marginTop: 2 }}>Clique num tributo pra detalhar por mês.</div>
                     <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
                       {(() => {
                         const maxTrib = Math.max(1, ...dm.porTributo.map(t => t.qt))
                         return dm.porTributo.map((t, i) => (
-                          <div key={t.nome}>
+                          <div key={t.nome} onClick={() => selecionarDamTributo(t)} style={{ cursor: 'pointer' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
                               <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
                               <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(t.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(t.pagas)} pagas)</span></span>
@@ -553,16 +620,54 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                       })()}
                     </div>
                   </div>
+                  )
                 ) : (
+                  damDrillOperador ? (
+                    <div style={{ marginTop: 18 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span title={damDrillOperador.nome} style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{damDrillOperador.nome} — por mês</span>
+                        <button onClick={() => { setDamDrillOperador(null); setDamDrillMesData(null) }} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
+                      </div>
+                      {!damDrillMesData ? (
+                        <div style={{ height: 180, marginTop: 10, borderRadius: 12, background: '#eef1f7' }} />
+                      ) : (
+                        <div style={{ height: 180, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDamDrill(null)}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={damDrillMesData.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+                              <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={1} />
+                              <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                              <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+                              <Legend wrapperStyle={{ fontSize: 10.5 }} />
+                              <Bar dataKey="qt" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={22}
+                                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDamDrill({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
+                                onMouseLeave={() => setTipDamDrill(null)} />
+                              <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={22}
+                                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as DamMes & { label: string }; setTipDamDrill({ left: data.x + data.width / 2, top: data.y, label: p.label, qt: p.qt, pagas: p.pagas }) }}
+                                onMouseLeave={() => setTipDamDrill(null)} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                          {tipDamDrill ? (
+                            <div style={{ position: 'absolute', left: tipDamDrill.left, top: tipDamDrill.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+                              {tipBox(tipDamDrill.label, [
+                                { texto: `Geradas: ${fmtInt(tipDamDrill.qt)} guias`, cor: '#283e93' },
+                                { texto: `Pagas: ${fmtInt(tipDamDrill.pagas)} guias`, cor: '#1fa463' },
+                              ])}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
                   <div style={{ marginTop: 18 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por operador</div>
+                    <div style={{ fontSize: 10, color: '#9098a8', marginTop: 2 }}>Clique num operador pra detalhar por mês.</div>
                     {/* Traz todos os atendentes nomeados (sem cortar num "Demais") — pode passar
                         de 70 linhas. Altura travada com scroll interno pra não esticar o card. */}
                     <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
                       {(() => {
                         const maxOper = Math.max(1, ...dm.porOperador.map(o => o.qt))
                         return dm.porOperador.map((o, i) => (
-                          <div key={o.nome}>
+                          <div key={o.nome} onClick={() => selecionarDamOperador(o)} style={{ cursor: 'pointer' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, gap: 8 }}>
                               <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.nome}</span>
                               <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(o.pagas)} pagas)</span></span>
@@ -575,6 +680,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                       })()}
                     </div>
                   </div>
+                  )
                 )}
               </>
             )

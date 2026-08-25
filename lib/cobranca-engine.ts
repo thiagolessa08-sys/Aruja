@@ -217,6 +217,60 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
   return { ano, total, totalPagas, porMes, porTributo, porOperador }
 }
 
+export type DamDrillFiltro =
+  | { tipo: 'tributo'; codigos: number[] }
+  | { tipo: 'operador'; nome: string }
+
+/**
+ * Drill de 2º nível do painel DAM — geradas × pagas por mês, restrito a um tributo (ou grupo
+ * "Demais tributos", daí `codigos` ser uma lista) ou a um operador específico da lente
+ * escolhida em "Por Tributo"/"Por Operador". O balde "Internet" de porOperador combina o
+ * cd_usuario_gerador literal "Internet" com todo código sem letra (CPF/numérico) — o filtro
+ * reproduz essa mesma composição para o "geradas" do drill bater com o qt exibido na linha
+ * (COUNT(*) por dt_geracao não se repete entre meses). Já "pagas" pode somar mais que o valor
+ * da linha: cada mês conta DAMs distintas pagas NAQUELE mês (COUNT DISTINCT por dt_baixa) — uma
+ * DAM com parcelas pagas em meses diferentes aparece em mais de um mês aqui, enquanto o total da
+ * linha é um único COUNT DISTINCT sobre o ano inteiro (mesmo fenômeno de comparativoDamPorId).
+ */
+export async function damsDrillMes(ano: number, mes: number | undefined, filtro: DamDrillFiltro): Promise<DamMes[]> {
+  const chave = filtro.tipo === 'tributo' ? `trib:${filtro.codigos.join(',')}` : `oper:${filtro.nome}`
+  return cached(`damsDrill:${ano}:${mes ?? ''}:${chave}`, TTL_15MIN, () => damsDrillMesRaw(ano, mes, filtro))
+}
+
+async function damsDrillMesRaw(ano: number, mes: number | undefined, filtro: DamDrillFiltro): Promise<DamMes[]> {
+  const filtroGuia = filtro.tipo === 'tributo'
+    ? `g.cd_tributo IN (${filtro.codigos.join(',')})`
+    : filtro.nome === 'Internet'
+      ? `(g.cd_usuario_gerador = 'Internet' OR PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) = 0)`
+      : `g.cd_usuario_gerador = '${filtro.nome.replace(/'/g, "''")}'`
+  const filtroMes = mes ? ` AND MONTH(dt_geracao) <= ${mes}` : ''
+  const filtroMesBaixa = mes ? ` AND MONTH(pb.dt_baixa) <= ${mes}` : ''
+  const [geradasR, pagasR] = await Promise.all([
+    agentQuery(`
+      SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias g
+      WHERE YEAR(dt_geracao) = ${ano}${filtroMes} AND ${filtroGuia}
+      GROUP BY MONTH(dt_geracao)`, 20),
+    agentQuery(`
+      SELECT MONTH(pb.dt_baixa) AS mes, COUNT(DISTINCT p.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(pb.dt_baixa) = ${ano}${filtroMesBaixa} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0 AND ${filtroGuia}
+      GROUP BY MONTH(pb.dt_baixa)`, 20),
+  ])
+
+  const geradasMap = new Map<number, number>()
+  for (const row of geradasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) geradasMap.set(m, num(row[1])) }
+  const pagasMap = new Map<number, number>()
+  for (const row of pagasR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) pagasMap.set(m, num(row[1])) }
+
+  const porMes: DamMes[] = []
+  for (let m = 1; m <= 12; m++) porMes.push({ mes: m, qt: geradasMap.get(m) ?? 0, pagas: pagasMap.get(m) ?? 0 })
+  return porMes
+}
+
 export interface ResultadoMes { mes: number; geradas: number; recebidas: number; pagas: number }
 export interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; totalPagas: number; porMes: ResultadoMes[] }
 
