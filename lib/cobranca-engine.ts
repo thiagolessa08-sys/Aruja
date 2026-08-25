@@ -142,15 +142,17 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
       LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
       WHERE YEAR(g.dt_geracao) = ${ano}${filtroMes}
       GROUP BY g.cd_tributo, t.ds_tributo`, 200),
-    // Milhares de valores distintos (muitos são CPF/CNPJ de contribuintes que geraram a
-    // própria guia pelo portal) — TOP + ORDER BY direto no SQL, "Demais" calculado por
-    // diferença do total (evita trazer a cauda toda pro JS).
+    // cd_usuario_gerador mistura login de atendente ("CalebeAM") com CPF/CNPJ/código numérico
+    // de contribuintes que geraram a própria guia pelo portal (milhares de valores distintos) —
+    // PATINDEX filtra só os valores com pelo menos uma letra (atendentes reais + o literal
+    // "Internet"), universo pequeno, então busca TODOS sem TOP; o resto (autoemitido) some ao
+    // balde "Internet" por diferença do total do ano.
     agentQuery(`
-      SELECT TOP ${TOP_N_DAM_OPER} cd_usuario_gerador, COUNT(*) AS qt
+      SELECT cd_usuario_gerador, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
       WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
-      GROUP BY cd_usuario_gerador
-      ORDER BY qt DESC`, TOP_N_DAM_OPER),
+        AND PATINDEX('%[A-Za-z]%', cd_usuario_gerador) > 0
+      GROUP BY cd_usuario_gerador`, 300),
     agentQuery(`SELECT COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagas}`, 1),
     agentQuery(`SELECT MONTH(pb.dt_baixa) AS mes, COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagas} GROUP BY MONTH(pb.dt_baixa)`, 20),
     agentQuery(`SELECT g.cd_tributo AS cd, COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagas} GROUP BY g.cd_tributo`, 200),
@@ -193,15 +195,24 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
   const operPagasMap = new Map<string, number>()
   for (const row of operPagasR.rows) operPagasMap.set(String(row[0] ?? '').trim(), num(row[1]))
 
-  const operList = operR.rows
-    .map(row => { const bruto = String(row[0] ?? '').trim(); return { nome: bruto || 'Não identificado', qt: num(row[1]), pagas: operPagasMap.get(bruto) ?? 0 } })
-    .filter(x => x.qt > 0)
-  const somaTopOper = operList.reduce((s, x) => s + x.qt, 0)
-  const somaTopOperPagas = operList.reduce((s, x) => s + x.pagas, 0)
-  const porOperador: DamOperador[] = [...operList]
-  const restoOper = total - somaTopOper
-  const restoOperPagas = Math.max(0, totalPagas - somaTopOperPagas)
-  if (restoOper > 0) porOperador.push({ nome: 'Demais operadores', qt: restoOper, pagas: restoOperPagas })
+  // Todos os operadores NOMEADOS (login de atendente com letra, incluindo o literal "Internet")
+  // entram individualmente — nada fica escondido num "Demais". O que sobra do total do ano
+  // (autoemissão via CPF/código numérico) é somado ao balde "Internet" — se "Internet" já
+  // existir na lista (é um cd_usuario_gerador literal), soma nele em vez de duplicar a linha.
+  const operNomeados = operR.rows
+    .map(row => ({ nome: String(row[0] ?? '').trim(), qt: num(row[1]), pagas: operPagasMap.get(String(row[0] ?? '').trim()) ?? 0 }))
+    .filter(x => x.nome && x.qt > 0)
+  const somaNomeadoQt = operNomeados.reduce((s, x) => s + x.qt, 0)
+  const somaNomeadoPagas = operNomeados.reduce((s, x) => s + x.pagas, 0)
+  const restoQt = Math.max(0, total - somaNomeadoQt)
+  const restoPagas = Math.max(0, totalPagas - somaNomeadoPagas)
+  const operList = [...operNomeados]
+  if (restoQt > 0) {
+    const internetExistente = operList.find(x => x.nome === 'Internet')
+    if (internetExistente) { internetExistente.qt += restoQt; internetExistente.pagas += restoPagas }
+    else operList.push({ nome: 'Internet', qt: restoQt, pagas: restoPagas })
+  }
+  const porOperador: DamOperador[] = operList.sort((a, b) => b.qt - a.qt)
 
   return { ano, total, totalPagas, porMes, porTributo, porOperador }
 }
@@ -406,7 +417,12 @@ async function analiseConversaoRaw(ano: number, mes?: number): Promise<AnaliseCo
   const internetLancado = Math.max(0, totalLancadoAno - somaNomeadoLancado)
   const internetPago = Math.max(0, totalPagoAno - somaNomeadoPago)
   const operList = [...operNomeados]
-  if (internetLancado > 0) operList.push({ nome: 'Internet', lancado: internetLancado, pago: internetPago })
+  if (internetLancado > 0) {
+    // "Internet" pode já existir como cd_usuario_gerador literal — soma nele em vez de duplicar.
+    const internetExistente = operList.find(x => x.nome === 'Internet')
+    if (internetExistente) { internetExistente.lancado += internetLancado; internetExistente.pago += internetPago }
+    else operList.push({ nome: 'Internet', lancado: internetLancado, pago: internetPago })
+  }
   const porOperador: ConversaoItem[] = operList
     .sort((a, b) => b.lancado - a.lancado)
     .map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))

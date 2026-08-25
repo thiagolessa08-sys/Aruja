@@ -556,7 +556,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 ) : (
                   <div style={{ marginTop: 18 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por operador</div>
-                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11 }}>
+                    {/* Traz todos os atendentes nomeados (sem cortar num "Demais") — pode passar
+                        de 70 linhas. Altura travada com scroll interno pra não esticar o card. */}
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 11, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
                       {(() => {
                         const maxOper = Math.max(1, ...dm.porOperador.map(o => o.qt))
                         return dm.porOperador.map((o, i) => (
@@ -566,7 +568,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                               <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtInt(o.qt)} <span style={{ fontSize: 10, fontWeight: 600, color: '#1fa463' }}>({fmtInt(o.pagas)} pagas)</span></span>
                             </div>
                             <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${Math.max(3, 100 * o.qt / maxOper).toFixed(1)}%`, borderRadius: 5, background: o.nome === 'Demais operadores' ? '#c2c9d6' : CANAL_CORES[i % CANAL_CORES.length] }} />
+                              <div style={{ height: '100%', width: `${Math.max(3, 100 * o.qt / maxOper).toFixed(1)}%`, borderRadius: 5, background: o.nome === 'Internet' ? '#c2c9d6' : CANAL_CORES[i % CANAL_CORES.length] }} />
                             </div>
                           </div>
                         ))
