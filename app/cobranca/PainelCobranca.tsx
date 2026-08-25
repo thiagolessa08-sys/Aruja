@@ -201,6 +201,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // depois que uma lente for de fato clicada (ver uso de conversaoDim no painel de DAM).
   const [conversaoDim, setConversaoDim] = useState<'tributo' | 'periodo' | 'operador' | null>(null)
   const [buscaConversao, setBuscaConversao] = useState('')
+  const [ordemConversao, setOrdemConversao] = useState<'desc' | 'asc'>('desc')
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
@@ -404,9 +405,13 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             const dimAtual = conversaoDim ?? 'tributo'
             const itens = dimAtual === 'tributo' ? an.porTributo : dimAtual === 'periodo' ? an.porPeriodo : an.porOperador
             if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados para esta visão.</div>
-            const itensFiltrados = buscaConversao.trim()
+            // Por Período ordena pelo ano (não pelo lançado) — "maior p/ menor" = mais recente
+            // primeiro, o que faz mais sentido pra uma linha do tempo do que ordenar por valor.
+            const valorOrdenacao = (item: ConversaoItem) => dimAtual === 'periodo' ? Number(item.nome) : item.lancado
+            const itensFiltrados = (buscaConversao.trim()
               ? itens.filter(i => i.nome.toLowerCase().includes(buscaConversao.trim().toLowerCase()))
-              : itens
+              : [...itens]
+            ).sort((a, b) => ordemConversao === 'desc' ? valorOrdenacao(b) - valorOrdenacao(a) : valorOrdenacao(a) - valorOrdenacao(b))
             const maxLanc = Math.max(1, ...itensFiltrados.map(i => i.lancado))
             const placeholderLabel = dimAtual === 'tributo' ? 'tributo' : dimAtual === 'periodo' ? 'período' : 'operador'
             // "Por Operador" traz todos os atendentes nomeados (sem cortar num "Demais") — pode
@@ -414,13 +419,19 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             // Por Tributo/Por Período (poucos itens) cabem inteiros aqui, sem barra de rolagem.
             return (
               <>
-                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-                  <input value={buscaConversao} onChange={e => setBuscaConversao(e.target.value)} placeholder={`Buscar por ${placeholderLabel}…`}
-                    style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
-                  {buscaConversao ? (
-                    <button onClick={() => setBuscaConversao('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', fontSize: 13, padding: 0, flex: 'none', lineHeight: 1 }}>✕</button>
-                  ) : null}
+                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                    <input value={buscaConversao} onChange={e => setBuscaConversao(e.target.value)} placeholder={`Buscar por ${placeholderLabel}…`}
+                      style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+                    {buscaConversao ? (
+                      <button onClick={() => setBuscaConversao('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', fontSize: 13, padding: 0, flex: 'none', lineHeight: 1 }}>✕</button>
+                    ) : null}
+                  </div>
+                  <button onClick={() => setOrdemConversao(o => o === 'desc' ? 'asc' : 'desc')} title={dimAtual === 'periodo' ? 'Ordenar por ano' : 'Ordenar por lançado'}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, border: '1px solid #e3e8f1', background: '#fff', borderRadius: 12, padding: '7px 12px', fontSize: 11.5, fontWeight: 600, color: '#3a4256', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>
+                    {ordemConversao === 'desc' ? '↓ Maior p/ menor' : '↑ Menor p/ maior'}
+                  </button>
                 </div>
                 {!itensFiltrados.length ? (
                   <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Nenhum resultado para &quot;{buscaConversao}&quot;.</div>
