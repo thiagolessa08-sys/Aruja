@@ -200,6 +200,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // como padrão visual, mas o painel de DAM ao lado só detalha por tributo/período/operador
   // depois que uma lente for de fato clicada (ver uso de conversaoDim no painel de DAM).
   const [conversaoDim, setConversaoDim] = useState<'tributo' | 'periodo' | 'operador' | null>(null)
+  const [buscaConversao, setBuscaConversao] = useState('')
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
@@ -385,7 +386,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => setConversaoDim(key)}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao('') }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',
@@ -403,13 +404,29 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             const dimAtual = conversaoDim ?? 'tributo'
             const itens = dimAtual === 'tributo' ? an.porTributo : dimAtual === 'periodo' ? an.porPeriodo : an.porOperador
             if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados para esta visão.</div>
-            const maxLanc = Math.max(1, ...itens.map(i => i.lancado))
+            const itensFiltrados = buscaConversao.trim()
+              ? itens.filter(i => i.nome.toLowerCase().includes(buscaConversao.trim().toLowerCase()))
+              : itens
+            const maxLanc = Math.max(1, ...itensFiltrados.map(i => i.lancado))
+            const placeholderLabel = dimAtual === 'tributo' ? 'tributo' : dimAtual === 'periodo' ? 'período' : 'operador'
             // "Por Operador" traz todos os atendentes nomeados (sem cortar num "Demais") — pode
             // passar de 80 linhas. Altura travada com scroll interno pra não esticar o card;
             // Por Tributo/Por Período (poucos itens) cabem inteiros aqui, sem barra de rolagem.
             return (
-              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13, maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
-                {itens.map(item => {
+              <>
+                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                  <input value={buscaConversao} onChange={e => setBuscaConversao(e.target.value)} placeholder={`Buscar por ${placeholderLabel}…`}
+                    style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+                  {buscaConversao ? (
+                    <button onClick={() => setBuscaConversao('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', fontSize: 13, padding: 0, flex: 'none', lineHeight: 1 }}>✕</button>
+                  ) : null}
+                </div>
+                {!itensFiltrados.length ? (
+                  <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Nenhum resultado para &quot;{buscaConversao}&quot;.</div>
+                ) : (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13, maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
+                {itensFiltrados.map(item => {
                   const cor = convCor(item.conversao)
                   const w = Math.max(3, 100 * item.lancado / maxLanc)
                   return (
@@ -427,7 +444,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                     </div>
                   )
                 })}
-              </div>
+                </div>
+                )}
+              </>
             )
           })()}
         </div>
