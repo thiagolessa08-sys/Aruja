@@ -577,7 +577,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                       ) : (
                         <div style={{ height: 180, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDamDrill(null)}>
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={damDrillMesData.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+                            <BarChart data={damDrillMesData.filter(m => m.qt > 0 || m.pagas > 0).map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
                               <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={1} />
                               <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                               <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
@@ -647,7 +647,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                       ) : (
                         <div style={{ height: 180, marginTop: 10, position: 'relative' }} onMouseLeave={() => setTipDamDrill(null)}>
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={damDrillMesData.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+                            <BarChart data={damDrillMesData.filter(m => m.qt > 0 || m.pagas > 0).map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 30, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
                               <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} interval={1} />
                               <YAxis width={40} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 9.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                               <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
