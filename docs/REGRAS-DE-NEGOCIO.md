@@ -294,11 +294,26 @@ antigo) ÷ venal mais antigo, só transmissões com `vl_venal > 0`. Partes em
 Proprietário = `i.cd_contr_proprietario`; se espólio, possuidor de fato = `i.cd_contr_posseiro`.
 
 **Sanidade (base do IQ, 25/08/2026 — 2026 por `dt_lancamento`, 798 transmissões):** distribuição
-1 = 578 imóveis · 2 = 72 · 3–5 = 16 · 6+ = 2 · "Valor ≤ venal" = **151 imóveis**. Mais transmitidos:
-imóvel **3264** (NE11140617.000) = **14** transmissões / venal R$ 1.285.970,14 · 6662 = 9 /
-R$ 210.159,42 · 28890 = 5 / R$ 23.799.913,75 · 32945 = 4 / R$ 1.584.655,42 · 18739 = 4 /
-R$ 212.446,40. Note que **quantidade e venal rankeiam diferente** (28890 tem 5 transmissões mas o
-maior venal) — ao dizer "imóvel mais transmitido", deixar claro que o critério é a quantidade.
+1 = 578 imóveis · 2 = 72 · 3–5 = 16 · 6+ = 2 · "Valor ≤ venal" = **151 imóveis**. Mais transmitidos
+(o valor é a coluna "venal" **da tela**, que é *soma* — ver alerta abaixo): imóvel **3264**
+(NE11140617.000) = **14** transmissões / soma 1.285.970,14 · 6662 = 9 / 210.159,42 · 28890 = 5 /
+23.799.913,75 · 32945 = 4 / 1.584.655,42 · 18739 = 4 / 212.446,40. **Quantidade e soma de venal
+rankeiam diferente** — ao dizer "imóvel mais transmitido", deixar claro que o critério é a
+quantidade.
+
+🚨 **A coluna "venal" desse card é `SUM(it.vl_venal)` por imóvel — não é o venal do imóvel.** Como
+o venal é *constante por imóvel dentro do exercício*, a soma repete o mesmo venal uma vez por
+transmissão e infla o número em N vezes. Medido em 2026:
+
+| Imóvel | Soma exibida | Venal real | Inflação |
+|---|---|---|---|
+| 3264 | R$ 1.285.970,14 | R$ 91.855,01 | 14× |
+| 28890 | R$ 23.799.913,75 | R$ 4.759.982,75 | 5× |
+| 18739 | R$ 212.446,40 | R$ 53.111,60 | 4× |
+
+Em 2026, **90 imóveis** têm mais de uma transmissão (onde a soma infla) e em apenas **9** o venal
+realmente varia dentro do ano. → Nunca dizer "o valor venal do imóvel X é *soma*". Para o venal do
+imóvel, usar o venal de **uma** transmissão (a mais recente, ou `MAX`), nunca `SUM`.
 
 **Implementação:** `app/api/itbi/ranking-imovel/route.ts`,
 `app/api/itbi/transmissoes-faixa/route.ts`, `app/api/itbi/imovel/route.ts`,
@@ -383,7 +398,24 @@ proprietário (`ESP.LIO`).
 ### 7e. Valor venal — fonte única `it.vl_venal` (vale no chat, todas as abas)
 
 **Regra:** qualquer pergunta sobre **valor venal**, em **qualquer aba** (ITBI, ISS/ISSCC, IPTU, TCA),
-usa a fonte do card **"Imóveis mais transmitidos"**:
+usa a fonte dos cards de ITBI.
+
+⛔ **Ao falar de ITBI, as únicas autoridades sobre valor venal são os dois cards da tela de ITBI:
+"Imóveis mais transmitidos" e "Consultar Imóvel".** Checklist de qual card responde o quê:
+
+| Pergunta | Card / seção | Como calcular |
+|---|---|---|
+| venal do imóvel X | Consultar Imóvel (7d) | `it.vl_venal` da transmissão **mais recente** (nunca soma) |
+| histórico/evolução do venal | Consultar Imóvel (7d) | `it.vl_venal` por transmissão, ordem `dt_transacao` |
+| valorização do venal | Consultar Imóvel (7c) | (venal mais recente − mais antigo) ÷ mais antigo, só `vl_venal > 0` |
+| alerta "abaixo do venal" | Consultar Imóvel (7d) | `aquisicao > 0 AND venal > 0 AND aquisicao < venal` (`<` estrito) |
+| faixa "Valor ≤ venal" | Mais transmitidos (7c) | `venal > 0 AND aquisicao <= venal`, `COUNT(DISTINCT` imóvel`)` |
+| imóveis mais transmitidos | Mais transmitidos (7c) | `COUNT(DISTINCT it.cd_itbi)`; a coluna "venal" ali é **soma** |
+
+🚨 A coluna "venal" do card "Imóveis mais transmitidos" é `SUM(it.vl_venal)` e **infla em N×** —
+nunca reportá-la como "o valor venal do imóvel" (detalhe e números na seção 7c).
+
+**A coluna-fonte, usada pelos dois cards:**
 
 - ✅ **única fonte válida:** `tb_dsod_itbi.vl_venal` (com `it.vl_total > 0` e `vl_venal > 0` — ponte,
   data e agregação nas seções 7c/7d)

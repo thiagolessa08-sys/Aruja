@@ -521,11 +521,23 @@ SANIDADE (validado na base do IQ em 25/08/2026, exercício 2026 por dt_lancament
 transmissões):
   Distribuição por imóvel: 1 transmissão = 578 imóveis · 2 = 72 · 3 a 5 = 16 · 6 ou mais = 2
   Faixa "Valor <= venal" = 151 imóveis
-  Mais transmitidos: imóvel 3264 (insc. NE11140617.000) = 14 transmissões / venal R$ 1.285.970,14 ·
-  imóvel 6662 = 9 / R$ 210.159,42 · imóvel 28890 = 5 / R$ 23.799.913,75 · imóvel 32945 = 4 /
-  R$ 1.584.655,42 · imóvel 18739 = 4 / R$ 212.446,40
-  Note que QUANTIDADE e VENAL rankeiam diferente (28890 tem 5 transmissões mas o maior venal) —
-  ao responder "imóvel mais transmitido" deixe claro que o critério é a QUANTIDADE.
+  Mais transmitidos (o valor abaixo é a coluna "venal" DA TELA, que é SOMA — ver o alerta logo
+  em seguida): imóvel 3264 (insc. NE11140617.000) = 14 transmissões / soma 1.285.970,14 ·
+  imóvel 6662 = 9 / 210.159,42 · imóvel 28890 = 5 / 23.799.913,75 · imóvel 32945 = 4 /
+  1.584.655,42 · imóvel 18739 = 4 / 212.446,40
+  Note que QUANTIDADE e a SOMA de venal rankeiam diferente (28890 tem 5 transmissões mas a maior
+  soma) — ao responder "imóvel mais transmitido" deixe claro que o critério é a QUANTIDADE.
+
+  🚨 A COLUNA "VENAL" DESSE CARD É SUM(it.vl_venal) POR IMÓVEL — NÃO É O VENAL DO IMÓVEL.
+  Como o venal é CONSTANTE por imóvel dentro do exercício, a soma repete o MESMO venal uma vez
+  por transmissão e infla o número em N vezes. Medido em 2026:
+    imóvel 3264  → soma 1.285.970,14  mas venal real  91.855,01  (14× inflado)
+    imóvel 28890 → soma 23.799.913,75 mas venal real 4.759.982,75 (5× inflado)
+    imóvel 18739 → soma 212.446,40    mas venal real   53.111,60  (4× inflado)
+  Em 2026, 90 imóveis têm mais de uma transmissão (onde a soma infla) e em apenas 9 deles o venal
+  realmente varia dentro do ano. → NUNCA diga "o valor venal do imóvel X é <soma>". Para o VENAL
+  DO IMÓVEL use o venal de UMA transmissão (a mais recente; ou MAX(it.vl_venal) no período),
+  nunca SUM. Ver REGRA 14.
 
 ## REGRA 13 — ITBI: PARTES, VÍNCULO MOBILIÁRIO, VALORES E ALERTA — regra ÚNICA e OBRIGATÓRIA
 
@@ -617,7 +629,34 @@ SANIDADE (validada na base do IQ em 26/08/2026):
 
 VALE PARA QUALQUER PERGUNTA SOBRE VALOR VENAL, em QUALQUER aba (ITBI, ISS/ISSCC, IPTU, TCA) e em
 QUALQUER tela. Existe MAIS DE UMA coluna de "venal" no banco e elas dão números DIFERENTES —
-esta regra fixa qual usar. A fonte é a do card "Imóveis mais transmitidos" (e "Consultar Imóvel"):
+esta regra fixa qual usar.
+
+⛔ AO FALAR DE ITBI, as ÚNICAS autoridades sobre VALOR VENAL são os dois cards da tela de ITBI
+(Imobiliário): "IMÓVEIS MAIS TRANSMITIDOS" e "CONSULTAR IMÓVEL". Não existe outra origem válida
+de venal para responder sobre ITBI. Checklist obrigatório de qual card responde o quê:
+
+  PERGUNTA                                  → CARD / REGRA          → COMO CALCULAR
+  "venal do imóvel X"                       → Consultar Imóvel (13) → it.vl_venal da transmissão
+                                                                      MAIS RECENTE (nunca soma)
+  "histórico/evolução do venal do imóvel"   → Consultar Imóvel (13) → it.vl_venal por transmissão,
+                                                                      ordem it.dt_transacao
+  "valorização do venal"                    → Consultar Imóvel (12) → (venal mais recente − venal
+                                                                      mais antigo) ÷ mais antigo,
+                                                                      só vl_venal > 0
+  "transação abaixo do venal" (alerta)      → Consultar Imóvel (13) → aquisicao > 0 AND venal > 0
+                                                                      AND aquisicao < venal (< estrito)
+  "quantos com valor ≤ venal" (faixa)       → Mais transmitidos (12)→ venal > 0 AND aquisicao
+                                                                      <= venal, COUNT(DISTINCT imóvel)
+  "imóveis mais transmitidos"               → Mais transmitidos (12)→ COUNT(DISTINCT it.cd_itbi);
+                                                                      a coluna "venal" ali é SOMA
+                                                                      (ver alerta na REGRA 12)
+
+🚨 A coluna "venal" do card "Imóveis mais transmitidos" é SUM(it.vl_venal) por imóvel e INFLA o
+valor em N vezes (o mesmo venal somado uma vez por transmissão) — medido em 2026: imóvel 3264
+soma 1.285.970,14 contra venal real 91.855,01 (14×); imóvel 28890 soma 23.799.913,75 contra
+4.759.982,75 (5×). NUNCA reporte essa soma como "o valor venal do imóvel". Detalhe na REGRA 12.
+
+A coluna-fonte, usada pelos dois cards:
 
   ✅ ÚNICA FONTE VÁLIDA DE VALOR VENAL: tb_dsod_itbi.vl_venal
      (com it.vl_total > 0 e vl_venal > 0 — ver REGRAS 12 e 13 para ponte, data e agregação)
