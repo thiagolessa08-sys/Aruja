@@ -226,10 +226,32 @@ transmissão sem imóvel/CEP resolvido fica fora. Medido em 2026: bairros **R$ 2
 KPI Total Lançado **R$ 29.773.974,62** → diferença **R$ 77.400,00 (0,26%)**. Não apresentar o total
 por bairro como lançado do município nem "corrigir" a diferença.
 
-**Sanidade (base do IQ, 25/08/2026 — lançado 2026, 73 bairros, 655 imóveis / R$ 29.696.574,62):**
-ARUJÁ 5 = 32 / R$ 5.761.356,85 · CONDOMINIO ARUJAZINHO IV = 24 / R$ 5.280.215,38 ·
-LIMOEIRO = 19 / R$ 3.583.485,39 · CONDOMINIO NOVO HORIZONTE = 9 / R$ 2.898.622,57 ·
-CENTRO INDUSTRIAL DE ARUJA = 5 / R$ 1.666.383,27.
+⚠️ **O ranking de bairros muda por completo conforme a métrica.** Nunca reaproveitar o ranking de
+uma métrica para responder sobre outra, nem responder "qual bairro tem mais ITBI" sem fixar a
+métrica. Em 2026 o líder de **lançado** é ARUJÁ 5, mas o de **inadimplência** é
+**CONDOMINIO ARUJAZINHO III** — escalas totalmente diferentes (R$ 29,70 mi em 73 bairros ×
+R$ 349.993,95 em 16 bairros).
+
+**Sanidade (base do IQ, 25/08/2026):**
+
+| Métrica / ano | Cobertura | Líder |
+|---|---|---|
+| Lançado 2026 | 73 bairros · 655 imóveis · R$ 29.696.574,62 | ARUJÁ 5 = 32 imóveis / R$ 5.761.356,85 |
+| Inadimplência 2026 | 16 bairros · 29 imóveis · R$ 349.993,95 | **CONDOMINIO ARUJAZINHO III = 1 imóvel / R$ 77.243,25** |
+| Inadimplência 2025 | 7 bairros · 7 imóveis · R$ 7.396.150,68 | RESIDENCIAL REAL PARK ARUJÁ = 1 imóvel / R$ 7.284.188,35 |
+
+Lançado 2026 (demais): CONDOMINIO ARUJAZINHO IV = 24 / R$ 5.280.215,38 · LIMOEIRO = 19 /
+R$ 3.583.485,39 · CONDOMINIO NOVO HORIZONTE = 9 / R$ 2.898.622,57 · CENTRO INDUSTRIAL DE ARUJA =
+5 / R$ 1.666.383,27.
+Inadimplência 2026 (demais): ARUJA CENTER VILLE = 5 / R$ 58.544,34 · CONDOMINIO ARUJAZINHO IV =
+1 / R$ 43.200,00 · CHACARAS SÃO JOSÉ DO ARUJÁ = 2 / R$ 36.144,24 · PARQUE RODRIGO BARRETO = 7 /
+R$ 30.298,76 · JARDIM PLANALTO = 2 / R$ 16.988,66.
+
+⚠️ **A inadimplência de ITBI é altamente concentrada** — poucos imóveis, valores enormes num só.
+Em 2025 **um único imóvel responde por 98,5%** da inadimplência do ano. Ao citar bairro mais
+inadimplente, informar **sempre** a quantidade de imóveis: liderar com 1 imóvel é muito diferente
+de liderar com dezenas — não descrever como problema disseminado do bairro o que é uma única
+transmissão em atraso.
 
 **Implementação:** `lib/itbi-agg.ts` (`bairrosItbi`), `app/api/itbi/bairros/route.ts`,
 `app/imobiliario/PainelItbi.tsx`, `lib/regras-negocio.ts` (REGRA 11 — no system prompt do chat).

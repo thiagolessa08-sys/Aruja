@@ -426,9 +426,32 @@ R$ 29.696.574,62 contra KPI Total Lançado R$ 29.773.974,62 — diferença de R$
 NUNCA apresente o total por bairro como se fosse o lançado do município, e não "conserte" a
 diferença: se precisar citar os dois, explique que o recorte por bairro exige imóvel vinculado.
 
-SANIDADE (validado na base do IQ em 25/08/2026, lançado 2026, nível bairro — 73 bairros,
-total 655 imóveis / R$ 29.696.574,62):
-  ARUJÁ 5 = 32 imóveis / R$ 5.761.356,85 · CONDOMINIO ARUJAZINHO IV = 24 / R$ 5.280.215,38
-  LIMOEIRO = 19 / R$ 3.583.485,39 · CONDOMINIO NOVO HORIZONTE = 9 / R$ 2.898.622,57
-  CENTRO INDUSTRIAL DE ARUJA = 5 / R$ 1.666.383,27
+⚠️ O RANKING DE BAIRROS MUDA COMPLETAMENTE CONFORME A MÉTRICA — nunca reaproveite o ranking de
+uma métrica para responder sobre outra, e nunca responda "qual bairro tem mais ITBI" sem antes
+fixar QUAL métrica (lançado? arrecadado? inadimplência?). Em 2026 o líder de LANÇADO é ARUJÁ 5,
+mas o líder de INADIMPLÊNCIA é CONDOMINIO ARUJAZINHO III — bairros diferentes, escalas diferentes
+(lançado R$ 29,70 mi em 73 bairros × inadimplência R$ 349.993,95 em apenas 16 bairros).
+
+SANIDADE (validado na base do IQ em 25/08/2026, nível bairro):
+
+  LANÇADO 2026 — 73 bairros, 655 imóveis, total R$ 29.696.574,62:
+    ARUJÁ 5 = 32 imóveis / R$ 5.761.356,85 · CONDOMINIO ARUJAZINHO IV = 24 / R$ 5.280.215,38
+    LIMOEIRO = 19 / R$ 3.583.485,39 · CONDOMINIO NOVO HORIZONTE = 9 / R$ 2.898.622,57
+    CENTRO INDUSTRIAL DE ARUJA = 5 / R$ 1.666.383,27
+
+  INADIMPLÊNCIA 2026 — 16 bairros, 29 imóveis, total R$ 349.993,95:
+    CONDOMINIO ARUJAZINHO III = 1 imóvel / R$ 77.243,25   <-- MAIOR inadimplência de 2026
+    ARUJA CENTER VILLE = 5 / R$ 58.544,34 · CONDOMINIO ARUJAZINHO IV = 1 / R$ 43.200,00
+    CHACARAS SÃO JOSÉ DO ARUJÁ = 2 / R$ 36.144,24 · PARQUE RODRIGO BARRETO = 7 / R$ 30.298,76
+    JARDIM PLANALTO = 2 / R$ 16.988,66
+
+  INADIMPLÊNCIA 2025 — 7 bairros, 7 imóveis, total R$ 7.396.150,68:
+    RESIDENCIAL REAL PARK ARUJÁ = 1 imóvel / R$ 7.284.188,35 (98,5% do ano inteiro!)
+    ARUJÁ COUNTRY CLUB = 1 / R$ 44.966,01 · ARUJAMERICA = 1 / R$ 42.450,00
+
+⚠️ A INADIMPLÊNCIA DE ITBI É ALTAMENTE CONCENTRADA — poucos imóveis, valores enormes num só.
+Em 2025, UM único imóvel responde por 98,5% da inadimplência do ano. Ao responder sobre bairro
+mais inadimplente, SEMPRE informe também a quantidade de imóveis: dizer que um bairro "lidera a
+inadimplência" com 1 imóvel é muito diferente de liderar com dezenas. Não descreva como problema
+disseminado do bairro o que é uma única transmissão em atraso.
 `
