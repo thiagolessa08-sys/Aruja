@@ -503,7 +503,8 @@ FAIXA "VALOR <= VENAL" (o 5º card):
     ano: o histórico é SEMPRE completo, mesmo com a tela filtrada por exercício.
   • ⚠️ A data exibida da transmissão é it.dt_transacao (terceira coluna de data do módulo —
     não confundir com it.dt_lancamento das contagens, nem com it.dt_vencimento).
-  • Natureza = it.ds_natureza_transacao · situação = it.ds_situacao
+  • Natureza = it.ds_natureza_transacao. ⚠️ it.ds_situacao existe mas vem VAZIA em 100% das
+    linhas (24.507 de 24.507 medidas) — NUNCA prometa/cite "situação" da transmissão.
   • Partes: it.cd_contr_transmitente / it.cd_contr_adquirente → nome em tb_dsod_contribuinte;
     o nome do transmitente tem fallback para o texto livre it.nm_transmitente quando o vínculo
     não resolve (COALESCE(NULLIF(it.nm_transmitente,''), tb_dsod_contribuinte.nm_rsocial)).
@@ -525,4 +526,90 @@ transmissões):
   R$ 1.584.655,42 · imóvel 18739 = 4 / R$ 212.446,40
   Note que QUANTIDADE e VENAL rankeiam diferente (28890 tem 5 transmissões mas o maior venal) —
   ao responder "imóvel mais transmitido" deixe claro que o critério é a QUANTIDADE.
+
+## REGRA 13 — ITBI: PARTES, VÍNCULO MOBILIÁRIO, VALORES E ALERTA — regra ÚNICA e OBRIGATÓRIA
+
+COMPLEMENTA a REGRA 12 (que define a CONTAGEM de transmissões e as faixas). Esta REGRA 13 define
+os CAMPOS do detalhe do imóvel. Quando a pergunta de ITBI envolver VALOR VENAL, TRANSMISSÕES,
+AQUISIÇÕES, TRANSMITENTE × PROPRIETÁRIO, VÍNCULO MOBILIÁRIO, VALOR DA TRANSAÇÃO, IMPOSTO ou
+ALERTA, use EXATAMENTE as regras dos cards "Imóveis mais transmitidos" e "Consultar Imóvel" da
+tela de ITBI (Imobiliário). NUNCA invente coluna, indicador ou interpretação fora deste bloco.
+
+DE-PARA rótulo da tela → coluna real (nunca trocar):
+  • "Valor da Transação" = it.vl_aquisicao_original  (valor de aquisição declarado pelas partes)
+  • "Valor Venal"        = it.vl_venal
+  • "Imposto"            = livro-razão (ponte g.cd_origem = cd_itbi, mov 1,2,3, no_parcela <> 0,
+                           fora de Recalculo/Validacao) — NÃO é it.vl_total
+  • "Natureza"           = it.ds_natureza_transacao
+  • "Data de Início"     = it.dt_transacao
+  • "Data de Fim"        = it.dt_vencimento → ⚠️ VAZIA em 100% das linhas (24.507 de 24.507
+    medidas). A coluna existe na tela mas nunca tem valor. NUNCA prometa nem cite "data de fim".
+  "AQUISIÇÃO" = it.vl_aquisicao_original (é o mesmo dado de "Valor da Transação", não outro campo).
+
+COLUNA "ALERTA" (badge "⚠ abaixo do venal") — condição EXATA, com < ESTRITO:
+  it.vl_aquisicao_original > 0 AND it.vl_venal > 0 AND it.vl_aquisicao_original < it.vl_venal
+  ⚠️ NÃO CONFUNDIR com a faixa "Valor ≤ venal" do card "Imóveis mais transmitidos" (REGRA 12),
+  que usa <= e não exige transação > 0. São dois indicadores diferentes: medido em 2026, o ALERTA
+  dá 109 imóveis e a FAIXA dá 151 (dos 42 de diferença, 5 imóveis têm vl_aquisicao_original = 0).
+  ⚠️ O alerta NÃO é sonegação, subdeclaração, fraude nem irregularidade — significa apenas que a
+  base de cálculo foi o VENAL, porque a base é o MAIOR entre venal e valor declarado (apuração
+  NORMAL). Se o usuário sugerir fraude a partir do alerta, corrija essa leitura.
+
+CARD "TRANSMITENTE × PROPRIETÁRIO":
+  Proprietário atual = i.cd_contr_proprietario (tb_dsod_imovel_urbano). Estados do card:
+    "Partes não informadas" (nenhuma transmissão com nome de transmitente nem de adquirente) ·
+    "Cadastro atualizado" (adquirente da transmissão MAIS RECENTE = proprietário atual) ·
+    "Possível divergência" (todo o resto)
+  ⚠️⚠️ GUARDA CRÍTICA — o ADQUIRENTE quase nunca existe nesta base: it.cd_contr_adquirente = -1
+  (linha sentinela, nome "Não Informado") em 24.434 de 24.507 ITBIs = 99,7%. Só 73 ITBIs (0,3%)
+  têm adquirente real. Consequências OBRIGATÓRIAS:
+    → "Possível divergência" é o estado quase universal: apenas 29 de 14.349 imóveis com
+      transmissão (0,2%) chegam a "Cadastro atualizado". NUNCA apresente "Possível divergência"
+      como indício de irregularidade, erro de cadastro ou fraude — é AUSÊNCIA DE DADO.
+    → NUNCA afirme quem foi o adquirente/comprador sem antes checar cd_contr_adquirente > 0.
+      Se for -1, responda que o adquirente não está informado no cadastro.
+  ⚠️ A "cobertura" exibida ("N/M c/ adquirente") conta NOME não-vazio, e o sentinela "Não
+  Informado" conta como preenchido — então "18/18 c/ adquirente" pode ser 100% sentinela. Para
+  saber se há adquirente REAL, teste cd_contr_adquirente > 0; nunca conclua pelo nome.
+  O TRANSMITENTE, ao contrário, é confiável: real em 23.399 de 24.507 (95,5%), sentinela em 1.107
+  (4,5%). Nome = COALESCE(NULLIF(it.nm_transmitente,''), tb_dsod_contribuinte.nm_rsocial).
+  Badge "transm.= prop." (transmitente = proprietário atual) ocorre em 2.129 de 14.349 imóveis
+  (14,8%) — típico de incorporadora/loteadora que segue como proprietária no cadastro enquanto as
+  unidades são vendidas. É normal, não é erro.
+
+CARD "VÍNCULO MOBILIÁRIO":
+  FONTE: tb_dsod_contribuinte_mob_fisico (mf), WHERE mf.cd_imovel_urbano = <id>, contando
+  DISTINCT mf.cd_contr_mob = nº de empresas no endereço do imóvel. Tabela acessível (27.557
+  linhas · 7.515 imóveis · 26.584 empresas). "Empresa é o proprietário" = esse conjunto contém
+  i.cd_contr_proprietario. "Transmissões com PJ" = transmissões em que o transmitente OU o
+  adquirente é PJ.
+  ⚠️ PJ vem de tb_dsod_contribuinte.ic_pessoa = 'J' e é POUCO CONFIÁVEL nos dois sentidos:
+  1.099 contribuintes têm nome claramente PJ (LTDA / EIRELI / S.A. / INCORPORADORA /
+  EMPREENDIMENTO) e NÃO estão marcados como 'J'; 579 têm CNPJ em no_cpf_cnpj (contém "/") sem
+  estar marcados. Caso real: cd_contr 423296 = "FOMENTO 02 INCORPORADORA SPE LTDA", CNPJ
+  54.992.445/0001-24, ic_pessoa = 'F'. → NUNCA afirme "as partes são pessoas físicas" só com
+  base em ic_pessoa. Se nome ou CNPJ indicarem PJ, diga que o cadastro está marcado como física
+  (divergência cadastral), e trate "transmissões com PJ = 0" como subcontagem possível.
+  ⚠️ "Sem empresa no endereço" também aparece quando a consulta do mobiliário FALHA (o código
+  trata erro como conjunto vazio) — não afirme ausência categórica de empresa.
+
+INDICADORES do imóvel (nº de transmissões, valorização do venal, intervalo médio, imposto total,
+venal primeiro/último): SEM filtro de ano — histórico SEMPRE completo, mesmo com a tela filtrada
+por exercício (ver REGRA 12). Ordenação do histórico = it.dt_transacao DESC (mais recente
+primeiro); "última transmissão" = a primeira linha dessa ordem.
+"Espólio" NÃO é campo do banco: é detectado por padrão no NOME do proprietário (regex ESP.LIO).
+Quando for espólio, cite o possuidor de fato i.cd_contr_posseiro (REGRA 12).
+
+SANIDADE (validada na base do IQ em 26/08/2026):
+  • Imóvel 3264 (insc. NE11140617.000) — o caso típico: 18 transmissões no histórico COMPLETO
+    (contra 14 no exercício 2026 pela REGRA 12: o detalhe não filtra ano). Venal 59.146,51 →
+    91.855,01 = +55,3% de valorização · imposto total R$ 924.960,00 · intervalo médio 0,53 ano ·
+    proprietário FOMENTO 02 INCORPORADORA SPE LTDA · 1 empresa no endereço · 0 transmissões com
+    alerta. TODOS os 18 adquirentes são o sentinela -1: o card mostra "Possível divergência" e
+    "18/18 c/ adquirente", mas NENHUM adquirente é real, e transmitente = proprietário nas 18.
+  • Imóvel 30044 (insc. SO11020411.000, BASSICON EMPREENDIMENTOS) — o caso raro (0,2%): 2
+    transmissões, ambas em 16/04/2019, adquirente REAL = proprietário atual → "Cadastro
+    atualizado". Venal igual nas duas (169.987,19) → valorização 0%. ITBI 16369: transação
+    111.291,09 < venal → COM alerta; ITBI 16373: transação 440.000,00 > venal → SEM alerta.
+    Imposto total R$ 20.999,74 · 2 empresas no endereço.
 `

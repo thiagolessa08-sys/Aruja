@@ -304,6 +304,82 @@ maior venal) — ao dizer "imóvel mais transmitido", deixar claro que o critér
 `app/api/itbi/transmissoes-faixa/route.ts`, `app/api/itbi/imovel/route.ts`,
 `app/imobiliario/PainelItbi.tsx`, `lib/regras-negocio.ts` (REGRA 12 — no system prompt do chat).
 
+### 7d. ITBI — partes, vínculo mobiliário, valores e alerta (vale no chat)
+
+**Complementa a 7c:** a 7c define a *contagem* de transmissões e as faixas; esta define os **campos
+do detalhe do imóvel** (cards "Imóveis mais transmitidos" e "Consultar Imóvel").
+
+**De-para rótulo da tela → coluna real:**
+
+| Rótulo na tela | Coluna |
+|---|---|
+| Valor da Transação (= "aquisição") | `it.vl_aquisicao_original` |
+| Valor Venal | `it.vl_venal` |
+| Imposto | livro-razão (`g.cd_origem = cd_itbi`, mov 1,2,3, `no_parcela <> 0`, fora de Recalculo/Validacao) — **não** `it.vl_total` |
+| Natureza | `it.ds_natureza_transacao` |
+| Data de Início | `it.dt_transacao` |
+| Data de Fim | `it.dt_vencimento` — ⚠️ **vazia em 100%** (24.507/24.507) |
+
+⚠️ `it.ds_situacao` também vem **vazia em 100%** das linhas — nunca citar "situação" da transmissão.
+
+**Coluna "Alerta"** (badge `⚠ abaixo do venal`), com `<` **estrito**:
+`vl_aquisicao_original > 0 AND vl_venal > 0 AND vl_aquisicao_original < vl_venal`.
+⚠️ **Não confundir com a faixa "Valor ≤ venal"** da 7c (que usa `<=` e não exige transação > 0):
+medido em 2026, o **alerta = 109 imóveis** × a **faixa = 151** (dos 42 de diferença, 5 imóveis têm
+`vl_aquisicao_original = 0`). ⚠️ O alerta **não é** sonegação/fraude — indica apenas que a base de
+cálculo foi o venal (apuração normal, o maior entre venal e declarado).
+
+**Card "Transmitente × Proprietário"** — proprietário atual = `i.cd_contr_proprietario`. Estados:
+"Partes não informadas" / "Cadastro atualizado" (adquirente da transmissão mais recente =
+proprietário) / "Possível divergência" (resto).
+
+⚠️⚠️ **Guarda crítica — o adquirente quase nunca existe:** `it.cd_contr_adquirente = -1` (sentinela
+"Não Informado") em **24.434 de 24.507 ITBIs = 99,7%**; só 73 (0,3%) têm adquirente real. Logo
+**"Possível divergência" é o estado quase universal** (só **29 de 14.349** imóveis = 0,2% chegam a
+"Cadastro atualizado") e **não** é indício de irregularidade — é ausência de dado. Nunca afirmar
+quem foi o adquirente sem checar `cd_contr_adquirente > 0`.
+
+⚠️ A cobertura exibida ("N/M c/ adquirente") conta **nome não-vazio**, e o sentinela "Não Informado"
+conta como preenchido — "18/18 c/ adquirente" pode ser 100% sentinela. Testar
+`cd_contr_adquirente > 0`, nunca o nome.
+
+O **transmitente é confiável**: real em 23.399/24.507 (95,5%), sentinela em 1.107 (4,5%). Badge
+"transm.= prop." ocorre em **2.129 de 14.349** imóveis (14,8%) — típico de incorporadora/loteadora
+que segue como proprietária no cadastro. É normal, não é erro.
+
+**Card "Vínculo Mobiliário"** — fonte `tb_dsod_contribuinte_mob_fisico` (mf),
+`WHERE mf.cd_imovel_urbano = <id>`, `COUNT(DISTINCT mf.cd_contr_mob)` = empresas no endereço.
+Tabela **acessível** (27.557 linhas · 7.515 imóveis · 26.584 empresas).
+
+⚠️ **PJ (`ic_pessoa = 'J'`) é pouco confiável nos dois sentidos:** 1.099 contribuintes têm nome
+claramente PJ (LTDA/EIRELI/S.A./INCORPORADORA/EMPREENDIMENTO) sem estar marcados como `'J'`, e 579
+têm CNPJ (`no_cpf_cnpj` com `/`) sem a marcação. Caso real: `cd_contr` 423296 = "FOMENTO 02
+INCORPORADORA SPE LTDA", CNPJ 54.992.445/0001-24, `ic_pessoa = 'F'`. Nunca afirmar "as partes são
+pessoas físicas" só por `ic_pessoa`; tratar "transmissões com PJ = 0" como possível subcontagem.
+⚠️ "Sem empresa no endereço" **também** aparece quando a consulta do mobiliário falha (o código
+trata erro como conjunto vazio) — não afirmar ausência categórica.
+
+**Indicadores** (nº de transmissões, valorização, intervalo médio, imposto total, venal
+primeiro/último): **sem filtro de ano**, histórico sempre completo. Ordenação = `dt_transacao DESC`;
+"última transmissão" = primeira linha. **"Espólio" não é campo do banco** — é regex no *nome* do
+proprietário (`ESP.LIO`).
+
+**Sanidade (base do IQ, 26/08/2026):**
+
+- **Imóvel 3264** (NE11140617.000) — caso típico: **18** transmissões no histórico completo (× 14 no
+  exercício 2026 pela 7c: o detalhe não filtra ano) · venal 59.146,51 → 91.855,01 = **+55,3%** ·
+  imposto total **R$ 924.960,00** · intervalo médio 0,53 ano · proprietário FOMENTO 02 INCORPORADORA
+  SPE LTDA · 1 empresa no endereço · 0 alertas. **Todos os 18 adquirentes são o sentinela −1**: o
+  card mostra "Possível divergência" e "18/18 c/ adquirente", mas nenhum adquirente é real, e
+  transmitente = proprietário nas 18.
+- **Imóvel 30044** (SO11020411.000, BASSICON EMPREENDIMENTOS) — caso raro (0,2%): 2 transmissões
+  (16/04/2019), adquirente real = proprietário → **"Cadastro atualizado"**. Venal igual nas duas
+  (169.987,19) → valorização 0%. ITBI 16369: transação 111.291,09 < venal → **com** alerta; ITBI
+  16373: transação 440.000,00 > venal → **sem** alerta. Imposto total R$ 20.999,74 · 2 empresas.
+
+**Implementação:** `app/api/itbi/imovel/route.ts`, `app/imobiliario/PainelItbi.tsx`,
+`lib/regras-negocio.ts` (REGRA 13 — no system prompt do chat).
+
 ## 7b. Chat — busca por texto e anti-alucinação (Regra 5 do prompt)
 
 **Contexto:** o chat gerou uma análise falsa sobre um contribuinte ("Robinson Simões": CPF e
