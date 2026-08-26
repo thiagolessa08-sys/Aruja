@@ -196,10 +196,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [resultado, setResultado] = useState<ResultadoMensal | null>(null)
   const [compDamId, setCompDamId] = useState<ComparativoDamId | null>(null)
   const [analise, setAnalise] = useState<AnaliseConversao | null>(null)
-  // null = usuário ainda não escolheu uma lente — a Análise de Conversão exibe "Por Tributo"
-  // como padrão visual, mas o painel de DAM ao lado só detalha por tributo/período/operador
-  // depois que uma lente for de fato clicada (ver uso de conversaoDim no painel de DAM).
-  const [conversaoDim, setConversaoDim] = useState<'tributo' | 'periodo' | 'operador' | null>(null)
+  // Default 'tributo' (não null): Análise de Conversão e o painel de DAM ao lado devem
+  // nascer sincronizados no mesmo ano corrente + mesma lente, sem exigir clique — antes o
+  // botão "Por Tributo" já aparecia realçado (padrão visual só na Análise de Conversão), mas
+  // o painel de DAM ficava preso em "Selecione uma lente" até o usuário clicar de verdade.
+  const [conversaoDim, setConversaoDim] = useState<'tributo' | 'periodo' | 'operador' | null>('tributo')
   const [buscaConversao, setBuscaConversao] = useState('')
   const [ordemConversao, setOrdemConversao] = useState<'desc' | 'asc'>('desc')
   // Drill de 2º nível do painel DAM — ao clicar num tributo/operador em "Por Tributo"/"Por
@@ -514,10 +515,12 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
 
         {/* Companion panel — Documentos de Arrecadação Municipal (DAM) gerados. O total fica
-            sempre visível; o detalhe por tributo/período(mês)/operador só aparece depois que
-            uma lente for escolhida em "Análise de Conversão" (mesmo estado conversaoDim),
-            mostrando só a lente correspondente. "Internet" = autoatendimento pelo portal;
-            "Schedule" = geração automática agendada. */}
+            sempre visível; o detalhe por tributo/período(mês)/operador acompanha a lente
+            escolhida em "Análise de Conversão" (mesmo estado conversaoDim, default "Por
+            Tributo"), mostrando só a lente correspondente — os dois painéis nascem no mesmo
+            ano corrente (prop `ano`, vindo do Exercício selecionado na página) e reagem juntos
+            quando ele muda. "Internet" = autoatendimento pelo portal; "Schedule" = geração
+            automática agendada. */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div>
