@@ -1,7 +1,20 @@
 import { agentQuery } from '@/lib/agent'
-import { rankingTributos, iptuOficialAno } from '@/lib/tributo-engine'
+import { rankingTributos, iptuOficialAno, type RankTributo } from '@/lib/tributo-engine'
 import { CODIGOS_EXCLUIDOS } from '@/lib/tributos'
 import { cached, TTL_15MIN } from '@/lib/cache'
+
+// Sobrescreve a linha do IPTU (cd_tributo=1) do ranking genérico (rankingTributos, modelo
+// tb_dsod_parcela_posicao) pelo lançado/arrecadado OFICIAL usado nos KPIs de Imobiliário
+// (ver iptuOficialAno em tributo-engine.ts) — usado tanto pelo resumo (KPIs do topo + tabela
+// "Conversão por Tributo") quanto pela Análise de Conversão ("Por Tributo"), pra manter os
+// dois consistentes entre si e com a tela de Imobiliário. Não mexe em `saldo` (não foi
+// pedido, e "A Recuperar" da tabela de resumo fica sem uma definição oficial equivalente
+// aqui) nem em "IPTU Diferença de Área" (cd_tributo=25), que também fica de fora do IPTU
+// oficial de Imobiliário.
+async function aplicarIptuOficial(rank: RankTributo[], ano: number, mes?: number): Promise<RankTributo[]> {
+  const iptuOficial = await iptuOficialAno(ano, mes)
+  return rank.map(t => t.cd === 1 ? { ...t, lancado: iptuOficial.lancado, arrecadado: iptuOficial.arrecadado } : t)
+}
 
 const SCHEMA = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
@@ -59,14 +72,16 @@ async function resumoCobrancaRaw(ano: number, mes?: number): Promise<ResumoCobra
       GROUP BY YEAR(dt_baixa)`, 100),
   ])
 
-  const tributos = rank
+  const rankAjustado = await aplicarIptuOficial(rank, ano, mes)
+
+  const tributos = rankAjustado
     .filter(t => t.lancado > 0)
     .map(t => ({ nome: t.nome, lancado: t.lancado, arrecadado: t.arrecadado, saldo: t.saldo, conversao: t.lancado ? (t.arrecadado / t.lancado) * 100 : 0 }))
     .slice(0, 10)
 
-  const lancado = rank.reduce((a, t) => a + t.lancado, 0)
-  const arrecadado = rank.reduce((a, t) => a + t.arrecadado, 0)
-  const saldo = rank.reduce((a, t) => a + t.saldo, 0)
+  const lancado = rankAjustado.reduce((a, t) => a + t.lancado, 0)
+  const arrecadado = rankAjustado.reduce((a, t) => a + t.arrecadado, 0)
+  const saldo = rankAjustado.reduce((a, t) => a + t.saldo, 0)
 
   const canais = canaisR.rows
     .map(r => ({ nome: String(r[0] ?? '').trim() || 'Outros', n: num(r[1]) }))
