@@ -380,6 +380,58 @@ proprietário (`ESP.LIO`).
 **Implementação:** `app/api/itbi/imovel/route.ts`, `app/imobiliario/PainelItbi.tsx`,
 `lib/regras-negocio.ts` (REGRA 13 — no system prompt do chat).
 
+### 7e. Valor venal — fonte única `it.vl_venal` (vale no chat, todas as abas)
+
+**Regra:** qualquer pergunta sobre **valor venal**, em **qualquer aba** (ITBI, ISS/ISSCC, IPTU, TCA),
+usa a fonte do card **"Imóveis mais transmitidos"**:
+
+- ✅ **única fonte válida:** `tb_dsod_itbi.vl_venal` (com `it.vl_total > 0` e `vl_venal > 0` — ponte,
+  data e agregação nas seções 7c/7d)
+- 🚫 **proibido** como "valor venal": `tb_dsod_imovel_urbano_lanc.vl_venal_imovel` e as demais
+  (`vl_venal_predio`, `vl_venal_terreno`, `vl_venal_tributavel`, `vl_venal_principal`,
+  `vl_venal_secundaria`, `vl_venal_excesso`, `vl_venal_nao_edificado`,
+  `vl_venal_territorial_*`). A tabela **é acessível** (794.452 linhas) — daí a armadilha — mas é o
+  venal **cadastral do lançamento de IPTU por exercício**, não o venal da transmissão.
+
+⚠️ **Não são intercambiáveis** (medido em 2026, mesmo imóvel + exercício, 738 casos comparáveis):
+batem em **660 (89,4%)**, divergem em **78 (10,6%)**.
+
+| Imóvel | Venal ITBI | Venal cadastral IPTU |
+|---|---|---|
+| 13740 | R$ 398.494,97 | R$ 796.989,94 (exatamente 2×) |
+| 13739 | R$ 167.793,81 | R$ 335.587,62 (exatamente 2×) |
+| 2405 | R$ 58.768,04 | R$ 61.805,79 |
+| 167 | R$ 170.945,17 | R$ 179.783,21 |
+
+Os casos de **exatamente 2×** indicam **fração ideal**: o venal do ITBI reflete a *fração
+transmitida*, o cadastral é o *imóvel inteiro*. Não é erro de um dos lados — são conceitos
+diferentes, e trocar um pelo outro pode **dobrar** a resposta.
+
+⚠️ Se precisar citar o venal cadastral (só quando o usuário pedir explicitamente o venal de
+IPTU/cadastro), dizer qual está usando; e `tb_dsod_imovel_urbano_lanc` **não é 1:1** por
+imóvel+exercício (**271 combinações duplicadas**) → pré-agregar antes de juntar, senão dá fan-out.
+Coluna de exercício ali = `no_exercicio_lancamento`.
+
+🚫 Nunca usar `tb_extr_*` (`tb_extr_itbi`, `tb_extr_imovel_urbano_lanc`): **Permission denied −121**
+— aparecem no catálogo com colunas de venal, mas não são consultáveis (ver
+`project_tabelas_permissao_negada`).
+🚫 Nunca citar `it.vl_venal_isento` nem `it.ic_sem_valor_venal_terreno`: existem, mas **100% sem
+uso** (0 linhas com valor em 24.507).
+⚠️ `it.vl_venal` vem **0/NULO em 1.287 de 24.507** ITBIs (5,3%) — valorização, faixa "Valor ≤ venal"
+e alerta precisam filtrar `vl_venal > 0`.
+
+⚠️ **ISS/ISSCC não tem valor venal:** a aba ISSCC trabalha com **área edificada (m²)** e ISSCC
+lançado/arrecadado (`cd_tributo` 40/17/18). Se a pergunta misturar ISS com venal, responder com o
+venal de ITBI e deixar explícito que vem do módulo de ITBI — nunca inventar um "venal de ISS".
+
+**Sanidade (26/08/2026)** — imóvel **3264**, onde as duas fontes *coincidem* (imóvel inteiro, sem
+fração): `it.vl_venal` 2017 = 59.146,51 · 2020 = 65.690,75 · 2024 = 83.642,87 · 2025 = 87.341,52 ·
+2026 = 91.855,01, idêntico ao cadastral dos mesmos exercícios. Dentro de um **mesmo exercício o
+venal é constante por imóvel**: as 14 transmissões de 2026 desse imóvel têm todas 91.855,01.
+
+**Implementação:** `lib/regras-negocio.ts` (REGRA 14 — no system prompt do chat);
+fonte usada pela tela em `app/api/itbi/ranking-imovel/route.ts` e `app/api/itbi/imovel/route.ts`.
+
 ## 7b. Chat — busca por texto e anti-alucinação (Regra 5 do prompt)
 
 **Contexto:** o chat gerou uma análise falsa sobre um contribuinte ("Robinson Simões": CPF e

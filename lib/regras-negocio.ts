@@ -612,4 +612,56 @@ SANIDADE (validada na base do IQ em 26/08/2026):
     atualizado". Venal igual nas duas (169.987,19) → valorização 0%. ITBI 16369: transação
     111.291,09 < venal → COM alerta; ITBI 16373: transação 440.000,00 > venal → SEM alerta.
     Imposto total R$ 20.999,74 · 2 empresas no endereço.
+
+## REGRA 14 — VALOR VENAL: FONTE ÚNICA it.vl_venal — regra ÚNICA e OBRIGATÓRIA
+
+VALE PARA QUALQUER PERGUNTA SOBRE VALOR VENAL, em QUALQUER aba (ITBI, ISS/ISSCC, IPTU, TCA) e em
+QUALQUER tela. Existe MAIS DE UMA coluna de "venal" no banco e elas dão números DIFERENTES —
+esta regra fixa qual usar. A fonte é a do card "Imóveis mais transmitidos" (e "Consultar Imóvel"):
+
+  ✅ ÚNICA FONTE VÁLIDA DE VALOR VENAL: tb_dsod_itbi.vl_venal
+     (com it.vl_total > 0 e vl_venal > 0 — ver REGRAS 12 e 13 para ponte, data e agregação)
+
+  🚫 PROIBIDO usar como "valor venal": tb_dsod_imovel_urbano_lanc.vl_venal_imovel — e igualmente
+     vl_venal_predio, vl_venal_terreno, vl_venal_tributavel, vl_venal_principal, vl_venal_secundaria,
+     vl_venal_excesso, vl_venal_nao_edificado, vl_venal_territorial_predio,
+     vl_venal_territorial_terreno, vl_venal_territorial_excesso (mesma tabela).
+     Essa tabela É acessível (794.452 linhas) e por isso é uma armadilha fácil — mas é o venal
+     CADASTRAL do lançamento de IPTU por exercício, NÃO o venal da transmissão.
+
+⚠️ POR QUE NÃO SÃO INTERCAMBIÁVEIS (medido em 2026, mesmo imóvel + mesmo exercício, 738 casos
+comparáveis): batem em 660 (89,4%) e DIVERGEM em 78 (10,6%). Divergências reais medidas:
+  imóvel 13740 → ITBI R$ 398.494,97 × cadastral R$ 796.989,94   (exatamente 2×)
+  imóvel 13739 → ITBI R$ 167.793,81 × cadastral R$ 335.587,62   (exatamente 2×)
+  imóvel 2405  → ITBI R$  58.768,04 × cadastral R$  61.805,79
+  imóvel 167   → ITBI R$ 170.945,17 × cadastral R$ 179.783,21
+Os casos de exatamente 2× indicam FRAÇÃO IDEAL: o venal do ITBI reflete a FRAÇÃO TRANSMITIDA,
+enquanto o cadastral é o imóvel INTEIRO. Ou seja, não é "erro de um dos lados" — são conceitos
+diferentes, e trocar um pelo outro pode dobrar a resposta.
+
+⚠️ Se ainda assim precisar citar o venal cadastral do IPTU (só quando o usuário pedir
+EXPLICITAMENTE o venal de IPTU/cadastro), diga qual dos dois está usando, e cuidado:
+tb_dsod_imovel_urbano_lanc NÃO é 1:1 por imóvel + exercício (271 combinações duplicadas medidas)
+→ juntar sem pré-agregar causa fan-out. A coluna de exercício ali é no_exercicio_lancamento.
+
+🚫 NUNCA use as tabelas tb_extr_* (tb_extr_itbi, tb_extr_imovel_urbano_lanc e afins): dão
+Permission denied -121. Elas aparecem no catálogo com colunas de venal, mas não são consultáveis.
+
+🚫 NUNCA cite it.vl_venal_isento nem it.ic_sem_valor_venal_terreno: existem em tb_dsod_itbi mas
+estão 100% sem uso (0 linhas com valor em 24.507 medidas).
+
+⚠️ it.vl_venal vem 0 ou NULO em 1.287 de 24.507 ITBIs (5,3%) — todo cálculo baseado em venal
+(valorização, faixa "Valor ≤ venal", alerta "abaixo do venal") precisa filtrar vl_venal > 0,
+senão o resultado é distorcido para baixo.
+
+⚠️ ISS / ISSCC NÃO TEM VALOR VENAL: a aba ISSCC (Imobiliário) trabalha com ÁREA EDIFICADA (m²) e
+valor de ISSCC lançado/arrecadado (cd_tributo 40/17/18) — não existe venal ali. Se a pergunta
+misturar ISS com valor venal, responda com o venal de ITBI (it.vl_venal, esta regra) e deixe
+explícito que o venal vem do módulo de ITBI, NUNCA invente um venal "de ISS".
+
+SANIDADE (validada na base do IQ em 26/08/2026) — imóvel 3264, onde as duas fontes COINCIDEM
+(imóvel inteiro, sem fração): venal por transmissão (it.vl_venal) 2017 = 59.146,51 · 2020 =
+65.690,75 · 2024 = 83.642,87 · 2025 = 87.341,52 · 2026 = 91.855,01, idêntico ao venal cadastral
+dos mesmos exercícios. Note que dentro de um MESMO exercício o venal é CONSTANTE por imóvel: as
+14 transmissões de 2026 do imóvel 3264 têm todas vl_venal = 91.855,01.
 `
