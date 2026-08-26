@@ -65,8 +65,10 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
   const [buscaPrestador, setBuscaPrestador] = useState('')
   const [cadastroAberto, setCadastroAberto] = useState<string | null>(null) // cnpj do prestador expandido
   const [cadastroDados, setCadastroDados] = useState<CadastroResp | null>(null)
+  const [cadastroErro, setCadastroErro] = useState(false)
   const [notasAberto, setNotasAberto] = useState<string | null>(null) // cnpj do prestador com notas expandidas
   const [notasDados, setNotasDados] = useState<NotaFiscalItem[] | null>(null)
+  const [notasErro, setNotasErro] = useState(false)
 
   useEffect(() => {
     setDados(null)
@@ -75,8 +77,10 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setBuscaPrestador('')
     setCadastroAberto(null)
     setCadastroDados(null)
+    setCadastroErro(false)
     setNotasAberto(null)
     setNotasDados(null)
+    setNotasErro(false)
     const qs = new URLSearchParams()
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
@@ -91,8 +95,10 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setBuscaPrestador('')
     setCadastroAberto(null)
     setCadastroDados(null)
+    setCadastroErro(false)
     setNotasAberto(null)
     setNotasDados(null)
+    setNotasErro(false)
     const qs = new URLSearchParams({ top: '20', municipio: nome })
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
@@ -106,34 +112,52 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setBuscaPrestador('')
     setCadastroAberto(null)
     setCadastroDados(null)
+    setCadastroErro(false)
     setNotasAberto(null)
     setNotasDados(null)
+    setNotasErro(false)
   }
 
   // Nível 3 — dados cadastrais do prestador (drill dentro do drill): liga o CNPJ da NFS-e
   // ao cadastro mobiliário de Arujá (fonte /api/mobiliario/iss-fora-cadastro). Prestadores
-  // de fora do município podem não ter vínculo nenhum — resposta válida, não um erro.
-  function alternarCadastro(cnpj: string) {
-    if (cadastroAberto === cnpj) { setCadastroAberto(null); setCadastroDados(null); return }
-    setCadastroAberto(cnpj)
+  // de fora do município podem não ter vínculo nenhum — resposta válida, não um erro. Erro de
+  // rede/agente (timeout, 5xx) é distinto de "sem vínculo" — mostra estado de erro com opção
+  // de tentar de novo, em vez de ficar preso em "Carregando…" pra sempre (bug real: antes o
+  // catch engolia o erro e o painel nunca saía do estado de loading).
+  function carregarCadastro(cnpj: string) {
     setCadastroDados(null)
-    fetch(`/api/mobiliario/iss-fora-cadastro?cnpj=${encodeURIComponent(cnpj)}`).then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setCadastroDados(d) }).catch(() => {})
+    setCadastroErro(false)
+    fetch(`/api/mobiliario/iss-fora-cadastro?cnpj=${encodeURIComponent(cnpj)}`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(d => { if (d && !d.error) setCadastroDados(d); else setCadastroErro(true) })
+      .catch(() => setCadastroErro(true))
+  }
+  function alternarCadastro(cnpj: string) {
+    if (cadastroAberto === cnpj) { setCadastroAberto(null); setCadastroDados(null); setCadastroErro(false); return }
+    setCadastroAberto(cnpj)
+    carregarCadastro(cnpj)
   }
 
   // Nível 3 (alternativo) — notas do prestador: lista as NFS-e que compõem o qt/iss daquele
   // item, reaplicando o mesmo filtro de município + período (fonte /api/mobiliario/iss-fora-
   // notas). Independente do drill de cadastro acima — o clique é no texto "N notas", não na
-  // linha inteira, então os dois painéis podem abrir sem interferir um no outro.
-  function alternarNotas(cnpj: string) {
-    if (notasAberto === cnpj) { setNotasAberto(null); setNotasDados(null); return }
-    setNotasAberto(cnpj)
+  // linha inteira, então os dois painéis podem abrir sem interferir um no outro. Mesmo
+  // tratamento de erro com retry do cadastro acima (ver comentário lá).
+  function carregarNotas(cnpj: string) {
     setNotasDados(null)
+    setNotasErro(false)
     const qs = new URLSearchParams({ cnpj, municipio: municipioSel || '', top: '50' })
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
-    fetch(`/api/mobiliario/iss-fora-notas?${qs}`).then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error && Array.isArray(d.itens)) setNotasDados(d.itens) }).catch(() => {})
+    fetch(`/api/mobiliario/iss-fora-notas?${qs}`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(d => { if (d && !d.error && Array.isArray(d.itens)) setNotasDados(d.itens); else setNotasErro(true) })
+      .catch(() => setNotasErro(true))
+  }
+  function alternarNotas(cnpj: string) {
+    if (notasAberto === cnpj) { setNotasAberto(null); setNotasDados(null); setNotasErro(false); return }
+    setNotasAberto(cnpj)
+    carregarNotas(cnpj)
   }
 
   if (!dados) {
@@ -246,7 +270,13 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
                         {notasOpen ? (
                           <div style={{ marginTop: 8, background: '#f7f9fd', borderRadius: 10, padding: '10px 12px' }}>
                             {!notasDados ? (
-                              <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Carregando notas…</div>
+                              notasErro ? (
+                                <div onClick={() => carregarNotas(t.cnpj)} style={{ fontSize: 11.5, color: '#d64545', textAlign: 'center', padding: '10px 0', cursor: 'pointer' }}>
+                                  Não foi possível carregar as notas agora (agente/banco lento ou indisponível) — toque para tentar de novo.
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Carregando notas…</div>
+                              )
                             ) : !notasDados.length ? (
                               <div style={{ fontSize: 11.5, color: '#9098a8', padding: '4px 0' }}>Nenhuma nota encontrada.</div>
                             ) : (
@@ -274,7 +304,13 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
                         {aberto ? (
                           <div style={{ marginTop: 8, background: '#f7f9fd', borderRadius: 10, padding: '10px 12px' }}>
                             {!cadastroDados ? (
-                              <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Carregando dados cadastrais…</div>
+                              cadastroErro ? (
+                                <div onClick={() => carregarCadastro(t.cnpj)} style={{ fontSize: 11.5, color: '#d64545', textAlign: 'center', padding: '10px 0', cursor: 'pointer' }}>
+                                  Não foi possível carregar os dados cadastrais agora (agente/banco lento ou indisponível) — toque para tentar de novo.
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Carregando dados cadastrais…</div>
+                              )
                             ) : !cadastroDados.encontrado || !cadastroDados.detalhe ? (
                               <div style={{ fontSize: 11.5, color: '#9098a8', padding: '4px 0' }}>Sem vínculo com o cadastro mobiliário de Arujá — comum pra prestadores de fora do município sem estabelecimento local.</div>
                             ) : (() => {
