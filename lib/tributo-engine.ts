@@ -434,6 +434,51 @@ export interface BucketsIptuAno {
 
 const IPTU_COD = '1'
 
+/**
+ * Lançado/Arrecadado OFICIAL do IPTU (mesmas regras de lancadoOficial/bucketsIptu acima)
+ * para UM único exercício — versão enxuta pra telas que só precisam desses dois números de
+ * um ano específico (ex.: Cobrança → Análise de Conversão, "Por Tributo"). bucketsIptu/
+ * bucketsIptuAteMes calculam a série de TODOS os exercícios de uma vez (caro, só viável
+ * porque bucketsIptu() é pré-aquecido 2x/dia via lib/warmup.ts — bucketsIptuAteMes NÃO é
+ * pré-aquecido, então chamá-la sob demanda por mês arrisca timeout); aqui o filtro
+ * `g.no_exercicio_lancamento = ano` já na query mantém o escopo pequeno o bastante pra
+ * rodar direto, sem depender de cache pré-aquecido.
+ */
+export interface IptuOficialAno { lancado: number; arrecadado: number }
+
+export async function iptuOficialAno(ano: number, mes?: number): Promise<IptuOficialAno> {
+  return cached(`iptuOficialAno:${ano}:${mes ?? ''}`, TTL_15MIN, () => iptuOficialAnoRaw(ano, mes))
+}
+
+async function iptuOficialAnoRaw(ano: number, mes?: number): Promise<IptuOficialAno> {
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
+  const [lancR, arrecR] = await Promise.all([
+    agentQuery(`
+      SELECT g.ds_situacao AS sit, SUM(pm.vl_movimento) AS vl
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (1, 2, 3)
+        AND p.no_parcela NOT IN (0) AND g.no_exercicio_lancamento = ${ano}${filtroMes}
+      GROUP BY g.ds_situacao`, 20),
+    agentQuery(`
+      SELECT g.ds_situacao AS sit, SUM(pm.vl_movimento) AS vl
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND pm.cd_tipo_movimento IN (11, 14)
+        AND p.no_parcela NOT IN (0) AND pm.cd_tipo_lancamento IN (0, 4, 7, 10)
+        AND pb.cd_tipo_baixa NOT IN (28) AND YEAR(pb.dt_baixa) >= g.no_exercicio_lancamento
+        AND g.no_exercicio_lancamento = ${ano}${filtroMes}
+      GROUP BY g.ds_situacao`, 20),
+  ])
+  const soma = (rows: unknown[][]) => rows
+    .filter(r => !LANC_SIT_EXCLUIR.has(String(r[0] ?? '').trim()))
+    .reduce((s, r) => s + num(r[1]), 0)
+  return { lancado: soma(lancR.rows), arrecadado: soma(arrecR.rows) }
+}
+
 export async function bucketsIptu(): Promise<Map<number, BucketsIptuAno>> {
   return cached('bucketsIptu', TTL_15MIN, bucketsIptuRaw)
 }

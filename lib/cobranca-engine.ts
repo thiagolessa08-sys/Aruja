@@ -1,5 +1,5 @@
 import { agentQuery } from '@/lib/agent'
-import { rankingTributos } from '@/lib/tributo-engine'
+import { rankingTributos, iptuOficialAno } from '@/lib/tributo-engine'
 import { CODIGOS_EXCLUIDOS } from '@/lib/tributos'
 import { cached, TTL_15MIN } from '@/lib/cache'
 
@@ -413,7 +413,7 @@ export async function analiseConversao(ano = 2025, mes?: number): Promise<Analis
 async function analiseConversaoRaw(ano: number, mes?: number): Promise<AnaliseConversao> {
   const excl = CODIGOS_EXCLUIDOS.join(',')
   const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
-  const [rank, periodoR, totalAnoR, operR] = await Promise.all([
+  const [rank, periodoR, totalAnoR, operR, iptuOficial] = await Promise.all([
     rankingTributos(false, ano, mes),
     agentQuery(`
       SELECT g.no_exercicio_lancamento AS ex, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
@@ -440,9 +440,20 @@ async function analiseConversaoRaw(ano: number, mes?: number): Promise<AnaliseCo
       WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano}${filtroMes}
         AND PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) > 0
       GROUP BY g.cd_usuario_gerador`, 300),
+    iptuOficialAno(ano, mes),
   ])
 
-  const porTributo: ConversaoItem[] = rank
+  // "Por Tributo" precisa refletir o mesmo lançado/arrecadado OFICIAL do IPTU usado nos KPIs
+  // da tela de Imobiliário (Regras 1-6, tb_dsod_parcela_movimento — ver iptuOficialAno), não
+  // o modelo de tb_dsod_parcela_posicao usado por rankingTributos pros demais tributos.
+  // Sobrescreve só a linha do IPTU (cd_tributo=1) antes do corte de top 10 — os outros
+  // tributos continuam no modelo de rankingTributos. "IPTU Diferença de Área" (cd_tributo=25)
+  // fica de fora dessa troca porque também fica de fora do IPTU oficial de Imobiliário.
+  const rankAjustado = rank.map(t => t.cd === 1
+    ? { ...t, lancado: iptuOficial.lancado, arrecadado: iptuOficial.arrecadado }
+    : t)
+
+  const porTributo: ConversaoItem[] = rankAjustado
     .filter(t => t.lancado > 0)
     .sort((a, b) => b.lancado - a.lancado)
     .slice(0, 10)
