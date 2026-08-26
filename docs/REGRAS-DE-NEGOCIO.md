@@ -187,6 +187,53 @@ deve fazer o mesmo: `Total Lançado` (oficial) + `Lançado (Guias Ativas)` (mesm
 `app/api/itbi/visao/route.ts`, `app/imobiliario/PainelItbi.tsx`,
 `lib/regras-negocio.ts` (REGRA 10 — injetada no system prompt do chat).
 
+### 7b. ITBI por Bairro / Rua / Imóvel — valores E quantidades (vale no chat)
+
+**Regra:** valor ou quantidade de ITBI por bairro/rua/imóvel usa exatamente a regra do gráfico
+**"ITBI por Bairro"**. Para IPTU por bairro vale a REGRA 8 — **a ponte do ITBI é diferente**.
+
+⚠️ **`g.cd_devedor` NÃO é o imóvel no ITBI.** No IPTU `g.cd_devedor = cd_imovel_urbano`; no ITBI é o
+**contribuinte**. Usar como imóvel casa por coincidência de ID, derruba ~94% dos registros e atribui
+bairro errado (bug real já corrigido). Medido em 2026: errado = **41 imóveis / R$ 1,66 mi** vs
+correto = **655 imóveis / R$ 29,70 mi**.
+
+**Ponte oficial:** `g.cd_origem = it.cd_itbi` → `tb_dsod_itbi_imovel_urbano` → `cd_imovel_urbano`
+→ `tb_dsod_imovel_urbano` → `tb_dsod_cep` (`nm_bairro` / `ds_endereco`).
+
+⚠️ `tb_dsod_itbi_imovel_urbano` é **1:N** → juntar direto causa **fan-out e infla o SUM** (2026:
+R$ 29.744.826,12 inflado × R$ 29.696.574,62 correto). Obrigatório colapsar para 1 imóvel por
+transmissão:
+
+```sql
+JOIN (SELECT cd_itbi, MIN(cd_imovel_urbano) cd_imovel_urbano
+        FROM pref_aruja_sp.tb_dsod_itbi_imovel_urbano GROUP BY cd_itbi) iiu
+  ON iiu.cd_itbi = it.cd_itbi
+```
+
+Demais obrigatórios: `it.vl_total > 0`; `g.cd_tributo = 10`; `no_exercicio_lancamento = <ano>`;
+`p.no_parcela <> 0`. **Quantidade = `COUNT(DISTINCT iiu.cd_imovel_urbano)`** (nunca `COUNT(*)` — com
+parcelas/movimentos no FROM isso conta linhas de movimento). Drill: `c.nm_bairro` → `c.ds_endereco`
+→ `iiu.cd_imovel_urbano`.
+
+Métricas espelham `bucketsItbi`: **lançado** `pm.cd_tipo_movimento <= 3` + fora de
+Recalculo/Validacao · **arrecadado** mov 11,14 · lanç 0,4,7,10 · exclui `Estorno de Baixa`
+**e também `Cancelada`** (diferente do lançado) · **isento** = `Não Incidência de ITBI` via
+`tb_extr_isencoes` · **suspenso** mov 20 · **em aberto / inadimplência** = net por
+(imóvel, devedor, vencimento) `HAVING > 0` / `> 1` (inadimplência é subconjunto do em aberto).
+
+⚠️ **A soma dos bairros não fecha com o KPI da seção 7a**: a ponte de imóvel é INNER JOIN, então
+transmissão sem imóvel/CEP resolvido fica fora. Medido em 2026: bairros **R$ 29.696.574,62** ×
+KPI Total Lançado **R$ 29.773.974,62** → diferença **R$ 77.400,00 (0,26%)**. Não apresentar o total
+por bairro como lançado do município nem "corrigir" a diferença.
+
+**Sanidade (base do IQ, 25/08/2026 — lançado 2026, 73 bairros, 655 imóveis / R$ 29.696.574,62):**
+ARUJÁ 5 = 32 / R$ 5.761.356,85 · CONDOMINIO ARUJAZINHO IV = 24 / R$ 5.280.215,38 ·
+LIMOEIRO = 19 / R$ 3.583.485,39 · CONDOMINIO NOVO HORIZONTE = 9 / R$ 2.898.622,57 ·
+CENTRO INDUSTRIAL DE ARUJA = 5 / R$ 1.666.383,27.
+
+**Implementação:** `lib/itbi-agg.ts` (`bairrosItbi`), `app/api/itbi/bairros/route.ts`,
+`app/imobiliario/PainelItbi.tsx`, `lib/regras-negocio.ts` (REGRA 11 — no system prompt do chat).
+
 ## 7b. Chat — busca por texto e anti-alucinação (Regra 5 do prompt)
 
 **Contexto:** o chat gerou uma análise falsa sobre um contribuinte ("Robinson Simões": CPF e

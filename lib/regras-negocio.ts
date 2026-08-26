@@ -349,5 +349,86 @@ SANIDADE (validado na base do IQ em 25/08/2026) — Total Lançado / Lançado At
 
 As demais métricas de ITBI (arrecadado, em aberto, inadimplência, isento, suspenso) seguem a mesma
 base/ponte deste bloco com os filtros da REGRA 4 — mas sempre mantendo o JOIN tb_dsod_itbi e o
-it.vl_total > 0.
+it.vl_total > 0. Para ITBI POR BAIRRO/RUA/IMÓVEL, use a REGRA 11 (ponte diferente).
+
+## REGRA 11 — ITBI POR BAIRRO / RUA / IMÓVEL (valores E quantidades) — regra ÚNICA e OBRIGATÓRIA
+
+Quando a pergunta pedir VALOR ou QUANTIDADE de ITBI por BAIRRO, RUA ou IMÓVEL ("ITBI por bairro",
+"bairros que mais arrecadam ITBI", "quantos imóveis tiveram ITBI no bairro X", "ruas com mais
+inadimplência de ITBI"), use EXATAMENTE a regra do gráfico "ITBI por Bairro" da tela de ITBI
+(Imobiliário). Para IPTU por bairro continue usando a REGRA 8 — a ponte do ITBI é DIFERENTE.
+
+⚠️ ERRO GRAVÍSSIMO A EVITAR — g.cd_devedor NÃO É O IMÓVEL NO ITBI:
+No IPTU, g.cd_devedor = cd_imovel_urbano. No ITBI, g.cd_devedor é o CONTRIBUINTE (pessoa). Se você
+usar g.cd_devedor como imóvel, o ID casa por COINCIDÊNCIA com algum imóvel qualquer: derruba ~94%
+dos registros e atribui BAIRRO ERRADO aos que "batem". Foi um bug real já corrigido. Medido ao
+vivo no exercício 2026: o jeito errado dá 41 imóveis / R$ 1.655.058,93 contra os corretos
+655 imóveis / R$ 29.696.574,62.
+
+PONTE OFICIAL (obrigatória): guia → itbi → itbi_imovel_urbano → imóvel → cep
+  g.cd_origem = it.cd_itbi   →   tb_dsod_itbi_imovel_urbano   →   cd_imovel_urbano   →   nm_bairro
+
+⚠️ tb_dsod_itbi_imovel_urbano é 1:N (uma transmissão pode ter vários imóveis). Juntá-la DIRETO
+causa fan-out e INFLA o SUM (medido em 2026: R$ 29.744.826,12 inflado contra R$ 29.696.574,62
+correto). É OBRIGATÓRIO colapsar para 1 imóvel por transmissão com uma subquery MIN:
+  (SELECT cd_itbi, MIN(cd_imovel_urbano) cd_imovel_urbano
+     FROM pref_aruja_sp.tb_dsod_itbi_imovel_urbano GROUP BY cd_itbi)
+Isso serve só para ATRIBUIR bairro e CONTAR imóveis, sem duplicar valor.
+
+FROM + WHERE base (todas as métricas partem daqui):
+  FROM pref_aruja_sp.tb_dsod_guias g
+  JOIN pref_aruja_sp.tb_dsod_itbi it ON it.cd_itbi = g.cd_origem
+  JOIN (SELECT cd_itbi, MIN(cd_imovel_urbano) cd_imovel_urbano
+          FROM pref_aruja_sp.tb_dsod_itbi_imovel_urbano GROUP BY cd_itbi) iiu ON iiu.cd_itbi = it.cd_itbi
+  JOIN pref_aruja_sp.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = iiu.cd_imovel_urbano
+  JOIN pref_aruja_sp.tb_dsod_cep c ON c.cd_cep = i.cd_cep
+  JOIN pref_aruja_sp.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+  JOIN pref_aruja_sp.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+  WHERE g.cd_tributo = 10 AND g.no_exercicio_lancamento = <ano> AND p.no_parcela <> 0
+    AND it.vl_total > 0
+
+QUANTIDADE ("quantos imóveis") = COUNT(DISTINCT iiu.cd_imovel_urbano). NUNCA COUNT(*) — com as
+parcelas/movimentos no FROM, COUNT(*) conta linhas de movimento, não imóveis.
+
+NÍVEL DO AGRUPAMENTO (é um drill de 3 níveis, igual à tela):
+  bairro → GROUP BY c.nm_bairro   ·   rua (dentro do bairro) → GROUP BY c.ds_endereco
+  imóvel (dentro da rua) → GROUP BY iiu.cd_imovel_urbano
+Filtrar nível: AND c.nm_bairro = '<bairro>'  e/ou  AND c.ds_endereco = '<rua>'
+
+FÓRMULA POR MÉTRICA (semRV = AND g.ds_situacao NOT IN ('Recalculo','Validacao')):
+  • LANÇADO (padrão): ...base... semRV AND pm.cd_tipo_movimento <= 3
+      → SELECT <grupo> k, COUNT(DISTINCT iiu.cd_imovel_urbano) im, SUM(pm.vl_movimento) vl
+  • ARRECADADO: junte tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      e tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      ...base... semRV AND g.ds_situacao NOT IN ('Cancelada')
+      AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+      AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
+      (ATENÇÃO: no arrecadado por bairro, 'Cancelada' também é excluída — diferente do lançado.)
+  • ISENTO (Não Incidência): ...base... semRV AND pm.cd_tipo_movimento <= 3
+      AND iiu.cd_imovel_urbano IN (SELECT e.cd_origem FROM pref_aruja_sp.tb_extr_isencoes e
+        WHERE e.ds_isencao IN ('Não Incidência de ITBI'))
+  • SUSPENSO: ...base... AND pm.cd_tipo_movimento = 20
+  • EM ABERTO: net por (imóvel, devedor, vencimento) — subquery + soma externa:
+      SELECT k, COUNT(DISTINCT imovel) im, SUM(valor) vl FROM (
+        SELECT <grupo> k, iiu.cd_imovel_urbano imovel, g.cd_devedor, p.dt_vencimento venc,
+               SUM(pm.vl_movimento*pm.no_sinal) valor
+        ...base... AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20)
+                   AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+        GROUP BY <grupo>, iiu.cd_imovel_urbano, g.cd_devedor, p.dt_vencimento
+        HAVING SUM(pm.vl_movimento*pm.no_sinal) > 0 ) t GROUP BY k
+  • INADIMPLÊNCIA: igual Em Aberto, mas AND p.dt_vencimento < getdate()-1,
+      movimento IN (0,1,2,3,12,11,14,20), lançamento IN (4,7,0,10,1) e HAVING ... > 1.
+      É SUBCONJUNTO do Em Aberto (parte vencida) — nunca some os dois.
+
+⚠️ A SOMA DOS BAIRROS NÃO FECHA COM O KPI DA REGRA 10: a ponte de imóvel é INNER JOIN, então
+transmissão que não resolve imóvel/CEP fica fora do gráfico. Medido em 2026: soma dos bairros
+R$ 29.696.574,62 contra KPI Total Lançado R$ 29.773.974,62 — diferença de R$ 77.400,00 (0,26%).
+NUNCA apresente o total por bairro como se fosse o lançado do município, e não "conserte" a
+diferença: se precisar citar os dois, explique que o recorte por bairro exige imóvel vinculado.
+
+SANIDADE (validado na base do IQ em 25/08/2026, lançado 2026, nível bairro — 73 bairros,
+total 655 imóveis / R$ 29.696.574,62):
+  ARUJÁ 5 = 32 imóveis / R$ 5.761.356,85 · CONDOMINIO ARUJAZINHO IV = 24 / R$ 5.280.215,38
+  LIMOEIRO = 19 / R$ 3.583.485,39 · CONDOMINIO NOVO HORIZONTE = 9 / R$ 2.898.622,57
+  CENTRO INDUSTRIAL DE ARUJA = 5 / R$ 1.666.383,27
 `
