@@ -10,6 +10,7 @@ interface MunItem { nome: string; qt: number; iss: number }
 interface Resp { local: GrupoMun; fora: GrupoMun; naoInformado: GrupoMun; topFora: MunItem[] }
 interface PrestadorForaItem { cnpj: string; nome: string; qt: number; iss: number }
 interface CadastroResp { encontrado: boolean; detalhe: DetalheEmpresa | null }
+interface NotaFiscalItem { cd: number; numero: string; serie: string; dtEmissao: string; vlServicos: number; vlImposto: number; aliquota: number }
 
 const situacaoCor = (s: string) => /ativ/i.test(s) ? '#1fa463' : /baix|cancel|encerr/i.test(s) ? '#d64545' : '#9098a8'
 const fmtData = (d: string) => d ? d.split('-').reverse().join('/') : '—'
@@ -33,15 +34,20 @@ const voltarBtn: React.CSSProperties = { border: 'none', background: '#eef1fb', 
 // guias usado no resto da aba ISS; não somar com "ISS lançado" do topo da tela). nm_mun é
 // texto livre digitado na nota, então a classificação Arujá × fora é aproximada
 // (normalizada) — ver aviso no card. `ano`/`mes` seguem a mesma convenção do PainelTributo.
-// Drill em 2 passos: 1) clique em qualquer barra (Arujá ou um município de fora) mostra o
-// ranking dos prestadores daquele local (fonte /api/mobiliario/iss-fora-prestadores — trata
-// "Arujá" como caso especial, já que não há uma grafia única de nm_mun pra filtrar por
-// igualdade); 2) clique num prestador expande os dados cadastrais dele (fonte
-// /api/mobiliario/iss-fora-cadastro), ligando o CNPJ da NFS-e ao cadastro mobiliário de
-// Arujá por CNPJ normalizado — cd_contr_mob_prestador da NFS-e NÃO é confiável (validado:
-// aponta pra empresa errada), por isso a ligação é feita à parte. Prestadores de fora do
-// município sem estabelecimento em Arujá legitimamente não têm cadastro — "sem vínculo" é
-// uma resposta esperada, não um erro. O painel de Simulação · Previsão fica sempre visível
+// Drill em 2 passos, com 2 destinos independentes no passo 2: 1) clique em qualquer barra
+// (Arujá ou um município de fora) mostra o ranking dos prestadores daquele local (fonte
+// /api/mobiliario/iss-fora-prestadores — trata "Arujá" como caso especial, já que não há uma
+// grafia única de nm_mun pra filtrar por igualdade); 2a) clique no nome do prestador expande
+// os dados cadastrais dele (fonte /api/mobiliario/iss-fora-cadastro), ligando o CNPJ da NFS-e
+// ao cadastro mobiliário de Arujá por CNPJ normalizado — cd_contr_mob_prestador da NFS-e NÃO
+// é confiável (validado: aponta pra empresa errada), por isso a ligação é feita à parte.
+// Prestadores de fora do município sem estabelecimento em Arujá legitimamente não têm
+// cadastro — "sem vínculo" é uma resposta esperada, não um erro. 2b) clique na quantidade de
+// notas ("N notas", clique separado do nome — stopPropagation) expande a lista das NFS-e que
+// compõem aquele qt/iss (fonte /api/mobiliario/iss-fora-notas), reaplicando o mesmo filtro de
+// município/CNPJ/período do ranking — TOP 50 mais recentes primeiro, com aviso de truncamento
+// quando o prestador tem mais notas que isso. Os dois painéis (cadastro/notas) são
+// independentes entre si. O painel de Simulação · Previsão fica sempre visível
 // abaixo, em qualquer nível — é uma projeção do total do card, não do item aberto no drill.
 // `previsao`/`cenario`/`onCenarioChange` vêm de app/mobiliario/page.tsx (componente
 // controlado) — o cenário escolhido aqui também alimenta ISS por Segmento e Limite Anual
@@ -59,6 +65,8 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
   const [buscaPrestador, setBuscaPrestador] = useState('')
   const [cadastroAberto, setCadastroAberto] = useState<string | null>(null) // cnpj do prestador expandido
   const [cadastroDados, setCadastroDados] = useState<CadastroResp | null>(null)
+  const [notasAberto, setNotasAberto] = useState<string | null>(null) // cnpj do prestador com notas expandidas
+  const [notasDados, setNotasDados] = useState<NotaFiscalItem[] | null>(null)
 
   useEffect(() => {
     setDados(null)
@@ -67,6 +75,8 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setBuscaPrestador('')
     setCadastroAberto(null)
     setCadastroDados(null)
+    setNotasAberto(null)
+    setNotasDados(null)
     const qs = new URLSearchParams()
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
@@ -81,6 +91,8 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setBuscaPrestador('')
     setCadastroAberto(null)
     setCadastroDados(null)
+    setNotasAberto(null)
+    setNotasDados(null)
     const qs = new URLSearchParams({ top: '20', municipio: nome })
     if (ano) qs.set('ano', String(ano))
     if (mes) qs.set('mes', String(mes))
@@ -94,6 +106,8 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setBuscaPrestador('')
     setCadastroAberto(null)
     setCadastroDados(null)
+    setNotasAberto(null)
+    setNotasDados(null)
   }
 
   // Nível 3 — dados cadastrais do prestador (drill dentro do drill): liga o CNPJ da NFS-e
@@ -105,6 +119,21 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
     setCadastroDados(null)
     fetch(`/api/mobiliario/iss-fora-cadastro?cnpj=${encodeURIComponent(cnpj)}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setCadastroDados(d) }).catch(() => {})
+  }
+
+  // Nível 3 (alternativo) — notas do prestador: lista as NFS-e que compõem o qt/iss daquele
+  // item, reaplicando o mesmo filtro de município + período (fonte /api/mobiliario/iss-fora-
+  // notas). Independente do drill de cadastro acima — o clique é no texto "N notas", não na
+  // linha inteira, então os dois painéis podem abrir sem interferir um no outro.
+  function alternarNotas(cnpj: string) {
+    if (notasAberto === cnpj) { setNotasAberto(null); setNotasDados(null); return }
+    setNotasAberto(cnpj)
+    setNotasDados(null)
+    const qs = new URLSearchParams({ cnpj, municipio: municipioSel || '', top: '50' })
+    if (ano) qs.set('ano', String(ano))
+    if (mes) qs.set('mes', String(mes))
+    fetch(`/api/mobiliario/iss-fora-notas?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error && Array.isArray(d.itens)) setNotasDados(d.itens) }).catch(() => {})
   }
 
   if (!dados) {
@@ -167,7 +196,7 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
       {municipioSel ? (
         <>
           <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-            Empresas de &quot;{municipioSel}&quot; que mais indicaram ISS nas NFS-e{mes ? ` até o mês ${mes}` : ''} · clique num prestador para ver os dados cadastrais.
+            Empresas de &quot;{municipioSel}&quot; que mais indicaram ISS nas NFS-e{mes ? ` até o mês ${mes}` : ''} · clique num prestador para ver os dados cadastrais, ou na quantidade de notas para ver as notas.
           </div>
 
           {!prestadoresFora ? (
@@ -193,6 +222,7 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
                     <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Nenhum prestador encontrado para a busca.</div>
                   ) : filtrados.map((t, i) => {
                     const aberto = cadastroAberto === t.cnpj
+                    const notasOpen = notasAberto === t.cnpj
                     return (
                       <div key={t.cnpj}>
                         <div onClick={() => t.cnpj && alternarCadastro(t.cnpj)} style={{ cursor: t.cnpj ? 'pointer' : 'default' }}>
@@ -203,11 +233,44 @@ export default function IssForaMunicipio({ ano, mes, previsao, cenario, onCenari
                             </span>
                             <span style={{ color: '#c07a2e', fontWeight: 700, flex: 'none' }}>{fmtAbrev(t.iss)}</span>
                           </div>
-                          <div style={{ fontSize: 10, color: '#aeb6c6', marginBottom: 4 }}>{t.qt.toLocaleString('pt-BR')} nota{t.qt === 1 ? '' : 's'}</div>
+                          <div
+                            onClick={e => { e.stopPropagation(); alternarNotas(t.cnpj) }}
+                            title="Ver as notas"
+                            style={{ fontSize: 10, color: notasOpen ? '#c07a2e' : '#aeb6c6', marginBottom: 4, cursor: 'pointer', width: 'fit-content', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }}>
+                            {t.qt.toLocaleString('pt-BR')} nota{t.qt === 1 ? '' : 's'}
+                          </div>
                           <div style={{ height: 12, borderRadius: 6, background: '#eef1f7', overflow: 'hidden' }}>
                             <div style={{ height: '100%', width: `${Math.max(3, 100 * t.iss / maxVal).toFixed(1)}%`, borderRadius: 6, background: aberto ? '#c0612a' : '#e8962e' }} />
                           </div>
                         </div>
+                        {notasOpen ? (
+                          <div style={{ marginTop: 8, background: '#f7f9fd', borderRadius: 10, padding: '10px 12px' }}>
+                            {!notasDados ? (
+                              <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Carregando notas…</div>
+                            ) : !notasDados.length ? (
+                              <div style={{ fontSize: 11.5, color: '#9098a8', padding: '4px 0' }}>Nenhuma nota encontrada.</div>
+                            ) : (
+                              <div>
+                                <div style={{ fontSize: 10, color: '#9098a8', marginBottom: 6 }}>
+                                  {notasDados.length < t.qt
+                                    ? `Mostrando as ${notasDados.length} notas mais recentes de ${t.qt.toLocaleString('pt-BR')}`
+                                    : `${notasDados.length} nota${notasDados.length === 1 ? '' : 's'}`}
+                                </div>
+                                <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
+                                  {notasDados.map(n => (
+                                    <div key={n.cd} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10.5, borderBottom: '1px solid #eef1f7', paddingBottom: 5 }}>
+                                      <span style={{ color: '#5b6477' }}>NFS-e {n.numero}{n.serie ? `/${n.serie}` : ''} · {fmtData(n.dtEmissao)}</span>
+                                      <span style={{ flex: 'none', textAlign: 'right' }}>
+                                        <span style={{ color: '#1f2a44', fontWeight: 600 }}>{fmtAbrev(n.vlServicos)}</span>
+                                        <span style={{ color: '#9098a8' }}> · ISS {fmtAbrev(n.vlImposto)} ({n.aliquota.toFixed(2).replace('.', ',')}%)</span>
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                         {aberto ? (
                           <div style={{ marginTop: 8, background: '#f7f9fd', borderRadius: 10, padding: '10px 12px' }}>
                             {!cadastroDados ? (
