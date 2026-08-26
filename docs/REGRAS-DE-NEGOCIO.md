@@ -256,6 +256,54 @@ transmissão em atraso.
 **Implementação:** `lib/itbi-agg.ts` (`bairrosItbi`), `app/api/itbi/bairros/route.ts`,
 `app/imobiliario/PainelItbi.tsx`, `lib/regras-negocio.ts` (REGRA 11 — no system prompt do chat).
 
+### 7c. Transmissão de imóveis e valor venal (vale no chat)
+
+**Regra:** contagem de transmissões e valor venal usam as regras dos cards **"Imóveis mais
+transmitidos"** e **"Consultar Imóvel"**. Fonte = `tb_dsod_itbi` (it) + `tb_dsod_itbi_imovel_urbano`
+(iiu) — **não passa por `tb_dsod_guias`** (é o cadastro da transmissão, não o lançamento do imposto).
+
+`TRANSMISSÃO = COUNT(DISTINCT it.cd_itbi)`, sempre com `it.vl_total > 0`.
+
+⚠️ **A coluna de data aqui é `it.dt_lancamento`** — *não* `no_exercicio_lancamento` da guia
+(seções 7a/7b). Medido em 2026: **798** transmissões por `dt_lancamento` × **760** por exercício da
+guia (38 de diferença). Para contar transmissão, usar `dt_lancamento`.
+
+⚠️ **Aqui a ponte 1:N NÃO é colapsada** (o oposto da seção 7b): junta-se
+`tb_dsod_itbi_imovel_urbano` direto, porque a unidade é **imóvel × transmissão** — um ITBI que cobre
+2 imóveis conta 1 transmissão para cada. **Consequência:** `SUM(it.vl_venal)` agrupado por imóvel
+repete o venal do ITBI em cada imóvel dele (**34 ITBIs têm mais de um imóvel**), então "venal total"
+vale **por imóvel** e nunca somado entre imóveis.
+
+Colunas de valor em `tb_dsod_itbi`: `vl_venal` (valor venal) · `vl_aquisicao_original` (valor
+declarado) · `pc_aliquota` · `vl_total` (imposto).
+
+**Faixas do card:** `HAVING COUNT(DISTINCT it.cd_itbi)` `= 1` / `= 2` / `BETWEEN 3 AND 5` / `>= 6`.
+
+**Faixa "Valor ≤ venal":** `vl_venal > 0 AND vl_aquisicao_original <= vl_venal`, contagem
+`COUNT(DISTINCT iiu.cd_imovel_urbano)`. Significa que o ITBI foi calculado **sobre o venal**, pois a
+base é o maior entre venal e declarado — **regra normal de apuração**. ⚠️ Nunca descrever como
+sonegação/subdeclaração/fraude.
+
+**Consultar Imóvel:** transmissões via `iiu.cd_imovel_urbano = <id> AND it.vl_total > 0`, **sem
+filtro de ano** (histórico sempre completo). ⚠️ A data exibida é **`it.dt_transacao`** (terceira
+coluna de data do módulo, ≠ `dt_lancamento` das contagens, ≠ `dt_vencimento`). Imposto por
+transmissão vem do **livro-razão** (`g.cd_origem = cd_itbi`, mov 1,2,3, `no_parcela <> 0`, fora de
+Recalculo/Validacao), não de `vl_total`. Valorização do venal = (venal mais recente − venal mais
+antigo) ÷ venal mais antigo, só transmissões com `vl_venal > 0`. Partes em
+`cd_contr_transmitente`/`cd_contr_adquirente` (fallback de nome: `it.nm_transmitente`).
+Proprietário = `i.cd_contr_proprietario`; se espólio, possuidor de fato = `i.cd_contr_posseiro`.
+
+**Sanidade (base do IQ, 25/08/2026 — 2026 por `dt_lancamento`, 798 transmissões):** distribuição
+1 = 578 imóveis · 2 = 72 · 3–5 = 16 · 6+ = 2 · "Valor ≤ venal" = **151 imóveis**. Mais transmitidos:
+imóvel **3264** (NE11140617.000) = **14** transmissões / venal R$ 1.285.970,14 · 6662 = 9 /
+R$ 210.159,42 · 28890 = 5 / R$ 23.799.913,75 · 32945 = 4 / R$ 1.584.655,42 · 18739 = 4 /
+R$ 212.446,40. Note que **quantidade e venal rankeiam diferente** (28890 tem 5 transmissões mas o
+maior venal) — ao dizer "imóvel mais transmitido", deixar claro que o critério é a quantidade.
+
+**Implementação:** `app/api/itbi/ranking-imovel/route.ts`,
+`app/api/itbi/transmissoes-faixa/route.ts`, `app/api/itbi/imovel/route.ts`,
+`app/imobiliario/PainelItbi.tsx`, `lib/regras-negocio.ts` (REGRA 12 — no system prompt do chat).
+
 ## 7b. Chat — busca por texto e anti-alucinação (Regra 5 do prompt)
 
 **Contexto:** o chat gerou uma análise falsa sobre um contribuinte ("Robinson Simões": CPF e

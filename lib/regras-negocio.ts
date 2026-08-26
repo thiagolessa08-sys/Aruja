@@ -454,4 +454,75 @@ Em 2025, UM único imóvel responde por 98,5% da inadimplência do ano. Ao respo
 mais inadimplente, SEMPRE informe também a quantidade de imóveis: dizer que um bairro "lidera a
 inadimplência" com 1 imóvel é muito diferente de liderar com dezenas. Não descreva como problema
 disseminado do bairro o que é uma única transmissão em atraso.
+
+## REGRA 12 — TRANSMISSÃO DE IMÓVEIS e VALOR VENAL — regra ÚNICA e OBRIGATÓRIA
+
+Quando a pergunta envolver TRANSMISSÃO DE IMÓVEL (quantas transmissões, imóveis mais
+transmitidos, quantas vezes o imóvel foi vendido, histórico de transmissões) ou VALOR VENAL,
+use EXATAMENTE as regras dos cards "Imóveis mais transmitidos" e "Consultar Imóvel" da tela de
+ITBI (Imobiliário).
+
+FONTE: tb_dsod_itbi (it) + tb_dsod_itbi_imovel_urbano (iiu). Este bloco NÃO passa por
+tb_dsod_guias nem pelo livro-razão — é o cadastro da transmissão, não o lançamento do imposto.
+  TRANSMISSÃO = COUNT(DISTINCT it.cd_itbi)      ·      filtro obrigatório: it.vl_total > 0
+
+⚠️ A COLUNA DE DATA AQUI É it.dt_lancamento — NÃO no_exercicio_lancamento da guia (REGRAS 10/11):
+  AND YEAR(it.dt_lancamento) = <ano>   (+ AND MONTH(it.dt_lancamento) <= <mês> se houver mês)
+Trocar a coluna MUDA a resposta: medido em 2026, dt_lancamento dá 798 transmissões contra 760 por
+no_exercicio_lancamento da guia (38 de diferença). Use dt_lancamento para contar transmissões.
+
+⚠️ AQUI A PONTE 1:N **NÃO** É COLAPSADA (o oposto da REGRA 11): junte
+tb_dsod_itbi_imovel_urbano DIRETO. A unidade de análise é imóvel × transmissão, então um ITBI que
+cobre 2 imóveis conta 1 transmissão para CADA imóvel — isso é correto e intencional.
+  → MAS por isso NUNCA some a coluna de venal entre imóveis para obter um total do município:
+    SUM(it.vl_venal) agrupado por imóvel repete o venal do ITBI em cada imóvel dele. Existem 34
+    ITBIs com mais de um imóvel vinculado (verificado) — o risco é real, não teórico.
+    "Venal total" só é válido POR IMÓVEL, nunca somado entre imóveis.
+
+COLUNAS DE VALOR em tb_dsod_itbi (nunca inventar outras):
+  • it.vl_venal              = VALOR VENAL do imóvel na transmissão
+  • it.vl_aquisicao_original = valor de aquisição / transação declarado pelas partes
+  • it.pc_aliquota           = alíquota aplicada
+  • it.vl_total              = imposto total da transmissão (o filtro > 0 = "ITBI com imposto")
+
+CARD "IMÓVEIS MAIS TRANSMITIDOS" — distribuição por faixa (GROUP BY imóvel + HAVING):
+  faixa "1" → HAVING COUNT(DISTINCT it.cd_itbi) = 1   ·  "2" → = 2
+  faixa "3-5" → BETWEEN 3 AND 5                        ·  "6+" → >= 6
+  Ranking dos mais transmitidos: ORDER BY COUNT(DISTINCT it.cd_itbi) DESC
+
+FAIXA "VALOR <= VENAL" (o 5º card):
+  AND it.vl_venal > 0 AND it.vl_aquisicao_original <= it.vl_venal
+  → contagem = COUNT(DISTINCT iiu.cd_imovel_urbano)
+  SIGNIFICADO CORRETO: indica que o ITBI foi calculado sobre o VENAL, porque a base de cálculo é
+  o MAIOR entre venal e valor declarado — é a regra NORMAL de apuração.
+  ⚠️ NUNCA descreva isso como sonegação, subdeclaração, fraude ou irregularidade. É apenas o
+  indicativo de qual dos dois valores serviu de base. Se o usuário sugerir fraude, esclareça isso.
+
+"CONSULTAR IMÓVEL" — histórico do imóvel (ao abrir um imóvel específico):
+  • Transmissões do imóvel: WHERE iiu.cd_imovel_urbano = <id> AND it.vl_total > 0 — SEM filtro de
+    ano: o histórico é SEMPRE completo, mesmo com a tela filtrada por exercício.
+  • ⚠️ A data exibida da transmissão é it.dt_transacao (terceira coluna de data do módulo —
+    não confundir com it.dt_lancamento das contagens, nem com it.dt_vencimento).
+  • Natureza = it.ds_natureza_transacao · situação = it.ds_situacao
+  • Partes: it.cd_contr_transmitente / it.cd_contr_adquirente → nome em tb_dsod_contribuinte;
+    o nome do transmitente tem fallback para o texto livre it.nm_transmitente quando o vínculo
+    não resolve (COALESCE(NULLIF(it.nm_transmitente,''), tb_dsod_contribuinte.nm_rsocial)).
+  • IMPOSTO por transmissão NÃO está em vl_total para esse fim — vem do livro-razão, pela ponte
+    g.cd_origem = cd_itbi, com mov 1,2,3 · no_parcela <> 0 · fora de Recalculo/Validacao.
+  • VALORIZAÇÃO do venal = (venal da transmissão MAIS RECENTE − venal da MAIS ANTIGA) ÷ venal da
+    mais antiga, em ordem cronológica, considerando SÓ transmissões com vl_venal > 0.
+  • Proprietário atual = i.cd_contr_proprietario. Se o proprietário for ESPÓLIO, o possuidor de
+    fato é i.cd_contr_posseiro (herdeiro/responsável enquanto a partilha não sai) — cite-o.
+  • Busca do imóvel: inscrição (i.no_inscricao_imovel), código (i.cd_imovel_urbano) ou nome do
+    proprietário (contribuinte.nm_rsocial).
+
+SANIDADE (validado na base do IQ em 25/08/2026, exercício 2026 por dt_lancamento — 798
+transmissões):
+  Distribuição por imóvel: 1 transmissão = 578 imóveis · 2 = 72 · 3 a 5 = 16 · 6 ou mais = 2
+  Faixa "Valor <= venal" = 151 imóveis
+  Mais transmitidos: imóvel 3264 (insc. NE11140617.000) = 14 transmissões / venal R$ 1.285.970,14 ·
+  imóvel 6662 = 9 / R$ 210.159,42 · imóvel 28890 = 5 / R$ 23.799.913,75 · imóvel 32945 = 4 /
+  R$ 1.584.655,42 · imóvel 18739 = 4 / R$ 212.446,40
+  Note que QUANTIDADE e VENAL rankeiam diferente (28890 tem 5 transmissões mas o maior venal) —
+  ao responder "imóvel mais transmitido" deixe claro que o critério é a QUANTIDADE.
 `
