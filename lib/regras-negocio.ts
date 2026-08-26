@@ -490,9 +490,27 @@ CARD "IMÓVEIS MAIS TRANSMITIDOS" — distribuição por faixa (GROUP BY imóvel
   faixa "3-5" → BETWEEN 3 AND 5                        ·  "6+" → >= 6
   Ranking dos mais transmitidos: ORDER BY COUNT(DISTINCT it.cd_itbi) DESC
 
-FAIXA "VALOR <= VENAL" (o 5º card):
-  AND it.vl_venal > 0 AND it.vl_aquisicao_original <= it.vl_venal
-  → contagem = COUNT(DISTINCT iiu.cd_imovel_urbano)
+FAIXA "VALOR <= VENAL" (o 5º card) — QUERY EXATA, copie sem acrescentar nada:
+  SELECT COUNT(DISTINCT iiu.cd_imovel_urbano) n
+  FROM pref_aruja_sp.tb_dsod_itbi it
+  JOIN pref_aruja_sp.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = it.cd_itbi
+  WHERE it.vl_total > 0 AND it.vl_venal > 0 AND it.vl_aquisicao_original <= it.vl_venal
+    AND YEAR(it.dt_lancamento) = <ano>          (+ AND MONTH(it.dt_lancamento) <= <mês> se houver mês)
+
+  🚨 NUNCA ACRESCENTE "AND it.vl_aquisicao_original > 0" A ESTA FAIXA. Aquisição declarada = 0
+  SATISFAZ a condição (0 <= venal) e ENTRA na contagem. Esse filtro pertence SÓ ao alerta "abaixo
+  do venal" da REGRA 13 — não a esta faixa. ERRO JÁ COMETIDO PELO CHAT: respondeu 149 em vez de
+  151 (2026) exatamente por ter acrescentado esse "> 0"; os 2 imóveis perdidos foram o 5375
+  (aquisição 0,00 / venal 17.306,00) e o 15996 (aquisição 0,00 / venal 1.154.835,75).
+
+  ⚠️ Outras variações que dão o número ERRADO em 2026 (o certo é 151):
+    acrescentar vl_aquisicao_original > 0 ............... 149  ← erro já cometido
+    contar COUNT(DISTINCT it.cd_itbi) em vez de imóvel .. 186  (isso conta transmissões)
+    filtrar pela guia (g.no_exercicio_lancamento) ....... 146
+    filtrar por YEAR(it.dt_transacao) ................... 133
+  Colapsar a ponte com MIN, juntar tb_dsod_imovel_urbano/cep ou excluir sentinela NÃO mudam o
+  resultado (151 nos quatro casos) — mas não acrescente nada disso sem necessidade.
+
   SIGNIFICADO CORRETO: indica que o ITBI foi calculado sobre o VENAL, porque a base de cálculo é
   o MAIOR entre venal e valor declarado — é a regra NORMAL de apuração.
   ⚠️ NUNCA descreva isso como sonegação, subdeclaração, fraude ou irregularidade. É apenas o
@@ -560,9 +578,11 @@ DE-PARA rótulo da tela → coluna real (nunca trocar):
 
 COLUNA "ALERTA" (badge "⚠ abaixo do venal") — condição EXATA, com < ESTRITO:
   it.vl_aquisicao_original > 0 AND it.vl_venal > 0 AND it.vl_aquisicao_original < it.vl_venal
-  ⚠️ NÃO CONFUNDIR com a faixa "Valor ≤ venal" do card "Imóveis mais transmitidos" (REGRA 12),
-  que usa <= e não exige transação > 0. São dois indicadores diferentes: medido em 2026, o ALERTA
-  dá 109 imóveis e a FAIXA dá 151 (dos 42 de diferença, 5 imóveis têm vl_aquisicao_original = 0).
+  🚨 O "> 0" ACIMA VALE SÓ PARA ESTE ALERTA — NUNCA o carregue para a faixa "Valor ≤ venal" do
+  card "Imóveis mais transmitidos" (REGRA 12), que usa <= e NÃO exige transação > 0. São dois
+  indicadores diferentes: medido em 2026, o ALERTA dá 109 imóveis e a FAIXA dá 151 (dos 42 de
+  diferença, 5 imóveis têm vl_aquisicao_original = 0). Levar este "> 0" para a faixa faz ela
+  responder 149 em vez de 151 — erro que o chat JÁ cometeu (ver REGRA 12).
   ⚠️ O alerta NÃO é sonegação, subdeclaração, fraude nem irregularidade — significa apenas que a
   base de cálculo foi o VENAL, porque a base é o MAIOR entre venal e valor declarado (apuração
   NORMAL). Se o usuário sugerir fraude a partir do alerta, corrija essa leitura.

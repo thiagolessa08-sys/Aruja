@@ -279,10 +279,36 @@ declarado) · `pc_aliquota` · `vl_total` (imposto).
 
 **Faixas do card:** `HAVING COUNT(DISTINCT it.cd_itbi)` `= 1` / `= 2` / `BETWEEN 3 AND 5` / `>= 6`.
 
-**Faixa "Valor ≤ venal":** `vl_venal > 0 AND vl_aquisicao_original <= vl_venal`, contagem
-`COUNT(DISTINCT iiu.cd_imovel_urbano)`. Significa que o ITBI foi calculado **sobre o venal**, pois a
-base é o maior entre venal e declarado — **regra normal de apuração**. ⚠️ Nunca descrever como
-sonegação/subdeclaração/fraude.
+**Faixa "Valor ≤ venal"** — query exata, sem acrescentar nada:
+
+```sql
+SELECT COUNT(DISTINCT iiu.cd_imovel_urbano) n
+FROM pref_aruja_sp.tb_dsod_itbi it
+JOIN pref_aruja_sp.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = it.cd_itbi
+WHERE it.vl_total > 0 AND it.vl_venal > 0 AND it.vl_aquisicao_original <= it.vl_venal
+  AND YEAR(it.dt_lancamento) = <ano>   -- + AND MONTH(it.dt_lancamento) <= <mês> se houver mês
+```
+
+🚨 **Nunca acrescentar `AND it.vl_aquisicao_original > 0` a esta faixa.** Aquisição declarada = 0
+*satisfaz* a condição (`0 <= venal`) e **entra** na contagem; esse filtro pertence só ao alerta
+"abaixo do venal" (seção 7d). **Erro já cometido pelo chat:** respondeu **149** em vez de **151**
+(2026) por causa desse `> 0` — os 2 imóveis perdidos foram **5375** (aquisição 0,00 / venal
+17.306,00) e **15996** (aquisição 0,00 / venal 1.154.835,75).
+
+⚠️ Variações que dão número errado em 2026 (correto = **151**):
+
+| Variação | Resultado |
+|---|---|
+| acrescentar `vl_aquisicao_original > 0` | **149** ← erro já cometido |
+| `COUNT(DISTINCT it.cd_itbi)` em vez de imóvel | 186 (conta transmissões) |
+| filtrar pela guia (`g.no_exercicio_lancamento`) | 146 |
+| filtrar por `YEAR(it.dt_transacao)` | 133 |
+
+Colapsar a ponte com `MIN`, juntar `tb_dsod_imovel_urbano`/`tb_dsod_cep` ou excluir sentinela **não**
+alteram o resultado (151 nos quatro casos) — mas não acrescentar sem necessidade.
+
+Significa que o ITBI foi calculado **sobre o venal**, pois a base é o maior entre venal e declarado —
+**regra normal de apuração**. ⚠️ Nunca descrever como sonegação/subdeclaração/fraude.
 
 **Consultar Imóvel:** transmissões via `iiu.cd_imovel_urbano = <id> AND it.vl_total > 0`, **sem
 filtro de ano** (histórico sempre completo). ⚠️ A data exibida é **`it.dt_transacao`** (terceira
@@ -339,10 +365,12 @@ do detalhe do imóvel** (cards "Imóveis mais transmitidos" e "Consultar Imóvel
 
 **Coluna "Alerta"** (badge `⚠ abaixo do venal`), com `<` **estrito**:
 `vl_aquisicao_original > 0 AND vl_venal > 0 AND vl_aquisicao_original < vl_venal`.
-⚠️ **Não confundir com a faixa "Valor ≤ venal"** da 7c (que usa `<=` e não exige transação > 0):
-medido em 2026, o **alerta = 109 imóveis** × a **faixa = 151** (dos 42 de diferença, 5 imóveis têm
-`vl_aquisicao_original = 0`). ⚠️ O alerta **não é** sonegação/fraude — indica apenas que a base de
-cálculo foi o venal (apuração normal, o maior entre venal e declarado).
+🚨 **O `> 0` acima vale só para este alerta** — nunca carregá-lo para a faixa "Valor ≤ venal" da 7c
+(que usa `<=` e **não** exige transação > 0): medido em 2026, o **alerta = 109 imóveis** × a
+**faixa = 151** (dos 42 de diferença, 5 imóveis têm `vl_aquisicao_original = 0`). Levar esse `> 0`
+para a faixa faz ela responder **149** em vez de 151 — erro que o chat já cometeu (ver 7c).
+⚠️ O alerta **não é** sonegação/fraude — indica apenas que a base de cálculo foi o venal (apuração
+normal, o maior entre venal e declarado).
 
 **Card "Transmitente × Proprietário"** — proprietário atual = `i.cd_contr_proprietario`. Estados:
 "Partes não informadas" / "Cadastro atualizado" (adquirente da transmissão mais recente =
