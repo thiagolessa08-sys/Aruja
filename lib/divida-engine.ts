@@ -144,7 +144,7 @@ async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida
   }
 }
 
-export interface MaiorDevedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
+export interface MaiorDevedor { cd: number; nome: string; cpfCnpj: string; saldo: number; crc: string }
 
 // Situações de dívida "reais" (exclui 'Normal' — sem formalização, tratada à parte por
 // não ter um cd_devedor tributo-agnóstico confiável, ver debitosPassiveisDivida).
@@ -174,9 +174,39 @@ async function maioresDevedoresRaw(limite: number, ano?: number, mes?: number, s
     WHERE ${cond.join(' AND ')}
     GROUP BY g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj
     ORDER BY saldo DESC`, limite)
-  return r.rows
-    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim(), cpfCnpj: String(row[2] ?? '').trim(), saldo: num(row[3]) }))
+  const devedores = r.rows
+    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim(), cpfCnpj: String(row[2] ?? '').trim(), saldo: num(row[3]), crc: '' }))
     .filter(x => x.saldo > 0)
+
+  if (devedores.length) {
+    const crcMap = await crcPorContribuinte(devedores.map(d => d.cd))
+    for (const d of devedores) d.crc = crcMap.get(d.cd) ?? ''
+  }
+  return devedores
+}
+
+// CRC do contador responsável pelo contribuinte (busca à parte, NUNCA junto na query de saldo
+// acima — tb_dsod_contribuinte_mobiliario é 1:N por cd_contr (37.269 linhas / 36.101 cd_contr
+// distintos) e, juntando com tb_dsod_contadores por cd_contador, 21 contribuintes têm mais de
+// um cd_contador distinto vinculado — juntar direto multiplicaria SUM(saldo) no agrupamento
+// principal). Vínculo é cd_contribuinte_mobiliario.cd_contador → tb_dsod_contadores.cd_contador
+// (NÃO tb_dsod_contadores.cd_contr, que é auto-referente — liga um contribuinte a si mesmo
+// quando ELE é o contador registrado, e dá 0 de cobertura nos 200 maiores devedores, medido).
+// no_crc_profissional vem "Não Informado" (texto, não nulo) em boa parte das linhas —
+// tratado como sem CRC. Cobertura real medida: 26 de 200 (13%) nos maiores devedores.
+async function crcPorContribuinte(ids: number[]): Promise<Map<number, string>> {
+  const r = await agentQuery(`
+    SELECT cm.cd_contr, ct.no_crc_profissional
+    FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario cm
+    JOIN ${SCHEMA}.tb_dsod_contadores ct ON ct.cd_contador = cm.cd_contador
+    WHERE cm.cd_contr IN (${ids.join(',')}) AND cm.cd_contador > 0`, ids.length * 4)
+  const map = new Map<number, string>()
+  for (const row of r.rows) {
+    const cd = num(row[0])
+    const crc = String(row[1] ?? '').trim()
+    if (crc && crc !== 'Não Informado' && !map.has(cd)) map.set(cd, crc)
+  }
+  return map
 }
 
 export interface IptuDivida { imoveisComIptu: number; imoveisEmDivida: number; valorDivida: number }

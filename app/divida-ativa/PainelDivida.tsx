@@ -16,7 +16,7 @@ interface Resumo {
   dataAtualizacao?: string | null
   composicao?: { principal: number; correcao: number; juros: number; multa: number; honorarios: number }
 }
-interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number }
+interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; crc?: string }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
@@ -828,8 +828,8 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['#', 'Contribuinte', 'CPF/CNPJ', 'Dívida Ativa'].map((h, i) => (
-                    <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '10px 14px', textAlign: i === 0 ? 'center' : i === 3 ? 'right' : 'left', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  {['#', 'Contribuinte', 'CPF/CNPJ', 'CRC', 'Dívida Ativa'].map((h, i) => (
+                    <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '10px 14px', textAlign: i === 0 ? 'center' : i === 4 ? 'right' : 'left', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -838,7 +838,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                   const q = buscaDevedor.trim().toLowerCase()
                   const lista = (devedores ?? []).filter(x => !q || x.nome.toLowerCase().includes(q) || x.cpfCnpj.toLowerCase().includes(q))
                   if (!lista.length) return (
-                    <tr><td colSpan={4} style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: '#9098a8' }}>{devedores ? 'Nenhum devedor encontrado.' : ''}</td></tr>
+                    <tr><td colSpan={5} style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: '#9098a8' }}>{devedores ? 'Nenhum devedor encontrado.' : ''}</td></tr>
                   )
                   return lista.map((dv, i) => {
                     const cellBg = i % 2 === 0 ? '#ffffff' : '#f7f9fd'
@@ -847,6 +847,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                         <td style={{ background: '#e9eef8', color: '#5b6477', fontSize: 11.5, fontWeight: 600, padding: '8px 14px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{i + 1}</td>
                         <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '8px 14px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{dv.nome || `Contribuinte ${dv.cd}`}</td>
                         <td style={{ background: cellBg, color: '#5b6477', fontSize: 11.5, padding: '8px 14px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{dv.cpfCnpj || '—'}</td>
+                        <td style={{ background: cellBg, color: '#5b6477', fontSize: 11.5, padding: '8px 14px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7', whiteSpace: 'nowrap' }}>{dv.crc || '—'}</td>
                         <td style={{ background: cellBg, color: '#c0612a', fontSize: 12, fontWeight: 700, padding: '8px 14px', textAlign: 'right', borderBottom: '1px solid #eef1f7' }}>{fmtReais(dv.saldo)}</td>
                       </tr>
                     )
