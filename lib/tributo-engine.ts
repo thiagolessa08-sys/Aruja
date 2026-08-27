@@ -1,6 +1,6 @@
 import { agentQuery } from '@/lib/agent'
 import { GrupoTributo, codigosDoGrupo, CODIGOS, CODIGOS_CORE, CODIGOS_EXCLUIDOS, LABEL_GRUPO } from '@/lib/tributos'
-import { cached, TTL_15MIN } from '@/lib/cache'
+import { cached, TTL_15MIN, TTL_30MIN } from '@/lib/cache'
 
 const SCHEMA = 'pref_aruja_sp'
 const EXCL = [...CODIGOS_CORE, ...CODIGOS_EXCLUIDOS].join(',')
@@ -670,10 +670,13 @@ export async function isentoIptu(ano: number): Promise<number | null> {
 
 /**
  * Data de atualização dos dados = MAX(dt_alter_ods) das guias (data de carga da origem).
- * Retorna string 'YYYY-MM-DD' ou null.
+ * Retorna string 'YYYY-MM-DD' ou null. TTL próprio de 30min (não o TTL_15MIN de 24h usado
+ * pelo resto do arquivo) — a carga de origem foi medida caindo às 21h; com cache de 24h
+ * (só reabastecido pelo warmup às 8h/12h) o rótulo ficaria mostrando o dia anterior por até
+ * ~11h depois da carga do dia. Ver REGISTRO em lib/cache.ts (TTL_30MIN).
  */
 export async function dataAtualizacaoIptu(): Promise<string | null> {
-  return cached('dataAtualizIptu', TTL_15MIN, async () => {
+  return cached('dataAtualizIptu', TTL_30MIN, async () => {
     const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${SCHEMA}.tb_dsod_guias`, 1)
     const v = r.rows[0]?.[0]
     if (!v) return null

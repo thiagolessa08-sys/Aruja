@@ -1,5 +1,5 @@
 import { agentQuery } from '@/lib/agent'
-import { cached, TTL_15MIN } from '@/lib/cache'
+import { cached, TTL_15MIN, TTL_30MIN } from '@/lib/cache'
 import { CODIGOS_EXCLUIDOS } from '@/lib/tributos'
 
 const SCHEMA = 'pref_aruja_sp'
@@ -43,9 +43,10 @@ const ATUALIZADA_LOOKUP = `SELECT cd_parcelas,
   SUM(vl_multa) vl_multa, SUM(vl_honorarios) vl_honorarios, SUM(vl_total) vl_total
   FROM ${SCHEMA}.tb_dsod_parcelas_atualizadas GROUP BY cd_parcelas`
 
-// Data de atualização dos dados = MAX(dt_alter_ods) das guias (cross-tributo).
+// Data de atualização dos dados = MAX(dt_alter_ods) das guias (cross-tributo). TTL de 30min
+// (não o TTL_15MIN de 24h) — ver comentário em dataAtualizacaoIptu (tributo-engine.ts).
 export async function dataAtualizacaoDivida(): Promise<string | null> {
-  return cached('dataAtualizDivida', TTL_15MIN, async () => {
+  return cached('dataAtualizDivida', TTL_30MIN, async () => {
     const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${SCHEMA}.tb_dsod_guias`, 1)
     const v = r.rows[0]?.[0]
     if (!v) return null

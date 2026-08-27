@@ -4,13 +4,14 @@
 // GROUP BY ds_situacao e o filtro é aplicado em JS.
 
 import { agentQuery } from './agent'
-import { cached, TTL_15MIN } from './cache'
+import { cached, TTL_30MIN } from './cache'
 
 const SCHEMA = 'pref_aruja_sp'
 
-// Data de atualização dos dados = MAX(dt_alter_ods) da base de empresas do Mobiliário.
+// Data de atualização dos dados = MAX(dt_alter_ods) da base de empresas do Mobiliário. TTL de
+// 30min (não o TTL_15MIN de 24h) — ver comentário em dataAtualizacaoIptu (tributo-engine.ts).
 export async function dataAtualizacaoMobiliario(): Promise<string | null> {
-  return cached('dataAtualizMobiliario', TTL_15MIN, async () => {
+  return cached('dataAtualizMobiliario', TTL_30MIN, async () => {
     const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario`, 1)
     const v = r.rows[0]?.[0]
     if (!v) return null

@@ -2,7 +2,7 @@
 // 17/18 são legado de 2003). Mesmo padrão do IPTU/TCA. Ponte guia.cd_origem = imovel.cd_imovel_urbano
 // (confirmada: 619/621 casam). Isento via tb_extr_isencoes filtrando pelo cd_tributo do ISSCC.
 import { agentQuery } from '@/lib/agent'
-import { cached, TTL_15MIN } from '@/lib/cache'
+import { cached, TTL_15MIN, TTL_30MIN } from '@/lib/cache'
 import { detalhesImoveis } from '@/lib/iptu-agg'
 
 const S = 'pref_aruja_sp'
@@ -243,9 +243,10 @@ export async function imoveisPorVinculoIsscc(ano: number, categoria: CategoriaVi
   return itens.sort((a, b) => a.proprietario.localeCompare(b.proprietario))
 }
 
-/** Data de atualização (carga) = MAX(dt_alter_ods) das guias de ISSCC. */
+/** Data de atualização (carga) = MAX(dt_alter_ods) das guias de ISSCC. TTL de 30min (não o
+ * TTL_15MIN de 24h) — ver comentário em dataAtualizacaoIptu (tributo-engine.ts). */
 export async function dataAtualizacaoIsscc(): Promise<string | null> {
-  return cached('dataAtualizIsscc', TTL_15MIN, async () => {
+  return cached('dataAtualizIsscc', TTL_30MIN, async () => {
     const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${S}.tb_dsod_guias WHERE cd_tributo IN (${ISSCC})`, 1)
     const v = r.rows[0]?.[0]
     return v ? String(v).slice(0, 10) : null

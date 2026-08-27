@@ -13,7 +13,7 @@
 //   • suspenso     = |net| (vl_movimento*no_sinal) mov 20, devedores com net<0
 //   • isento       = "Não Incidência de ITBI" (via tb_extr_isencoes; requer permissão)
 import { agentQuery } from '@/lib/agent'
-import { cached, TTL_15MIN } from '@/lib/cache'
+import { cached, TTL_15MIN, TTL_30MIN } from '@/lib/cache'
 
 const S = 'pref_aruja_sp'
 const ITBI = '10'
@@ -246,9 +246,10 @@ export async function qtdTransmissoesItbi(): Promise<Map<number, number>> {
 
 /**
  * Data de atualização dos dados de ITBI = MAX(dt_alter_ods) da tb_dsod_itbi. 'YYYY-MM-DD' ou null.
+ * TTL de 30min (não o TTL_15MIN de 24h) — ver comentário em dataAtualizacaoIptu (tributo-engine.ts).
  */
 export async function dataAtualizacaoItbi(): Promise<string | null> {
-  return cached('dataAtualizItbi', TTL_15MIN, async () => {
+  return cached('dataAtualizItbi', TTL_30MIN, async () => {
     const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${S}.tb_dsod_itbi`, 1)
     const v = r.rows[0]?.[0]
     return v ? String(v).slice(0, 10) : null

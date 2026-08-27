@@ -2,7 +2,7 @@
 // conforme queries de referência do usuário. Tributo por imóvel (sem join de itbi).
 // Isento usa tb_extr_isencoes.ds_tipo_isencao = 'IsentoTaxas' (regra própria da TCA).
 import { agentQuery } from '@/lib/agent'
-import { cached, TTL_15MIN } from '@/lib/cache'
+import { cached, TTL_15MIN, TTL_30MIN } from '@/lib/cache'
 import { detalhesImoveis } from '@/lib/iptu-agg'
 
 const S = 'pref_aruja_sp'
@@ -223,9 +223,10 @@ export async function qtdImoveisTca(f: FiltrosTca = {}): Promise<Map<number, num
   })
 }
 
-/** Data de atualização (carga) = MAX(dt_alter_ods) das guias de TCA. */
+/** Data de atualização (carga) = MAX(dt_alter_ods) das guias de TCA. TTL de 30min (não o
+ * TTL_15MIN de 24h) — ver comentário em dataAtualizacaoIptu (tributo-engine.ts). */
 export async function dataAtualizacaoTca(): Promise<string | null> {
-  return cached('dataAtualizTca', TTL_15MIN, async () => {
+  return cached('dataAtualizTca', TTL_30MIN, async () => {
     const r = await agentQuery(`SELECT MAX(dt_alter_ods) FROM ${S}.tb_dsod_guias WHERE cd_tributo = ${TCA}`, 1)
     const v = r.rows[0]?.[0]
     return v ? String(v).slice(0, 10) : null

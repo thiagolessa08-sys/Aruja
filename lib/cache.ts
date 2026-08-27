@@ -24,3 +24,10 @@ export function invalidate(prefix?: string) {
 // reabastece nos horários agendados (8h e 12h). Ver lib/warmup.ts.
 export const CACHE_TTL = 24 * 60 * 60 * 1000 // 24h
 export const TTL_15MIN = CACHE_TTL // alias retrocompatível (nome legado)
+
+// Pra valores que precisam refletir a carga do dia mais perto do real (ex.: "dados
+// atualizados em"), sem depender só da janela de warmup (8h/12h) — a carga de origem foi
+// medida caindo às 21h, então de 21h até o warmup das 8h o rótulo ficaria "atrasado" um dia
+// inteiro se usasse o TTL_15MIN de 24h. 30min limita essa janela sem virar consulta a cada
+// requisição (MAX(dt_alter_ods) em tb_dsod_guias mede ~1,9s sobre 7,2M linhas).
+export const TTL_30MIN = 30 * 60 * 1000
