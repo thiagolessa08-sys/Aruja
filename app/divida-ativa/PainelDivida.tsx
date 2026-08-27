@@ -820,7 +820,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-            <input value={buscaDevedor} onChange={e => setBuscaDevedor(e.target.value)} placeholder="Buscar nome ou CPF/CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: 220, fontFamily: 'inherit' }} />
+            <input value={buscaDevedor} onChange={e => setBuscaDevedor(e.target.value)} placeholder="Buscar nome, CPF/CNPJ ou CRC…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: 220, fontFamily: 'inherit' }} />
           </div>
         </div>
         <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
@@ -836,7 +836,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
               <tbody>
                 {(() => {
                   const q = buscaDevedor.trim().toLowerCase()
-                  const lista = (devedores ?? []).filter(x => !q || x.nome.toLowerCase().includes(q) || x.cpfCnpj.toLowerCase().includes(q))
+                  const lista = (devedores ?? []).filter(x => !q || x.nome.toLowerCase().includes(q) || x.cpfCnpj.toLowerCase().includes(q) || (x.crc ?? '').toLowerCase().includes(q))
                   if (!lista.length) return (
                     <tr><td colSpan={5} style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: '#9098a8' }}>{devedores ? 'Nenhum devedor encontrado.' : ''}</td></tr>
                   )
