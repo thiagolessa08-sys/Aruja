@@ -360,6 +360,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const pctPorRot = new Map(serie.map(s => [s.rot, { arrecPct: s.arrecPct, inadPct: s.inadPct, previsto: s.previsto }]))
   // cores por métrica (tom forte = real, tom claro = previsto)
   const CORES: Record<string, [string, string]> = { lancado: ['#283e93', '#a9b6e2'], arrecadado: ['#1fa463', '#9adcbc'], emAberto: ['#e8962e', '#f3cd97'], inadimplencia: ['#d64545', '#eeaeae'], isento: ['#8094d6', '#c3ccec'], suspenso: ['#5b6477', '#b9bec8'] }
+  const LABELS_EVOL: Record<string, string> = { lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência', isento: 'Isento', suspenso: 'Suspenso' }
 
   // Relatório (PDF/Excel): sem bairro selecionado → 1 linha por BAIRRO; com bairro
   // selecionado → 1 linha por CONTRIBUINTE daquele bairro. Sempre respeita ano/mês da tela.
@@ -504,10 +505,26 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
                 <XAxis dataKey="rot" interval={0} height={!drillAno ? 46 : 24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                 <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                 <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                  formatter={(v, name) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
-                  contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                  content={(props) => {
+                    const { active, label, payload } = props as unknown as { active?: boolean; label?: string | number; payload?: { dataKey?: string; value?: number; payload?: { previsto?: boolean } }[] }
+                    if (!active || !payload || !payload.length) return null
+                    const previsto = !!payload[0]?.payload?.previsto
+                    const itens = payload.filter(p => Number(p.value) > 0)
+                    if (!itens.length) return null
+                    return (
+                      <div style={{ background: '#23304b', borderRadius: 10, padding: '9px 12px', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{label}{previsto ? ' (previsto)' : ''}</div>
+                        {itens.map((p, i) => (
+                          <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: i === 0 ? 4 : 2 }}>
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: CORES[p.dataKey as string]?.[previsto ? 1 : 0] ?? '#8094d6', flex: 'none' }} />
+                            {LABELS_EVOL[p.dataKey as string] ?? p.dataKey}: R$ {(Number(p.value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  }} />
                 {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso'] as const).map(dk => (
-                  <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência', isento: 'Isento', suspenso: 'Suspenso' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={16}
+                  <Bar key={dk} dataKey={dk} name={LABELS_EVOL[dk]} radius={[3, 3, 0, 0]} maxBarSize={16}
                     stroke="none" activeBar={false}
                     cursor={!drillAno ? 'pointer' : 'default'}
                     onClick={(d) => {
