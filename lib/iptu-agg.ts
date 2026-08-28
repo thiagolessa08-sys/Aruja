@@ -3,7 +3,7 @@
 // do boot/agendamento serve as requisições dos usuários direto do cache.
 import { agentQuery } from '@/lib/agent'
 import { cached, CACHE_TTL } from '@/lib/cache'
-import { formaPagamentoIptu } from '@/lib/tributo-engine'
+import { formaPagamentoIptu, guiasIsentasIptu } from '@/lib/tributo-engine'
 
 const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
@@ -258,6 +258,13 @@ export function resumoIptu(f: FiltrosResumo) {
     // maioria em dezembro, conforme geração do exercício), não uma série mensal.
     const fimMes = mes ? `'${ano}-${String(mes).padStart(2, '0')}-${new Date(ano, mes, 0).getDate()}'` : null
     const fimItbi = fimMes ?? 'getdate()-1'
+    // Guias isentas (ver guiasIsentasIptu) excluídas da forma de pagamento restrita ao filtro
+    // abaixo, mesma regra de formaPagamentoIptu — sem isso, imóvel isento (ex.: Arujá Golf
+    // Clube) aparece em "Em aberto" ao filtrar por bairro/rua/espólio/sem número. Só busca
+    // quando há filtro (a query abaixo só roda nesse caso) — sem filtro, formaPagamentoIptu já
+    // resolve isso e o cache de guiasIsentasIptu é o mesmo, então não duplica a query.
+    const guiasIsentas = temFiltro ? await guiasIsentasIptu() : []
+    const excluirIsentasFiltro = guiasIsentas.length ? ` AND g.cd_guia NOT IN (${guiasIsentas.join(',')})` : ''
     const [comIptuR, totalImR, sitR, tcaR, itbiR, empR, semTcaR, forma, formaFiltroR] = await Promise.all([
       // Com IPTU = qtd de imóveis que compõem o lançado do exercício
       agentQuery(`SELECT COUNT(DISTINCT g.cd_origem) FROM ${S}.tb_dsod_guias g ${jb} WHERE g.cd_tributo=1 AND g.no_exercicio_lancamento=${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}`, 1),
@@ -294,7 +301,7 @@ export function resumoIptu(f: FiltrosResumo) {
           ${jb}
           JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
           JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-          WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}
+          WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao = 'Ativa'${excluirIsentasFiltro}${jbw}
           GROUP BY g.cd_guia
         ) t GROUP BY categoria`, 50) : Promise.resolve(null),
     ])
@@ -340,6 +347,11 @@ export interface ImovelPagamento { cd: number; inscricao: string; numero: string
 export async function imoveisPorPagamento(f: FiltrosResumo, categoria: CategoriaPagamento, q?: string): Promise<ImovelPagamento[]> {
   const { ano } = f
   const { join: jb, where: jbw } = joinFiltroResumo(f)
+  // Exclui guia isenta (ver guiasIsentasIptu) — mesma regra de resumoIptu/formaPagamentoIptu,
+  // pra lista do drill bater com a contagem do quadro (senão um imóvel isento aparece na
+  // lista de "Em aberto" mesmo não estando na contagem, ou vice-versa).
+  const guiasIsentas = await guiasIsentasIptu()
+  const excluirIsentas = guiasIsentas.length ? ` AND g.cd_guia NOT IN (${guiasIsentas.join(',')})` : ''
   const r = await agentQuery(`
     SELECT TOP 300 cd_origem FROM (
       SELECT g.cd_guia, g.cd_origem,
@@ -353,7 +365,7 @@ export async function imoveisPorPagamento(f: FiltrosResumo, categoria: Categoria
       ${jb}
       JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${S}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
-      WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${jbw}
+      WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao = 'Ativa'${excluirIsentas}${jbw}
       GROUP BY g.cd_guia, g.cd_origem
     ) t WHERE categoria = '${categoria}'`, 300)
 

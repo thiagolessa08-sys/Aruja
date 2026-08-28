@@ -909,17 +909,48 @@ export async function qtdImoveisIptu(): Promise<Map<number, number>> {
   })
 }
 
+// Guias de IPTU com baixa de ISENÇÃO (movimento 12/5, lançamento 1, setor de origem da baixa
+// = 'Isencao') — mesma regra oficial usada em bucketsIptu para o KPI "Total Isento". Isenção
+// NÃO aparece em g.ds_situacao (só 3 guias no banco inteiro têm ds_situacao='Isenta', ambas de
+// 2001/2002) — o sinal real é essa baixa. Reaproveitada por formaPagamentoIptu (abaixo) e pelas
+// queries de status de pagamento em lib/iptu-agg.ts (resumoIptu/imoveisPorPagamento): todas
+// precisam excluir guia isenta da classificação de pagamento, senão ela cai em "Em aberto" (um
+// imóvel isento nunca tem vl_pagto > 0 — não é "pago", é dispensado). Lista pequena (54 guias
+// no total, medido) — usada como NOT IN direto, nunca como JOIN (uma guia isenta tem várias
+// linhas de baixa Isencao, uma por lançamento — juntar na query de classificação inflaria o
+// SUM(vl_pagto)/SUM(vl_saldo) por fan-out).
+export async function guiasIsentasIptu(): Promise<number[]> {
+  return cached('guiasIsentasIptu', TTL_15MIN, async () => {
+    const r = await agentQuery(`
+      SELECT DISTINCT g.cd_guia
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      WHERE g.cd_tributo IN (1) AND pm.cd_tipo_movimento IN (12, 5)
+        AND pm.cd_tipo_lancamento IN (1) AND p.no_parcela NOT IN (0)
+        AND pb.ds_setor_origem_baixa = 'Isencao'`, 500)
+    return r.rows.map(row => num(row[0])).filter(Boolean)
+  })
+}
+
 /**
  * Imóveis (guias) de IPTU por FORMA DE PAGAMENTO e exercício. Classifica cada guia:
  *  • Cota única  = parcela 0 (única) teve pagamento (vl_pagto > 0)
  *  • Em aberto   = nenhum pagamento
  *  • Parcelado   = parcelas 1-N totalmente quitadas (saldo <= 0), sem pagar a única
  *  • Pago Parcial= pagou parte (nem tudo, e não pela única)
+ * Só guias ATIVA (não Recalculo/Validacao/Cancelada/etc.) e excluindo guias isentas (ver
+ * guiasIsentasIptu acima) — bug relatado: um imóvel isento (ex.: Arujá Golf Clube) caía em
+ * "Em aberto" mesmo sem dever nada.
  */
 export interface FormaPagtoAno { cotaUnica: number; parcelado: number; pagoParcial: number; emAberto: number }
 
 export async function formaPagamentoIptu(): Promise<Map<number, FormaPagtoAno>> {
   return cached('formaPagtoIptu', TTL_15MIN, async () => {
+    const guiasIsentas = await guiasIsentasIptu()
+    const excluirIsentas = guiasIsentas.length ? ` AND g.cd_guia NOT IN (${guiasIsentas.join(',')})` : ''
+
     const r = await agentQuery(`
       SELECT ex, categoria, COUNT(*) AS qt FROM (
         SELECT g.no_exercicio_lancamento AS ex, g.cd_guia,
@@ -933,7 +964,7 @@ export async function formaPagamentoIptu(): Promise<Map<number, FormaPagtoAno>> 
         JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
         JOIN ${SCHEMA}.tb_dsod_parcela_posicao pp ON pp.cd_parcela = p.cd_parcelas
         WHERE g.cd_tributo IN (1) AND g.no_exercicio_lancamento BETWEEN 2018 AND 2030
-          AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+          AND g.ds_situacao = 'Ativa'${excluirIsentas}
         GROUP BY g.no_exercicio_lancamento, g.cd_guia
       ) t GROUP BY ex, categoria`, 200)
     const map = new Map<number, FormaPagtoAno>()
