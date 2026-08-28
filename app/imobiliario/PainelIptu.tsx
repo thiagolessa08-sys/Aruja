@@ -125,6 +125,14 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [drillAno, setDrillAno] = useState<number | null>(null) // ano em drill mensal na evolução
   const [mensalData, setMensalData] = useState<{ mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }[]>([])
   const [carregandoMensal, setCarregandoMensal] = useState(false)
+  // 3º nível da Evolução: clique num mês (real, não previsão) desce a dia — linha de
+  // arrecadação diária, mesmo padrão do card "Arrecadação Diária" (ver diario/de/ate abaixo),
+  // mas com estado próprio pra não interferir naquele card independente.
+  const [drillMes, setDrillMes] = useState<number | null>(null)
+  const [diarioEvol, setDiarioEvol] = useState<Diario | null>(null)
+  const [diarioEvolErro, setDiarioEvolErro] = useState(false)
+  const [deEvol, setDeEvol] = useState('')
+  const [ateEvol, setAteEvol] = useState('')
   const [res, setRes] = useState<Resumo | null>(null)
   const [diario, setDiario] = useState<Diario | null>(null)
   const [diarioErro, setDiarioErro] = useState(false)
@@ -180,7 +188,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   // Visão geral (carrega já — é o topo da tela); reflete o bairro e o mês selecionados
   useEffect(() => {
     let vivo = true
-    setCarregando(true); setDrillAno(null)
+    setCarregando(true); setDrillAno(null); setDrillMes(null)
     fetchJson(`/api/imobiliario/iptu-visao${qs}${bairroQ}${mesQ}`)
       .then(d => { if (vivo && d && !d.error) setV(d) })
       .finally(() => { if (vivo) setCarregando(false) })
@@ -218,6 +226,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   // Série mensal só quando o usuário clica num ano na evolução (drill).
   // No ano de previsão, busca a projeção mês a mês (sazonalidade); senão, a série real.
   useEffect(() => {
+    setDrillMes(null)
     if (!drillAno) { setMensalData([]); return }
     let vivo = true
     setCarregandoMensal(true); setMensalData([])
@@ -227,6 +236,25 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       .finally(() => { if (vivo) setCarregandoMensal(false) })
     return () => { vivo = false }
   }, [drillAno, anoPrevisto])
+
+  // 3º nível: dia a dia do mês clicado (só meses reais — a previsão não desce a dia, não há
+  // arrecadação diária projetada). Intervalo padrão = mês inteiro; os inputs "De"/"até" ficam
+  // editáveis pra ampliar a janela sem sair do drill, mesmo padrão do card "Arrecadação Diária".
+  useEffect(() => {
+    if (!drillAno || !drillMes) { setDeEvol(''); setAteEvol(''); return }
+    const ultimoDia = new Date(drillAno, drillMes, 0).getDate()
+    setDeEvol(`${drillAno}-${String(drillMes).padStart(2, '0')}-01`)
+    setAteEvol(`${drillAno}-${String(drillMes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`)
+  }, [drillAno, drillMes])
+
+  useEffect(() => {
+    if (!drillAno || !drillMes || !deEvol || !ateEvol) { setDiarioEvol(null); return }
+    let vivo = true
+    setDiarioEvolErro(false)
+    fetchJson(`/api/imobiliario/iptu-diario?ano=${drillAno}&de=${deEvol}&ate=${ateEvol}${bairroQ}`)
+      .then(d => { if (!vivo) return; if (d && !d.error) setDiarioEvol(d); else setDiarioEvolErro(true) })
+    return () => { vivo = false }
+  }, [drillAno, drillMes, deEvol, ateEvol, bairroQ])
 
   // Intervalo padrão da arrecadação diária: jan→dez do ano, ou jan→fim do mês selecionado (acumulado)
   useEffect(() => {
@@ -354,8 +382,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
 
   // Evolução (5 anos + previsão) ou mensal (drill)
   const serie = v ? (drillAno
-    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia, isento: 0, suspenso: 0, previsto: drillPrevisto, arrecPct: 0, inadPct: 0 }))
-    : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano, lancado: e.lancado, arrecadado: e.arrecadado, emAberto: e.emAberto, inadimplencia: e.inadimplencia, isento: e.isento, suspenso: e.suspenso, previsto: e.previsto, arrecPct: e.arrecPct, inadPct: e.inadPct }))
+    ? mensalData.map(m => ({ rot: MESES[m.mes - 1], ano: undefined as number | undefined, mes: m.mes as number | undefined, lancado: m.lancado, arrecadado: m.arrecadado, emAberto: m.emAberto, inadimplencia: m.inadimplencia, isento: 0, suspenso: 0, previsto: drillPrevisto, arrecPct: 0, inadPct: 0 }))
+    : v.evolucao.map(e => ({ rot: String(e.ano), ano: e.ano as number | undefined, mes: undefined as number | undefined, lancado: e.lancado, arrecadado: e.arrecadado, emAberto: e.emAberto, inadimplencia: e.inadimplencia, isento: e.isento, suspenso: e.suspenso, previsto: e.previsto, arrecPct: e.arrecPct, inadPct: e.inadPct }))
   ) : []
   const pctPorRot = new Map(serie.map(s => [s.rot, { arrecPct: s.arrecPct, inadPct: s.inadPct, previsto: s.previsto }]))
   // cores por métrica (tom forte = real, tom claro = previsto)
@@ -483,63 +511,119 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
           {carregandoMensal ? <LoadingOverlay label="Carregando meses…" /> : null}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>
-              {drillAno ? `${drillPrevisto ? 'Previsão mensal' : 'Evolução mensal'} · ${drillAno}` : 'Evolução (5 anos)'}
+              {drillMes ? `Arrecadação diária · ${MESES[drillMes - 1]}/${drillAno}` : drillAno ? `${drillPrevisto ? 'Previsão mensal' : 'Evolução mensal'} · ${drillAno}` : 'Evolução (5 anos)'}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
-                {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }, { label: 'Isento', cor: '#8094d6' }, { label: 'Suspenso', cor: '#5b6477' }].map(m => (
-                  <span key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
-                ))}
-              </div>
-              {drillAno ? <button onClick={() => setDrillAno(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button> : null}
+              {drillMes ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5b6477' }}>
+                  <span>De</span>
+                  <input type="date" value={deEvol} onChange={e => setDeEvol(e.target.value)} style={{ border: '1.5px solid #e3e9f5', borderRadius: 10, padding: '5px 8px', fontSize: 12, color: '#283e93', fontFamily: 'inherit' }} />
+                  <span>até</span>
+                  <input type="date" value={ateEvol} onChange={e => setAteEvol(e.target.value)} style={{ border: '1.5px solid #e3e9f5', borderRadius: 10, padding: '5px 8px', fontSize: 12, color: '#283e93', fontFamily: 'inherit' }} />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
+                  {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }, { label: 'Isento', cor: '#8094d6' }, { label: 'Suspenso', cor: '#5b6477' }].map(m => (
+                    <span key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: m.cor }} />{m.label}</span>
+                  ))}
+                </div>
+              )}
+              {drillMes ? (
+                <button onClick={() => setDrillMes(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button>
+              ) : drillAno ? (
+                <button onClick={() => setDrillAno(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11 }}>‹ Voltar</button>
+              ) : null}
             </div>
           </div>
-          <div style={{ marginTop: 16, height: 300, cursor: !drillAno ? 'pointer' : 'default' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={serie} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
-                onClick={(e) => {
-                  const st = e as unknown as { activePayload?: { payload?: { ano?: number } }[]; activeLabel?: string }
-                  const ano = st?.activePayload?.[0]?.payload?.ano ?? Number(st?.activeLabel)
-                  if (!drillAno && ano) setDrillAno(ano)
-                }}>
-                <XAxis dataKey="rot" interval={0} height={!drillAno ? 46 : 24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
-                <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                  content={(props) => {
-                    const { active, label, payload } = props as unknown as { active?: boolean; label?: string | number; payload?: { dataKey?: string; value?: number; payload?: { previsto?: boolean } }[] }
-                    if (!active || !payload || !payload.length) return null
-                    const previsto = !!payload[0]?.payload?.previsto
-                    const itens = payload.filter(p => Number(p.value) > 0)
-                    if (!itens.length) return null
-                    return (
-                      <div style={{ background: '#23304b', borderRadius: 10, padding: '9px 12px', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{label}{previsto ? ' (previsto)' : ''}</div>
-                        {itens.map((p, i) => (
-                          <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: i === 0 ? 4 : 2 }}>
-                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: CORES[p.dataKey as string]?.[previsto ? 1 : 0] ?? '#8094d6', flex: 'none' }} />
-                            {LABELS_EVOL[p.dataKey as string] ?? p.dataKey}: R$ {(Number(p.value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  }} />
-                {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso'] as const).map(dk => (
-                  <Bar key={dk} dataKey={dk} name={LABELS_EVOL[dk]} radius={[3, 3, 0, 0]} maxBarSize={16}
-                    stroke="none" activeBar={false}
-                    cursor={!drillAno ? 'pointer' : 'default'}
-                    onClick={(d) => {
-                      const p = (d as unknown as { payload?: { ano?: number } })?.payload
-                      if (!drillAno && p?.ano) setDrillAno(p.ano)
-                    }}>
-                    {serie.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
-                    <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
-                  </Bar>
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {drillMes ? (
+            diarioEvol && diarioEvol.dias.length ? (() => {
+              const data = diarioEvol.dias.map(x => ({ t: new Date(x.dia + 'T00:00:00').getTime(), valor: x.valor }))
+              // ticks: ~8 datas reais distribuídas uniformemente pelo período (mesmo critério da Arrecadação Diária)
+              const ticks: number[] = []
+              if (data.length) {
+                const step = Math.max(1, Math.ceil(data.length / 8))
+                for (let i = 0; i < data.length; i += step) ticks.push(data[i].t)
+                const last = data[data.length - 1].t
+                if (ticks[ticks.length - 1] !== last) ticks.push(last)
+              }
+              return (
+                <div style={{ marginTop: 16, height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data} margin={{ top: 22, right: 8, left: 0, bottom: 0 }}>
+                      <defs><linearGradient id="evolDiaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" stopOpacity="0.25" /><stop offset="100%" stopColor="#283e93" stopOpacity="0" /></linearGradient></defs>
+                      <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} ticks={ticks.length ? ticks : undefined}
+                        tickFormatter={(t: number) => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} minTickGap={0} />
+                      <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        labelFormatter={(t) => new Date(t as number).toLocaleDateString('pt-BR')}
+                        formatter={(v) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'Arrecadado'] as [string, string]}
+                        contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                      <Area dataKey="valor" stroke="#283e93" strokeWidth={1.8} fill="url(#evolDiaGrad)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )
+            })() : diarioEvolErro ? (
+              <div style={{ fontSize: 12, color: '#9098a8', padding: '40px 0', textAlign: 'center' }}>Não foi possível carregar a arrecadação diária.</div>
+            ) : (
+              <div style={{ marginTop: 16, height: 300, borderRadius: 12, background: '#eef1f7' }} />
+            )
+          ) : (
+            <div style={{ marginTop: 16, height: 300, cursor: !drillPrevisto ? 'pointer' : 'default' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={serie} margin={{ top: 22, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%"
+                  onClick={(e) => {
+                    const st = e as unknown as { activePayload?: { payload?: { ano?: number; mes?: number } }[]; activeLabel?: string }
+                    const payload = st?.activePayload?.[0]?.payload
+                    if (!drillAno) {
+                      const anoClicado = payload?.ano ?? Number(st?.activeLabel)
+                      if (anoClicado) setDrillAno(anoClicado)
+                    } else if (!drillPrevisto && payload?.mes) {
+                      setDrillMes(payload.mes)
+                    }
+                  }}>
+                  <XAxis dataKey="rot" interval={0} height={!drillAno ? 46 : 24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+                  <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
+                    content={(props) => {
+                      const { active, label, payload } = props as unknown as { active?: boolean; label?: string | number; payload?: { dataKey?: string; value?: number; payload?: { previsto?: boolean } }[] }
+                      if (!active || !payload || !payload.length) return null
+                      const previsto = !!payload[0]?.payload?.previsto
+                      const itens = payload.filter(p => Number(p.value) > 0)
+                      if (!itens.length) return null
+                      return (
+                        <div style={{ background: '#23304b', borderRadius: 10, padding: '9px 12px', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{label}{previsto ? ' (previsto)' : ''}</div>
+                          {itens.map((p, i) => (
+                            <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: i === 0 ? 4 : 2 }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: CORES[p.dataKey as string]?.[previsto ? 1 : 0] ?? '#8094d6', flex: 'none' }} />
+                              {LABELS_EVOL[p.dataKey as string] ?? p.dataKey}: R$ {(Number(p.value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    }} />
+                  {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso'] as const).map(dk => (
+                    <Bar key={dk} dataKey={dk} name={LABELS_EVOL[dk]} radius={[3, 3, 0, 0]} maxBarSize={16}
+                      stroke="none" activeBar={false}
+                      cursor={!drillPrevisto ? 'pointer' : 'default'}
+                      onClick={(d) => {
+                        const p = (d as unknown as { payload?: { ano?: number; mes?: number } })?.payload
+                        if (!drillAno && p?.ano) setDrillAno(p.ano)
+                        else if (drillAno && !drillPrevisto && p?.mes) setDrillMes(p.mes)
+                      }}>
+                      {serie.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
+                      <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
+                    </Bar>
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
           {!drillAno ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num ano para detalhar por mês · {mes ? `valores acumulados até ${mesRefLabel}` : 'valores do ano cheio'} · barras claras = previsão {anoPrevisto ?? ''} (regressão linear dos últimos 5 anos)</div> : null}
-          {drillPrevisto ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Projeção mês a mês de {drillAno} — totais previstos distribuídos pela sazonalidade dos anos anteriores.</div> : null}
+          {drillAno && !drillMes && drillPrevisto ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Projeção mês a mês de {drillAno} — totais previstos distribuídos pela sazonalidade dos anos anteriores.</div> : null}
+          {drillAno && !drillMes && !drillPrevisto ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Clique num mês para detalhar a arrecadação dia a dia.</div> : null}
+          {drillMes ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>Ajuste "De"/"até" para ampliar ou reduzir o período exibido.</div> : null}
         </div>
 
       {/* ===== ONDA 2: Resumo de imóveis (lazy) ===== */}
