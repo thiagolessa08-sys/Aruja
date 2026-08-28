@@ -126,19 +126,14 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [mensalData, setMensalData] = useState<{ mes: number; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number }[]>([])
   const [carregandoMensal, setCarregandoMensal] = useState(false)
   // 3º nível da Evolução: clique num mês (real, não previsão) desce a dia — linha de
-  // arrecadação diária, mesmo padrão do card "Arrecadação Diária" (ver diario/de/ate abaixo),
-  // mas com estado próprio pra não interferir naquele card independente.
+  // arrecadação diária (mesmo padrão do antigo card "Arrecadação Diária", removido a pedido
+  // do usuário por ficar redundante com este drill).
   const [drillMes, setDrillMes] = useState<number | null>(null)
   const [diarioEvol, setDiarioEvol] = useState<Diario | null>(null)
   const [diarioEvolErro, setDiarioEvolErro] = useState(false)
   const [deEvol, setDeEvol] = useState('')
   const [ateEvol, setAteEvol] = useState('')
   const [res, setRes] = useState<Resumo | null>(null)
-  const [diario, setDiario] = useState<Diario | null>(null)
-  const [diarioErro, setDiarioErro] = useState(false)
-  const [recarregarDiario, setRecarregarDiario] = useState(0)
-  const [de, setDe] = useState('')
-  const [ate, setAte] = useState('')
   // Onda 3 — bairros (drill: bairro → rua → imóveis)
   const [bairros, setBairros] = useState<{ nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }[]>([])
   const [nivelBairro, setNivelBairro] = useState<'bairro' | 'rua' | 'imovel'>('bairro')
@@ -169,7 +164,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
   const [imoveisSit, setImoveisSit] = useState<{ cd: number; inscricao: string; numero: string; proprietario: string }[] | null>(null)
   const [carregandoSit, setCarregandoSit] = useState(false)
   // Lazy-load das seções pesadas (só busca quando aparecem na tela)
-  const obsDiario = useOnScreen<HTMLDivElement>()
   const obsBairros = useOnScreen<HTMLDivElement>()
   const obsResumo = useOnScreen<HTMLDivElement>()
   const obsComp = useOnScreen<HTMLDivElement>()
@@ -255,27 +249,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       .then(d => { if (!vivo) return; if (d && !d.error) setDiarioEvol(d); else setDiarioEvolErro(true) })
     return () => { vivo = false }
   }, [drillAno, drillMes, deEvol, ateEvol, bairroQ])
-
-  // Intervalo padrão da arrecadação diária: jan→dez do ano, ou jan→fim do mês selecionado (acumulado)
-  useEffect(() => {
-    if (!ano) return
-    setDe(`${ano}-01-01`)
-    if (mes) {
-      const ld = new Date(Number(ano), Number(mes), 0).getDate() // último dia do mês
-      setAte(`${ano}-${String(mes).padStart(2, '0')}-${String(ld).padStart(2, '0')}`)
-    } else {
-      setAte(`${ano}-12-31`)
-    }
-  }, [ano, mes])
-
-  useEffect(() => {
-    if (!de || !ate || !obsDiario.visible) return
-    let vivo = true
-    setDiarioErro(false)
-    fetchJson(`/api/imobiliario/iptu-diario?ano=${ano}&de=${de}&ate=${ate}${bairroQ}`)
-      .then(d => { if (!vivo) return; if (d && !d.error) setDiario(d); else setDiarioErro(true) })
-    return () => { vivo = false }
-  }, [ano, de, ate, bairroQ, obsDiario.visible, recarregarDiario])
 
   // Bairros (ou ruas quando há bairro selecionado) — query pesada, lazy + loading próprio
   useEffect(() => {
@@ -1025,55 +998,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         ) : (obsComp.visible ? <Spinner label="Carregando comparativo…" /> : null)}
       </div>
 
-      {/* ===== Arrecadação Diária + Insights (uma linha) · Pesquisa abaixo ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
-      {/* Arrecadação diária */}
-      <div ref={obsDiario.ref} style={{ ...card, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Arrecadação Diária {diario ? `· ${fmtAbrev(diario.total)}` : ''}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#5b6477' }}>
-            <span>De</span>
-            <input type="date" value={de} onChange={e => setDe(e.target.value)} style={{ border: '1.5px solid #e3e9f5', borderRadius: 10, padding: '5px 8px', fontSize: 12, color: '#283e93', fontFamily: 'inherit' }} />
-            <span>até</span>
-            <input type="date" value={ate} onChange={e => setAte(e.target.value)} style={{ border: '1.5px solid #e3e9f5', borderRadius: 10, padding: '5px 8px', fontSize: 12, color: '#283e93', fontFamily: 'inherit' }} />
-          </div>
-        </div>
-        {diario && diario.dias.length ? (() => {
-          const data = diario.dias.map(x => ({ t: new Date(x.dia + 'T00:00:00').getTime(), valor: x.valor }))
-          // ticks: ~8 datas reais distribuídas uniformemente pelo período
-          const ticks: number[] = []
-          if (data.length) {
-            const step = Math.max(1, Math.ceil(data.length / 8))
-            for (let i = 0; i < data.length; i += step) ticks.push(data[i].t)
-            const last = data[data.length - 1].t
-            if (ticks[ticks.length - 1] !== last) ticks.push(last)
-          }
-          return (
-            <div style={{ marginTop: 14, height: 220 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <defs><linearGradient id="diaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" stopOpacity="0.25" /><stop offset="100%" stopColor="#283e93" stopOpacity="0" /></linearGradient></defs>
-                  <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} ticks={ticks.length ? ticks : undefined}
-                    tickFormatter={(t: number) => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} minTickGap={0} />
-                  <YAxis width={44} tickFormatter={(v: number) => (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    labelFormatter={(t) => new Date(t as number).toLocaleDateString('pt-BR')}
-                    formatter={(v) => ['R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'Arrecadado'] as [string, string]}
-                    contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
-                  <Area dataKey="valor" stroke="#283e93" strokeWidth={1.8} fill="url(#diaGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          )
-        })() : diarioErro ? (
-          <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>
-            Não foi possível carregar.{' '}
-            <button onClick={() => setRecarregarDiario(n => n + 1)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, marginLeft: 6 }}>Recarregar</button>
-          </div>
-        ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '24px 0', textAlign: 'center' }}>Sem arrecadação no período.</div>}
-      </div>
-      {/* ===== Insights de IPTU (item 14) — somente ao lado da Arrecadação ===== */}
-      <div style={{ borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
+      {/* ===== Insights de IPTU (item 14) — Pesquisa abaixo ===== */}
+      <div style={{ marginTop: 18, borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }} />
@@ -1095,7 +1021,6 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             {[0, 1, 2].map(i => <div key={i} style={{ height: 9, borderRadius: 5, width: i === 1 ? '85%' : '95%', background: 'rgba(255,255,255,0.18)' }} />)}
           </div>
         )}
-      </div>
       </div>
 
     </div>
