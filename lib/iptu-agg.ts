@@ -14,13 +14,40 @@ const num = (v: unknown) => Number(v) || 0
 export type MetricaBairro = 'lancado' | 'arrecadado' | 'inadimplencia' | 'emAberto' | 'isento' | 'suspenso'
 export interface FiltrosBairro { ano: number; espolio: boolean; semNumero: boolean; bairro: string | null; rua?: string | null; metrica?: MetricaBairro }
 
+// "Fontes" e "Bairro dos Fontes" são o mesmo bairro, gravado com duas grafias diferentes em
+// tb_dsod_cep.nm_bairro (texto livre) — a pedido do usuário, concatenados num único item
+// "Bairro dos Fontes" na lista de bairros (soma imóveis + valor das duas grafias), para
+// TODAS as métricas — a mesma função de agregação atende lançado/arrecadado/em aberto/
+// inadimplência/isento/suspenso, então mesclar o resultado já cobre todas. Existem outras
+// grafias de "Fontes" no cadastro (ex. "DOS FONTES", "BAIRRO FONTES", validado ao vivo: mais
+// de 20 variantes), mas só essas duas apareceram como itens distintos no gráfico de 2026 —
+// as demais não são tocadas.
+const BAIRRO_FONTES_VARIANTES = ['FONTES', 'BAIRRO DOS FONTES']
+const BAIRRO_FONTES_NOME = 'Bairro dos Fontes'
+
+function mesclarBairroFontes(itens: { chave: string; imoveis: number; valor: number }[]) {
+  let imoveis = 0, valor = 0, achou = false
+  const resto = itens.filter(b => {
+    if (!BAIRRO_FONTES_VARIANTES.includes(b.chave.toUpperCase())) return true
+    imoveis += b.imoveis; valor += b.valor; achou = true
+    return false
+  })
+  if (!achou) return itens
+  return [...resto, { chave: BAIRRO_FONTES_NOME, imoveis, valor }].sort((a, b) => b.valor - a.valor)
+}
+
 // FROM + WHERE base (ponte cd_devedor→imóvel→cep); junta contribuinte só p/ filtro de espólio.
 function baseBairro(f: FiltrosBairro) {
   const joinProp = f.espolio ? `JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario` : ''
   let w = `g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${f.ano} AND p.no_parcela <> 0`
   if (f.espolio) w += ` AND cp.nm_rsocial LIKE '%ESP_LIO%'`
   if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)`
-  if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
+  if (f.bairro) {
+    // Drill de rua dentro do bairro mesclado: casa com as duas grafias de origem (ver
+    // mesclarBairroFontes acima), senão o drill perderia as ruas gravadas sob "FONTES".
+    const variantes = f.bairro === BAIRRO_FONTES_NOME ? BAIRRO_FONTES_VARIANTES : [f.bairro]
+    w += ` AND c.nm_bairro IN (${variantes.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`
+  }
   if (f.rua) w += ` AND c.ds_endereco = '${f.rua.replace(/'/g, "''")}'`
   const from = `FROM ${S}.tb_dsod_guias g
       JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_devedor
@@ -119,7 +146,12 @@ export function bairrosIptu(f: FiltrosBairro): Promise<ItemBairro[]> {
   const key = `iptuBairros:${f.ano}:${met}:${f.espolio ? 1 : 0}:${f.semNumero ? 1 : 0}:${f.bairro ?? ''}:${f.rua ?? ''}`
   return cached(key, CACHE_TTL, async () => {
     const base = await agregadoBairro({ ...f, metrica: met }, grupo)
-    if (!f.rua) return base.map(b => ({ nome: b.chave || '—', imoveis: b.imoveis, valor: b.valor }))
+    if (!f.rua) {
+      // Mescla só se aplica ao nível de bairro (grupo=nm_bairro) — não no nível de rua
+      // (grupo=ds_endereco dentro de um bairro já selecionado), onde a chave não é bairro.
+      const lista = f.bairro ? base : mesclarBairroFontes(base)
+      return lista.map(b => ({ nome: b.chave || '—', imoveis: b.imoveis, valor: b.valor }))
+    }
     const det = await detalhesImoveis(base.map(b => b.chave).filter(c => c && c !== '0'))
     return base.map(b => {
       const d = det.get(b.chave)
