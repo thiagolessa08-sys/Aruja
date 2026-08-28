@@ -949,8 +949,9 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         </div>
       ) : null}
 
-      {/* ===== Comparativo Detalhado (item 16) — interativo por bairro ===== */}
-      <div ref={obsComp.ref} style={{ ...card, marginTop: 18, position: 'relative', overflowX: 'auto' }}>
+      {/* ===== Comparativo Detalhado (item 16) + Insights (ao lado) ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 330px', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+      <div ref={obsComp.ref} style={{ ...card, position: 'relative', overflowX: 'auto', minWidth: 0 }}>
         {carregandoComp ? <LoadingOverlay label="Calculando comparativo…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Comparativo Detalhado{bairroSel ? ` · ${bairroSel}` : ''}</span>
@@ -998,8 +999,8 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         ) : (obsComp.visible ? <Spinner label="Carregando comparativo…" /> : null)}
       </div>
 
-      {/* ===== Insights de IPTU (item 14) — Pesquisa abaixo ===== */}
-      <div style={{ marginTop: 18, borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
+      {/* ===== Insights de IPTU (item 14) — ao lado do Comparativo Detalhado ===== */}
+      <div style={{ borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }} />
@@ -1021,6 +1022,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             {[0, 1, 2].map(i => <div key={i} style={{ height: 9, borderRadius: 5, width: i === 1 ? '85%' : '95%', background: 'rgba(255,255,255,0.18)' }} />)}
           </div>
         )}
+      </div>
       </div>
 
     </div>
