@@ -679,6 +679,11 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         {(() => {
           const metricaEfetiva: MetricaBairroUI = metricaBairro === 'todos' ? 'lancado' : metricaBairro
           const corM = METRICAS_BAIRRO.find(m => m.id === metricaEfetiva)!.cor
+          // Isento não tem um "valor" que faça sentido mostrar (é imóvel não cobrado) — só
+          // a quantidade de imóveis isentos é significativa (mesmo critério do TCA/ISSCC
+          // em SecaoBairros.tsx). Ordena/dimensiona as barras por quantidade e troca o
+          // valor pela informação de que é só quantidade.
+          const semValor = metricaEfetiva === 'isento'
           const q = buscaBairro.trim().toLowerCase()
           const filtrados = q ? bairros.filter(b => b.nome.toLowerCase().includes(q)) : bairros
           if (!filtrados.length) return bairrosErro ? (
@@ -688,13 +693,13 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
             </div>
           ) : <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>{q ? 'Nenhum resultado para a busca.' : 'Sem dados para os filtros selecionados.'}</div>
           // Ordena por valor da métrica OU por qtd de imóveis (item 7)
-          const lista = [...filtrados].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
-          const mx = Math.max(1, ...lista.map(b => Math.abs(b.valor)))
+          const lista = [...filtrados].sort((a, b) => (semValor || ordenarBairro === 'imoveis') ? b.imoveis - a.imoveis : b.valor - a.valor)
+          const mx = Math.max(1, ...lista.map(b => semValor ? b.imoveis : Math.abs(b.valor)))
           const metLabel = METRICAS_BAIRRO.find(m => m.id === metricaEfetiva)!.label
           return (
             <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
               {lista.map((b, i) => {
-                const w = Math.max(2, 100 * Math.abs(b.valor) / mx)
+                const w = Math.max(2, 100 * (semValor ? b.imoveis : Math.abs(b.valor)) / mx)
                 const clicavel = nivelBairro === 'bairro' || nivelBairro === 'rua' || (nivelBairro === 'imovel' && !!b.cd)
                 const acao = () => {
                   if (nivelBairro === 'bairro') selecionarBairro(b.nome)
@@ -708,7 +713,9 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
                       <span title={b.nome} style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {nivelBairro === 'imovel' ? (detalheImovel || `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`) : `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`}</span>
                       </span>
-                      <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.valor)}</span>
+                      {semValor
+                        ? <span style={{ color: '#9098a8', fontWeight: 600, fontStyle: 'italic', fontSize: 10.5, flex: 'none' }}>somente por quantidade</span>
+                        : <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.valor)}</span>}
                     </div>
                     <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 8, background: corM }} />
