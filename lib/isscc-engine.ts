@@ -185,22 +185,46 @@ export async function qtdIsscc(): Promise<Map<number, number>> {
   })
 }
 
+/** Idem qtdIsscc, mas acumulado até um mês (YTD) — mesma convenção de bucketsIssccAteMes.
+ * Junta parcelas pra filtrar por vencimento; COUNT(DISTINCT cd_guia) evita fan-out de guias
+ * parceladas. */
+export async function qtdIssccAteMes(mes: number): Promise<Map<number, number>> {
+  return cached(`qtdIssccAteMes:${mes}`, TTL_15MIN, async () => {
+    const r = await agentQuery(`
+      SELECT g.no_exercicio_lancamento ex, g.ds_situacao sit, COUNT(DISTINCT g.cd_guia) qt
+      FROM ${S}.tb_dsod_guias g
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      WHERE g.cd_tributo IN (${ISSCC}) AND MONTH(p.dt_vencimento) <= ${mes}
+      GROUP BY g.no_exercicio_lancamento, g.ds_situacao`, 600)
+    const map = new Map<number, number>()
+    for (const row of r.rows) {
+      const ex = num(row[0]); if (!(ex >= 2005 && ex <= 2035)) continue
+      if (LANC_SIT_EXCLUIR.has(String(row[1] ?? '').trim())) continue
+      map.set(ex, (map.get(ex) ?? 0) + num(row[2]))
+    }
+    return map
+  })
+}
+
 /**
  * Item 2 — Histórico de alterações de área edificada por ano (para cruzar com ISSCC).
  * Fonte: tb_dsod_imovel_urbano_alt_estrutura (registra cada alteração estrutural do imóvel,
  * com dt_alteracao). A metragem vem da área edificada ATUAL do imóvel (vl_area_edificaca),
  * somada 1× por imóvel/ano (MAX por imóvel para não multiplicar por nº de alterações).
+ * mes: acumulado até o mês (YTD) — aplicado em TODOS os anos da série (mesma convenção do
+ * hist de Evolução), pra comparação justa entre anos quando o filtro de Mês está ativo.
  */
 export interface AreaAno { imoveisAlterados: number; areaEdificada: number }
 
-export async function historicoAreaEdificada(): Promise<Map<number, AreaAno>> {
-  return cached('issccAreaHist', TTL_15MIN, async () => {
+export async function historicoAreaEdificada(mes?: number | null): Promise<Map<number, AreaAno>> {
+  return cached(`issccAreaHist:${mes ?? ''}`, TTL_15MIN, async () => {
+    const mesW = mes ? ` AND MONTH(ae.dt_alteracao) <= ${mes}` : ''
     const r = await agentQuery(`
       SELECT ano, COUNT(*) imoveis, SUM(area) area FROM (
         SELECT YEAR(ae.dt_alteracao) ano, ae.cd_imovel_urbano, MAX(iu.vl_area_edificaca) area
         FROM ${S}.tb_dsod_imovel_urbano_alt_estrutura ae
         JOIN ${S}.tb_dsod_imovel_urbano iu ON iu.cd_imovel_urbano = ae.cd_imovel_urbano
-        WHERE ae.dt_alteracao IS NOT NULL
+        WHERE ae.dt_alteracao IS NOT NULL${mesW}
         GROUP BY YEAR(ae.dt_alteracao), ae.cd_imovel_urbano
       ) t GROUP BY ano`, 60)
     const map = new Map<number, AreaAno>()
@@ -217,19 +241,21 @@ export async function historicoAreaEdificada(): Promise<Map<number, AreaAno>> {
 export type CategoriaVinculoIsscc = 'imoveis' | 'comMobiliario' | 'proprietarioPJ'
 export interface ImovelVinculoIsscc { cd: number; inscricao: string; numero: string; proprietario: string }
 
-export async function imoveisPorVinculoIsscc(ano: number, categoria: CategoriaVinculoIsscc, q?: string): Promise<ImovelVinculoIsscc[]> {
-  const base = `g.cd_tributo IN (${ISSCC}) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
+export async function imoveisPorVinculoIsscc(ano: number, categoria: CategoriaVinculoIsscc, q?: string, mes?: number | null): Promise<ImovelVinculoIsscc[]> {
+  const joinMes = mes ? `JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia` : ''
+  const mesW = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
+  const base = `g.cd_tributo IN (${ISSCC}) AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${mesW}`
   let sql: string
   if (categoria === 'comMobiliario') {
-    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g
+    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g ${joinMes}
       WHERE ${base} AND g.cd_origem IN (SELECT mf.cd_imovel_urbano FROM ${S}.tb_dsod_contribuinte_mob_fisico mf)`
   } else if (categoria === 'proprietarioPJ') {
-    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g
+    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g ${joinMes}
       JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_origem
       JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario
       WHERE ${base} AND cp.ic_pessoa = 'J'`
   } else {
-    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g WHERE ${base}`
+    sql = `SELECT DISTINCT TOP 300 g.cd_origem FROM ${S}.tb_dsod_guias g ${joinMes} WHERE ${base}`
   }
   const r = await agentQuery(sql, 300)
   const cds = r.rows.map(row => String(row[0])).filter(c => c && c !== '0')

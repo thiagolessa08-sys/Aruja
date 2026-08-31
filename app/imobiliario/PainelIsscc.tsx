@@ -113,14 +113,16 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
   }, [drillAno])
   useEffect(() => { setDrillAno(null) }, [ano])
 
-  // Vínculos (agregado) por exercício
+  // Vínculos (agregado) por exercício — acumulado até o mês (YTD), quando selecionado
   useEffect(() => {
     if (!ano) return
     let vivo = true; setVinculos(null)
-    fetchJson(`/api/isscc/vinculos?ano=${ano}`).then(d => { if (vivo && d && !d.error) setVinculos(d) })
+    const p = new URLSearchParams({ ano: String(ano) })
+    if (mes) p.set('mes', String(mes))
+    fetchJson(`/api/isscc/vinculos?${p}`).then(d => { if (vivo && d && !d.error) setVinculos(d) })
     return () => { vivo = false }
-  }, [ano])
-  useEffect(() => { setVinculoSel(null); setBuscaVinculo('') }, [ano])
+  }, [ano, mes])
+  useEffect(() => { setVinculoSel(null); setBuscaVinculo('') }, [ano, mes])
 
   // Drill "Vínculos mobiliários e imobiliários": busca a lista quando uma categoria está selecionada
   useEffect(() => {
@@ -129,18 +131,21 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
     setCarregandoVinculo(true)
     const t = setTimeout(() => {
       const p = new URLSearchParams({ ano: String(ano), categoria: vinculoSel.categoria })
+      if (mes) p.set('mes', String(mes))
       if (buscaVinculo.trim()) p.set('q', buscaVinculo.trim())
       fetchJson(`/api/isscc/vinculos-imoveis?${p}`).then(d => { if (vivo && d?.itens) setImoveisVinculo(d.itens) })
         .finally(() => { if (vivo) setCarregandoVinculo(false) })
     }, 300)
     return () => { vivo = false; clearTimeout(t) }
-  }, [vinculoSel, buscaVinculo, ano])
+  }, [vinculoSel, buscaVinculo, ano, mes])
 
   useEffect(() => {
-    let vivo = true
-    fetchJson('/api/isscc/area-historico').then(d => { if (vivo && d?.serie) setAreaHist(d.serie) })
+    let vivo = true; setAreaHist(null)
+    const p = new URLSearchParams()
+    if (mes) p.set('mes', String(mes))
+    fetchJson(`/api/isscc/area-historico?${p}`).then(d => { if (vivo && d?.serie) setAreaHist(d.serie) })
     return () => { vivo = false }
-  }, [])
+  }, [mes])
 
   // Relatório (PDF/Excel) a partir dos cards + evolução do exercício atual.
   async function gerarRelatorio(tipo: 'pdf' | 'excel') {
@@ -337,7 +342,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           </div>
 
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
-          <SecaoBairros key={resetBairros} endpoint="/api/isscc/bairros" ano={ano} titulo="ISSCC por Bairro" mostrarNaoLancados permitirDrillImovel
+          <SecaoBairros key={resetBairros} endpoint="/api/isscc/bairros" ano={ano} mes={mes} titulo="ISSCC por Bairro" mostrarNaoLancados permitirDrillImovel
             onSelecao={(b, r, im) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im) }} />
 
           {/* Vínculos mobiliários e imobiliários (agregado) — clique numa categoria faz drill pra lista de imóveis */}

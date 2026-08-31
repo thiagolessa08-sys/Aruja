@@ -14,7 +14,8 @@ export async function GET(req: NextRequest) {
     const rua = bairro ? (sp.get('rua') || null) : null
     const m = sp.get('metrica') as MetricaBairro
     const metrica = OK.includes(m) ? m : 'lancado'
-    return NextResponse.json({ bairros: await bairrosTributo(OPC_ISSCC, { ano, bairro, rua, metrica }) })
+    const mes = Number(sp.get('mes')) || null
+    return NextResponse.json({ bairros: await bairrosTributo(OPC_ISSCC, { ano, bairro, rua, metrica, mes }) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

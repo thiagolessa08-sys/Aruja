@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
     const ano = Number(sp.get('ano')) || new Date().getFullYear()
     const categoria = sp.get('categoria') as CategoriaVinculoIsscc
     if (!CATEGORIAS.includes(categoria)) return NextResponse.json({ error: 'categoria inválida' }, { status: 400 })
-    const itens = await imoveisPorVinculoIsscc(ano, categoria, sp.get('q') || undefined)
+    const mes = Number(sp.get('mes')) || null
+    const itens = await imoveisPorVinculoIsscc(ano, categoria, sp.get('q') || undefined, mes)
     return NextResponse.json({ itens })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

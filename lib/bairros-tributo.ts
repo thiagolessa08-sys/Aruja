@@ -9,7 +9,9 @@ const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 
 export type MetricaBairro = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso' | 'naoLancados'
-export interface FiltrosBairroTrib { ano: number; bairro: string | null; rua?: string | null; metrica: MetricaBairro }
+// mes: acumulado até o mês (YTD), mesma convenção do bucketsXxxAteMes — não se aplica a
+// isento/suspenso/naoLancados (métricas anuais/posição, ver comentário em cada engine).
+export interface FiltrosBairroTrib { ano: number; bairro: string | null; rua?: string | null; metrica: MetricaBairro; mes?: number | null }
 export interface OpcoesBairro { codigos: string; isentoWhere: string; cacheKey: string; isentoViaIptu?: boolean }
 export interface BairroLinha { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }
 
@@ -32,6 +34,7 @@ function query(o: OpcoesBairro, f: FiltrosBairroTrib, grupo: string): string {
   const from = baseFrom()
   const w = whereBase(o, f)
   const semRV = ` AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
+  const mesW = f.mes ? ` AND MONTH(p.dt_vencimento) <= ${f.mes}` : ''
   switch (f.metrica) {
     case 'arrecadado':
       return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_origem) im, SUM(pm.vl_movimento) vl
@@ -39,7 +42,7 @@ function query(o: OpcoesBairro, f: FiltrosBairroTrib, grupo: string): string {
         JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
         JOIN ${S}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
         WHERE ${w}${semRV} AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
-          AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
+          AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'${mesW}
         GROUP BY ${grupo}`
     case 'isento':
       return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_origem) im, SUM(pm.vl_movimento) vl
@@ -57,7 +60,7 @@ function query(o: OpcoesBairro, f: FiltrosBairroTrib, grupo: string): string {
       return `SELECT k, COUNT(DISTINCT cd_origem) im, SUM(valor) vl FROM (
         SELECT ${grupo} k, g.cd_origem cd_origem, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
         ${from}
-        WHERE ${w} AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)
+        WHERE ${w} AND pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)${mesW}
         GROUP BY ${grupo}, g.cd_origem, p.dt_vencimento HAVING SUM(pm.vl_movimento * pm.no_sinal) > 0
       ) t GROUP BY k`
     case 'inadimplencia':
@@ -65,7 +68,7 @@ function query(o: OpcoesBairro, f: FiltrosBairroTrib, grupo: string): string {
         SELECT ${grupo} k, g.cd_origem cd_origem, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
         ${from}
         WHERE ${w} AND p.dt_vencimento < getdate()-1
-          AND pm.cd_tipo_movimento IN (0,1,2,3,12,11,14,20) AND pm.cd_tipo_lancamento IN (4,7,0,10,1)
+          AND pm.cd_tipo_movimento IN (0,1,2,3,12,11,14,20) AND pm.cd_tipo_lancamento IN (4,7,0,10,1)${mesW}
         GROUP BY ${grupo}, g.cd_origem, p.dt_vencimento HAVING SUM(pm.vl_movimento * pm.no_sinal) > 1
       ) t GROUP BY k`
     case 'naoLancados':
@@ -86,7 +89,7 @@ function query(o: OpcoesBairro, f: FiltrosBairroTrib, grupo: string): string {
     default: // lancado
       return `SELECT ${grupo} k, COUNT(DISTINCT g.cd_origem) im, SUM(pm.vl_movimento) vl
         ${from}
-        WHERE ${w}${semRV} AND pm.cd_tipo_movimento <= 3
+        WHERE ${w}${semRV} AND pm.cd_tipo_movimento <= 3${mesW}
         GROUP BY ${grupo}`
   }
 }
@@ -95,7 +98,7 @@ export async function bairrosTributo(o: OpcoesBairro, f: FiltrosBairroTrib): Pro
   // nível: bairro → rua (bairro selecionado) → imóveis (rua selecionada, identificados por
   // inscrição/número/proprietário, igual ao drill do IPTU/ITBI).
   const grupo = f.rua ? 'i.cd_imovel_urbano' : f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
-  const key = `${o.cacheKey}:${f.ano}:${f.metrica}:${f.bairro ?? ''}:${f.rua ?? ''}`
+  const key = `${o.cacheKey}:${f.ano}:${f.metrica}:${f.bairro ?? ''}:${f.rua ?? ''}:${f.mes ?? ''}`
   return cached(key, TTL_15MIN, async () => {
     if (f.metrica === 'isento' && o.isentoViaIptu) {
       // TCA não tem fonte própria de quantidade de imóveis isentos (tb_extr_isencoes dá -121,

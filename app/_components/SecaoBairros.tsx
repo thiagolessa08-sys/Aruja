@@ -28,7 +28,7 @@ async function fetchJson(url: string, tries = 3): Promise<any | null> {
   return null
 }
 
-export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bairro', mostrarNaoLancados = false, permitirDrillImovel = false, onSelecao }: { endpoint: string; ano: number | ''; titulo?: string; mostrarNaoLancados?: boolean; permitirDrillImovel?: boolean; onSelecao?: (bairro: string | null, rua: string | null, imovel: number | null) => void }) {
+export default function SecaoBairros({ endpoint, ano, mes, titulo = 'Análise por Bairro', mostrarNaoLancados = false, permitirDrillImovel = false, onSelecao }: { endpoint: string; ano: number | ''; mes?: number | ''; titulo?: string; mostrarNaoLancados?: boolean; permitirDrillImovel?: boolean; onSelecao?: (bairro: string | null, rua: string | null, imovel: number | null) => void }) {
   const metricasVisiveis = mostrarNaoLancados ? METRICAS : METRICAS.filter(m => m.id !== 'naoLancados')
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [bairroSel, setBairroSel] = useState<string | null>(null)
@@ -57,13 +57,14 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
     let vivo = true
     setCarregando(true); setErro(false)
     const p = new URLSearchParams({ ano: String(ano), metrica })
+    if (mes) p.set('mes', String(mes))
     if (bairroSel) p.set('bairro', bairroSel)
     if (permitirDrillImovel && bairroSel && ruaSel) p.set('rua', ruaSel)
     fetchJson(`${endpoint}?${p}`)
       .then(d => { if (!vivo) return; if (d) setBairros(d.bairros ?? []); else { setErro(true); setBairros([]) } })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
-  }, [endpoint, ano, metrica, bairroSel, ruaSel, permitirDrillImovel, recarregar])
+  }, [endpoint, ano, mes, metrica, bairroSel, ruaSel, permitirDrillImovel, recarregar])
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const corM = METRICAS.find(m => m.id === metrica)!.cor
