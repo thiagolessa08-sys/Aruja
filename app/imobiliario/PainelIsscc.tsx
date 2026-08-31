@@ -452,12 +452,25 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
                       <YAxis yAxisId="area" width={48} tickFormatter={(val: number) => (val / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + 'k'} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                       <YAxis yAxisId="qtd" orientation="right" width={40} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                       <Tooltip
-                        formatter={(val, name) => {
-                          const n = Number(val) || 0
-                          if (name === 'Área edificada (m²)') return [n.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' m²', name] as [string, string]
-                          return [n.toLocaleString('pt-BR'), name] as [string, string]
-                        }}
-                        contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                        content={(props) => {
+                          const { active, label, payload } = props as unknown as { active?: boolean; label?: string | number; payload?: { dataKey?: string; name?: string; value?: number; color?: string }[] }
+                          if (!active || !payload || !payload.length) return null
+                          return (
+                            <div style={{ background: '#23304b', borderRadius: 10, padding: '9px 12px', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{label}</div>
+                              {payload.map((p, i) => {
+                                const n = Number(p.value) || 0
+                                const texto = p.dataKey === 'areaEdificada' ? n.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' m²' : n.toLocaleString('pt-BR')
+                                return (
+                                  <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: i === 0 ? 4 : 2 }}>
+                                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: p.color ?? '#8094d6', flex: 'none' }} />
+                                    {p.name}: {texto}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        }} />
                       <Bar yAxisId="area" dataKey="areaEdificada" name="Área edificada (m²)" fill="#5870c4" radius={[3, 3, 0, 0]} maxBarSize={34}>
                         <LabelList dataKey="imoveisAlterados" position="top" formatter={(val) => (Number(val) ? `${Number(val)} im.` : '')} fontSize={8.5} fill="#8a93a6" />
                       </Bar>
