@@ -58,6 +58,7 @@ export async function GET(req: NextRequest) {
       inadimplencia: cmp(inadMes(anoRef), inadMes(anoAnt)),
       emAberto: cmp(abertoMes(anoRef), abertoMes(anoAnt)),
       isento: cmp(bRef.isento, bAnt.isento),
+      suspenso: cmp(bRef.suspenso, bAnt.suspenso),
       transmissoes: cmp(transm.get(anoRef) ?? 0, transm.get(anoAnt) ?? 0),
     }
 
