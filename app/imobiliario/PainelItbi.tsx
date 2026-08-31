@@ -375,6 +375,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
     { label: 'Total Suspenso', cmp: v.cards.suspenso, cor: '#5b6477', sub: '', icon: svg(<><rect x="7" y="6" width="3.2" height="12" rx="1" /><rect x="13.8" y="6" width="3.2" height="12" rx="1" /></>) },
   ] : []
 
+  const LABELS_EVOL: Record<string, string> = { lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência', isento: 'Isento', suspenso: 'Suspenso' }
   const serie = (v?.evolucao ?? []).map(e => ({ ...e, rot: e.previsto ? `${e.ano}*` : String(e.ano) }))
   const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano
   const insights = v ? insightsItbi(v) : null
@@ -473,10 +474,26 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
                     <XAxis dataKey="rot" interval={0} height={24} tick={<EixoTick />} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                     <YAxis width={44} tickFormatter={(val: number) => (val / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tick={{ fontSize: 10.5, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                     <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }}
-                      formatter={(val, name) => ['R$ ' + (Number(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), name] as [string, string]}
-                      contentStyle={{ borderRadius: 10, border: '1px solid #e3e9f5', fontSize: 12 }} />
+                      content={(props) => {
+                        const { active, label, payload } = props as unknown as { active?: boolean; label?: string | number; payload?: { dataKey?: string; value?: number; payload?: { previsto?: boolean } }[] }
+                        if (!active || !payload || !payload.length) return null
+                        const previsto = !!payload[0]?.payload?.previsto
+                        const itens = payload.filter(p => Number(p.value) > 0)
+                        if (!itens.length) return null
+                        return (
+                          <div style={{ background: '#23304b', borderRadius: 10, padding: '9px 12px', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{label}{previsto ? ' (previsto)' : ''}</div>
+                            {itens.map((p, i) => (
+                              <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: i === 0 ? 4 : 2 }}>
+                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: CORES[p.dataKey as string]?.[previsto ? 1 : 0] ?? '#8094d6', flex: 'none' }} />
+                                {LABELS_EVOL[p.dataKey as string] ?? p.dataKey}: R$ {(Number(p.value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      }} />
                     {(['lancado', 'arrecadado', 'emAberto', 'inadimplencia', 'isento', 'suspenso'] as const).map(dk => (
-                      <Bar key={dk} dataKey={dk} name={{ lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência', isento: 'Isento', suspenso: 'Suspenso' }[dk]} radius={[3, 3, 0, 0]} maxBarSize={14} stroke="none">
+                      <Bar key={dk} dataKey={dk} name={LABELS_EVOL[dk]} radius={[3, 3, 0, 0]} maxBarSize={14} stroke="none">
                         {chartData.map((s, i) => <Cell key={i} fill={CORES[dk][s.previsto ? 1 : 0]} stroke="none" />)}
                         <LabelList dataKey={dk} position="top" formatter={(val) => (Number(val) ? fmtAbrev(Number(val)) : '')} fontSize={8.5} fill="#8a93a6" />
                       </Bar>
