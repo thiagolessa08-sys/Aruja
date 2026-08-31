@@ -3,14 +3,14 @@
 // Ponte imóvel: guia.cd_origem = imovel.cd_imovel_urbano (validada p/ TCA e ISSCC).
 import { agentQuery } from '@/lib/agent'
 import { cached, TTL_15MIN } from '@/lib/cache'
-import { detalhesImoveis } from '@/lib/iptu-agg'
+import { detalhesImoveis, bairrosIptu } from '@/lib/iptu-agg'
 
 const S = 'pref_aruja_sp'
 const num = (v: unknown) => Number(v) || 0
 
 export type MetricaBairro = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso' | 'naoLancados'
 export interface FiltrosBairroTrib { ano: number; bairro: string | null; rua?: string | null; metrica: MetricaBairro }
-export interface OpcoesBairro { codigos: string; isentoWhere: string; cacheKey: string }
+export interface OpcoesBairro { codigos: string; isentoWhere: string; cacheKey: string; isentoViaIptu?: boolean }
 export interface BairroLinha { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }
 
 function baseFrom() {
@@ -97,6 +97,17 @@ export async function bairrosTributo(o: OpcoesBairro, f: FiltrosBairroTrib): Pro
   const grupo = f.rua ? 'i.cd_imovel_urbano' : f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
   const key = `${o.cacheKey}:${f.ano}:${f.metrica}:${f.bairro ?? ''}:${f.rua ?? ''}`
   return cached(key, TTL_15MIN, async () => {
+    if (f.metrica === 'isento' && o.isentoViaIptu) {
+      // TCA não tem fonte própria de quantidade de imóveis isentos (tb_extr_isencoes dá -121,
+      // permissão negada, ver catch abaixo) — isenção de TCA e de IPTU são pelo MESMO imóvel
+      // (benefício municipal por imóvel, ex. templos/assistência — diferente de ISSCC, que é
+      // isenção de prestador de serviço), então reaproveita a quantidade de imóveis isentos de
+      // "IPTU por Bairro" (lib/iptu-agg.ts, já validada e com dado real) como proxy. Só a
+      // quantidade é usada — valor sempre 0, porque é um valor de IPTU, não de TCA (a tela
+      // mostra "somente por quantidade" para Isento, ver SecaoBairros.tsx `semValor`).
+      const itens = await bairrosIptu({ ano: f.ano, espolio: false, semNumero: false, bairro: f.bairro, rua: f.rua ?? null, metrica: 'isento' })
+      return itens.map(it => ({ nome: it.nome, imoveis: it.imoveis, valor: 0, cd: it.cd, inscricao: it.inscricao, numero: it.numero }))
+    }
     let r
     try {
       r = await agentQuery(query(o, f, grupo), 4000)
@@ -129,6 +140,7 @@ export async function bairrosTributo(o: OpcoesBairro, f: FiltrosBairroTrib): Pro
 export const OPC_TCA: OpcoesBairro = {
   codigos: '67', cacheKey: 'bairroTca',
   isentoWhere: `SELECT e.cd_origem FROM ${S}.tb_extr_isencoes e WHERE e.ds_tipo_isencao = 'IsentoTaxas'`,
+  isentoViaIptu: true,
 }
 export const OPC_ISSCC: OpcoesBairro = {
   codigos: '40,17,18', cacheKey: 'bairroIsscc',
