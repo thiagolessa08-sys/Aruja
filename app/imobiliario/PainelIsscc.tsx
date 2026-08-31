@@ -193,6 +193,10 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
   ] : []
 
   const LABELS_EVOL: Record<string, string> = { lancado: 'Lançado', arrecadado: 'Arrecadado', emAberto: 'Em aberto', inadimplencia: 'Inadimplência' }
+  // Mês de referência selecionado — mostrado sozinho ("Junho"), nunca como "até Junho": os
+  // valores são acumulados por baixo dos panos, mas o rótulo só indica QUAL mês está sendo
+  // analisado (mesmo texto que já aparece no seletor "Mês" do topo da página).
+  const mesNome = mes ? MESES_LONGO[Number(mes) - 1].replace(/^./, ch => ch.toUpperCase()) : null
   const serie = (v?.evolucao ?? []).map(e => ({ ...e, rot: e.previsto ? `${e.ano}*` : String(e.ano) }))
   const anoPrevisto = v?.evolucao.find(e => e.previsto)?.ano
   const insights = v ? insightsIsscc(v) : null
@@ -218,7 +222,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           {/* Cabeçalho — exercício/mês em análise, igual ao padrão do IPTU. Repetido (com
               rótulo próprio) em cada gráfico abaixo, a pedido do usuário. */}
           <div style={{ margin: '14px 4px 0' }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: '#283e93' }}>Visão Geral do ISSCC · Exercício {v.anoRef}{mes ? ` · até ${MESES_LONGO[Number(mes) - 1]}` : ''}</span>
+            <span style={{ fontSize: 18, fontWeight: 700, color: '#283e93' }}>Visão Geral do ISSCC · Exercício {v.anoRef}{mesNome ? ` · ${mesNome}` : ''}</span>
           </div>
 
           {/* Barra de relatórios (Excel/PDF a partir dos cards + evolução) */}
@@ -252,7 +256,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
             {cardsDef.map(c => (
               <div key={c.label} style={card}>
                 <span style={{ fontSize: 11.5, fontWeight: 600, color: '#5b6477', display: 'block' }}>{c.label}</span>
-                <span style={{ fontSize: 9.5, color: '#aeb6c6', display: 'block', height: 12 }}>{mes ? `até ${MESES_LONGO[Number(mes) - 1]}` : (c.sub || ' ')}</span>
+                <span style={{ fontSize: 9.5, color: '#aeb6c6', display: 'block', height: 12 }}>{mesNome ?? (c.sub || ' ')}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: `${c.cor}1a`, color: c.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{c.icon}</div>
                   <span style={{ fontSize: 20, fontWeight: 700, color: c.cor, letterSpacing: '-.5px' }}>{fmtAbrev(c.cmp.atual)}</span>
@@ -270,7 +274,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
             <div style={{ ...card, minWidth: 0, position: 'relative' }}>
               {carregMes ? <LoadingOverlay label="Carregando meses…" /> : null}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{drillAno ? `Evolução mensal · ${drillAno}` : `Evolução do ISSCC (5 anos)${mes ? ` · até ${MESES_LONGO[Number(mes) - 1]}` : ''}`}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>{drillAno ? `Evolução mensal · ${drillAno}` : `Evolução do ISSCC (5 anos)${mesNome ? ` · ${mesNome}` : ''}`}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5b6477' }}>
                     {[{ label: 'Lançado', cor: '#283e93' }, { label: 'Arrecadado', cor: '#1fa463' }, { label: 'Em aberto', cor: '#e8962e' }, { label: 'Inadimplência', cor: '#d64545' }].map(m => (
@@ -349,7 +353,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
 
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
           <SecaoBairros key={resetBairros} endpoint="/api/isscc/bairros" ano={ano} mes={mes}
-            titulo={`ISSCC por Bairro · Exercício ${ano}${mes ? ` até ${MESES_LONGO[Number(mes) - 1]}` : ''}`}
+            titulo={`ISSCC por Bairro · Exercício ${ano}${mesNome ? ` · ${mesNome}` : ''}`}
             mostrarNaoLancados permitirDrillImovel
             onSelecao={(b, r, im) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im) }} />
 
@@ -366,7 +370,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
               ) : (
                 <div>
                   <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44' }}>Vínculos mobiliários e imobiliários</span>
-                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Imóveis com lançamento de ISSCC no exercício de {v.anoRef}{mes ? ` até ${MESES_LONGO[Number(mes) - 1]}` : ''} e seus vínculos</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Imóveis com lançamento de ISSCC no exercício de {v.anoRef} e seus vínculos{mesNome ? ` · ${mesNome}` : ''}</div>
                 </div>
               )}
               {vinculoSel ? (
@@ -443,7 +447,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
                 </tbody>
               </table>
             </div>
-            <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>* exercício previsto (regressão linear). Valores por exercício de lançamento da guia (cd_tributo 40/17/18).{mes ? ` Acumulado até ${MESES_LONGO[Number(mes) - 1]} em todos os anos.` : ''}</div>
+            <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 8 }}>* exercício previsto (regressão linear). Valores por exercício de lançamento da guia (cd_tributo 40/17/18).{mesNome ? ` Mês de referência: ${mesNome} (todos os anos).` : ''}</div>
           </div>
 
           {/* ===== Item 2 — Área edificada × quantidade de ISSCC ===== */}
@@ -455,7 +459,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 3, borderRadius: 2, background: '#e8962e' }} />Qtd. ISSCC</span>
               </div>
             </div>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Imóveis com alteração estrutural no ano vs quantidade de ISSCC lançados — mede se a atividade de construção acompanha o tributo.{mes ? ` Acumulado até ${MESES_LONGO[Number(mes) - 1]} em todos os anos.` : ''}</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Imóveis com alteração estrutural no ano vs quantidade de ISSCC lançados — mede se a atividade de construção acompanha o tributo.{mesNome ? ` Mês de referência: ${mesNome} (todos os anos).` : ''}</div>
             {areaHist ? (
               <>
                 <div style={{ marginTop: 16, height: 300, minWidth: 560 }}>
