@@ -69,9 +69,13 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
   const corM = METRICAS.find(m => m.id === metrica)!.cor
   const metLabel = METRICAS.find(m => m.id === metrica)!.label
   const q = busca.trim().toLowerCase()
+  // Isento não tem um "valor" que faça sentido mostrar (é taxa não cobrada) — só a
+  // quantidade de imóveis isentos é significativa. Ordena/dimensiona as barras por
+  // quantidade e troca o valor pela informação de que é só quantidade.
+  const semValor = metrica === 'isento'
   const filtrados = (q ? bairros.filter(b => b.nome.toLowerCase().includes(q)) : bairros)
-  const lista = [...filtrados].sort((a, b) => ordenar === 'imoveis' ? b.imoveis - a.imoveis : Math.abs(b.valor) - Math.abs(a.valor))
-  const mx = Math.max(1, ...lista.map(b => Math.abs(b.valor)))
+  const lista = [...filtrados].sort((a, b) => (semValor || ordenar === 'imoveis') ? b.imoveis - a.imoveis : Math.abs(b.valor) - Math.abs(a.valor))
+  const mx = Math.max(1, ...lista.map(b => semValor ? b.imoveis : Math.abs(b.valor)))
 
   return (
     <div style={{ ...card, marginTop: 18, position: 'relative' }}>
@@ -112,7 +116,7 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
       ) : (
         <div style={{ marginTop: 14, maxHeight: 430, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
           {lista.map((b, i) => {
-            const w = Math.max(2, 100 * Math.abs(b.valor) / mx)
+            const w = Math.max(2, 100 * (semValor ? b.imoveis : Math.abs(b.valor)) / mx)
             const podeClicar = nivel === 'bairro' || (permitirDrillImovel && (nivel === 'rua' || (nivel === 'imovel' && !!b.cd)))
             const selecionado = nivel === 'imovel' && b.cd != null && b.cd === imovelSel
             const detalheImovel = [b.inscricao ? `Insc. ${b.inscricao}` : '', b.numero ? `Nº ${b.numero}` : ''].filter(Boolean).join(' · ')
@@ -128,7 +132,9 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
                   <span title={b.nome} style={{ color: selecionado ? '#283e93' : '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {selecionado ? '✓ ' : ''}{b.nome} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {nivel === 'imovel' ? (detalheImovel || `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`) : `${b.imoveis.toLocaleString('pt-BR')} im. (${metLabel})`}</span>
                   </span>
-                  <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.valor)}</span>
+                  {semValor
+                    ? <span style={{ color: '#9098a8', fontWeight: 600, fontStyle: 'italic', fontSize: 10.5, flex: 'none' }}>somente por quantidade</span>
+                    : <span style={{ color: corM, fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.valor)}</span>}
                 </div>
                 <div style={{ height: 15, borderRadius: 8, background: '#eef1f7', overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${w.toFixed(1)}%`, borderRadius: 8, background: corM }} />
