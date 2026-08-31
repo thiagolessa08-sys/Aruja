@@ -69,9 +69,11 @@ export async function GET(req: NextRequest) {
     })
     const histAnos: number[] = []
     for (let a = anoMax - 4; a <= anoMax; a++) histAnos.push(a)
+    // "Lançado" na Evolução segue a mesma regra do card "Lançado (Guias Ativas)" (exclui
+    // Cancelada) — lancMes() continua usado só no card interno cards.lancado/insights.
     const hist = histAnos.map(a => {
       const b = buckets.get(a) ?? zero
-      return { ano: a, lancado: lancMes(a), arrecadado: arrecMes(a), emAberto: abertoMes(a), inadimplencia: inadMes(a), isento: b.isento, suspenso: b.suspenso, cancelado: b.cancelado }
+      return { ano: a, lancado: lancAtivoMes(a), arrecadado: arrecMes(a), emAberto: abertoMes(a), inadimplencia: inadMes(a), isento: b.isento, suspenso: b.suspenso, cancelado: b.cancelado }
     })
     const evolucao = hist.map(h => ({
       ano: h.ano, lancado: h.lancado, arrecadado: h.arrecadado, emAberto: h.emAberto, inadimplencia: h.inadimplencia, isento: h.isento, suspenso: h.suspenso, cancelado: h.cancelado, previsto: false, ...pctFn(h.lancado, h.arrecadado, h.inadimplencia),
