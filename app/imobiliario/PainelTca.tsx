@@ -88,10 +88,15 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const [bairroFiltro, setBairroFiltro] = useState<string | null>(null)
   const [ruaFiltro, setRuaFiltro] = useState<string | null>(null)
   const [imovelFiltro, setImovelFiltro] = useState<number | null>(null)
+  // Força o remount de <SecaoBairros> ao limpar o filtro (item abaixo), voltando o próprio
+  // gráfico "TCA por Bairro" pro nível de bairro — ele só expõe a seleção via onSelecao
+  // (fluxo filho→pai), não tem um jeito de ser resetado de fora a não ser remontando.
+  const [resetBairros, setResetBairros] = useState(0)
   const filtroBairroQ = bairroFiltro ? `&bairro=${encodeURIComponent(bairroFiltro)}` : ''
   const filtroRuaQ = bairroFiltro && ruaFiltro ? `&rua=${encodeURIComponent(ruaFiltro)}` : ''
   const filtroImovelQ = imovelFiltro ? `&imovel=${imovelFiltro}` : ''
   const filtroLabel = imovelFiltro ? `Imóvel ${imovelFiltro}${ruaFiltro ? ` — ${ruaFiltro}` : ''}` : bairroFiltro ? (ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro) : null
+  function limparFiltroBairro() { setBairroFiltro(null); setRuaFiltro(null); setImovelFiltro(null); setResetBairros(n => n + 1) }
 
   // Drill do gráfico "Imóveis por situação da guia": clique numa situação → lista de imóveis
   const [situacaoSel, setSituacaoSel] = useState<string | null>(null)
@@ -282,6 +287,14 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
             </span>
           </div>
 
+          {/* Banner de filtro global por bairro/rua/imóvel (igual ao IPTU) */}
+          {filtroLabel ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '8px 4px 0' }}>
+              <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>Toda a tela filtrada por: <b>{filtroLabel}</b></span>
+              <button onClick={limparFiltroBairro} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>Limpar filtro</button>
+            </div>
+          ) : null}
+
           {/* 6 KPI cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginTop: 8, position: 'relative' }}>
             {carregando ? <LoadingOverlay label="Atualizando…" /> : null}
@@ -426,7 +439,7 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
 
           {/* Análise por bairro/rua/imóvel — a seleção interage com a Evolução da TCA (cards +
               tabela + previsão, acima) e com os quadros de situação/pagamento (abaixo) */}
-          <SecaoBairros endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel
+          <SecaoBairros key={resetBairros} endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel
             onSelecao={(b, r, im) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im) }} />
 
           {/* Quadros situação × status de pagamento (igual ao IPTU) — respeitam o bairro/rua/
