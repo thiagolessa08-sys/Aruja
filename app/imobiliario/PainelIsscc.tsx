@@ -156,7 +156,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const dados: DadosRelatorio = {
         titulo: `ISSCC — Exercício ${v.anoRef}`,
-        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}`,
+        subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}`,
         cards: [
           { rotulo: 'Lançado', valor: money(c.lancado.atual) },
           { rotulo: 'Arrecadado', valor: money(c.arrecadado.atual) },
@@ -237,7 +237,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           {/* Data de atualização */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
             <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
-              Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(v.dataAtualizacao)}</b>{mes ? ` · acumulado até ${MESES_LONGO[Number(mes) - 1]}` : ''}
+              Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(v.dataAtualizacao)}</b>
             </span>
           </div>
 
