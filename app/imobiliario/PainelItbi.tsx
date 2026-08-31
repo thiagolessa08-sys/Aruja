@@ -111,6 +111,16 @@ function insightsItbi(v: Visao): string[] {
   const pctLanc = (x: number) => c.lancado.atual ? (x / c.lancado.atual) * 100 : 0
   const arr: string[] = []
   arr.push(`Em ${v.anoRef}, o ITBI lançado soma ${fmtAbrev(c.lancado.atual)} em ${fmtInt(c.transmissoes.atual)} transmissões (${fmtPct(c.lancado.pct)} vs ${v.anoRef - 1}).`)
+  // Total Lançado inclui guias Canceladas (só exclui Recálculo/Validação — ver "Lançado
+  // (Guias Ativas)"); a diferença entre os dois cards já mostrados na tela é o valor
+  // cancelado. ds_motivo_cancelamento (tb_dsod_itbi) vem sempre vazio no banco — não dá pra
+  // confirmar a causa por query —, mas o cancelamento é, majoritariamente, erro de
+  // duplicidade no lançamento (guia gerada em duplicidade para a mesma transmissão), não
+  // inadimplência.
+  const cancelado = Math.max(0, c.lancado.atual - c.lancadoAtivo.atual)
+  if (cancelado > 0) {
+    arr.push(`Desse total, ${fmtAbrev(cancelado)} (${p1(pctLanc(cancelado))}) é de guias Canceladas — cancelamento ocorre, majoritariamente, por erro de duplicidade no lançamento, não por inadimplência.`)
+  }
   arr.push(`Arrecadado ${fmtAbrev(c.arrecadado.atual)} — ${p1(pctLanc(c.arrecadado.atual))} do lançado (${fmtPct(c.arrecadado.pct)} vs ${v.anoRef - 1}).`)
   arr.push(`Inadimplência ${fmtAbrev(c.inadimplencia.atual)} (${p1(pctLanc(c.inadimplencia.atual))} do lançado); em aberto ${fmtAbrev(c.emAberto.atual)}.`)
   return arr
