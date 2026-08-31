@@ -79,6 +79,16 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
   const [buscaVinculo, setBuscaVinculo] = useState('')
   const [imoveisVinculo, setImoveisVinculo] = useState<{ cd: number; inscricao: string; numero: string; proprietario: string }[]>([])
   const [carregandoVinculo, setCarregandoVinculo] = useState(false)
+  // Bairro/rua/imóvel selecionados no drill de "ISSCC por Bairro" — só usados pro banner
+  // "Limpar filtro" (igual IPTU/TCA/ITBI): esse filtro não afeta KPIs/Evolução do ISSCC,
+  // só o próprio gráfico. Força o remount de <SecaoBairros> ao limpar (via key incremental),
+  // já que o componente só expõe a seleção pro pai via onSelecao (fluxo filho→pai).
+  const [bairroFiltro, setBairroFiltro] = useState<string | null>(null)
+  const [ruaFiltro, setRuaFiltro] = useState<string | null>(null)
+  const [imovelFiltro, setImovelFiltro] = useState<number | null>(null)
+  const [resetBairros, setResetBairros] = useState(0)
+  const filtroLabelBairro = imovelFiltro ? `Imóvel ${imovelFiltro}${ruaFiltro ? ` — ${ruaFiltro}` : ''}` : bairroFiltro ? (ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro) : null
+  function limparFiltroBairro() { setBairroFiltro(null); setRuaFiltro(null); setImovelFiltro(null); setResetBairros(n => n + 1) }
 
   useEffect(() => {
     let vivo = true
@@ -215,6 +225,15 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
             </span>
           </div>
 
+          {/* Banner de filtro do gráfico "ISSCC por Bairro" (igual ao IPTU/TCA/ITBI) — aqui o
+              filtro só afeta esse gráfico (KPIs e Evolução não usam bairro). */}
+          {filtroLabelBairro ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '8px 4px 0' }}>
+              <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>"ISSCC por Bairro" filtrado por: <b>{filtroLabelBairro}</b></span>
+              <button onClick={limparFiltroBairro} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>Limpar filtro</button>
+            </div>
+          ) : null}
+
           {/* 6 KPI cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginTop: 8, position: 'relative' }}>
             {carregando ? <LoadingOverlay label="Atualizando…" /> : null}
@@ -301,7 +320,8 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           </div>
 
           {/* Análise por bairro/rua (todos os tipos de lançamento) */}
-          <SecaoBairros endpoint="/api/isscc/bairros" ano={ano} titulo="ISSCC por Bairro" mostrarNaoLancados permitirDrillImovel />
+          <SecaoBairros key={resetBairros} endpoint="/api/isscc/bairros" ano={ano} titulo="ISSCC por Bairro" mostrarNaoLancados permitirDrillImovel
+            onSelecao={(b, r, im) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im) }} />
 
           {/* Vínculos mobiliários e imobiliários (agregado) — clique numa categoria faz drill pra lista de imóveis */}
           <div style={{ ...card, marginTop: 18, position: 'relative' }}>
