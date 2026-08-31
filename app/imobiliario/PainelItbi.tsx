@@ -413,6 +413,15 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
             </span>
           </div>
 
+          {/* Banner de filtro do gráfico "ITBI por Bairro" (igual ao IPTU) — aqui o filtro só
+              afeta esse gráfico e o relatório PDF/Excel (KPIs e Evolução não usam bairro). */}
+          {bairroSel ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '8px 4px 0' }}>
+              <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>"ITBI por Bairro" filtrado por: <b>{ruaSel ? `${ruaSel} — ${bairroSel}` : bairroSel}</b></span>
+              <button onClick={() => { setBairroSel(null); setRuaSel(null) }} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11 }}>Limpar filtro</button>
+            </div>
+          ) : null}
+
           {/* 6 KPI cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginTop: 8, position: 'relative' }}>
             {carregando ? <LoadingOverlay label="Atualizando…" /> : null}
