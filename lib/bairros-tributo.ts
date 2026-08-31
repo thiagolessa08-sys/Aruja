@@ -97,7 +97,17 @@ export async function bairrosTributo(o: OpcoesBairro, f: FiltrosBairroTrib): Pro
   const grupo = f.rua ? 'i.cd_imovel_urbano' : f.bairro ? 'c.ds_endereco' : 'c.nm_bairro'
   const key = `${o.cacheKey}:${f.ano}:${f.metrica}:${f.bairro ?? ''}:${f.rua ?? ''}`
   return cached(key, TTL_15MIN, async () => {
-    const r = await agentQuery(query(o, f, grupo), 4000)
+    let r
+    try {
+      r = await agentQuery(query(o, f, grupo), 4000)
+    } catch (e) {
+      // Isento depende de tb_extr_isencoes, que nega permissão de SELECT neste ambiente
+      // (mesma limitação de RFB/Tomador CRC-CCM) — trata como "sem dados", igual ao
+      // fallback de isentoItbiPorExercicio (lib/itbi-engine.ts), em vez de propagar erro
+      // e deixar a tela "congelada" na métrica anterior (ver fix em SecaoBairros.tsx).
+      if (f.metrica === 'isento') return []
+      throw e
+    }
     const base = r.rows
       .map(row => ({ chave: String(row[0] ?? '').trim(), imoveis: num(row[1]), valor: num(row[2]) }))
       .filter(x => x.chave && x.valor !== 0)

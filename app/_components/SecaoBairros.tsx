@@ -60,7 +60,7 @@ export default function SecaoBairros({ endpoint, ano, titulo = 'Análise por Bai
     if (bairroSel) p.set('bairro', bairroSel)
     if (permitirDrillImovel && bairroSel && ruaSel) p.set('rua', ruaSel)
     fetchJson(`${endpoint}?${p}`)
-      .then(d => { if (!vivo) return; if (d) setBairros(d.bairros ?? []); else setErro(true) })
+      .then(d => { if (!vivo) return; if (d) setBairros(d.bairros ?? []); else { setErro(true); setBairros([]) } })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
   }, [endpoint, ano, metrica, bairroSel, ruaSel, permitirDrillImovel, recarregar])
