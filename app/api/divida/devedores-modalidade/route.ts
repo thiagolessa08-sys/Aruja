@@ -1,0 +1,18 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@/lib/auth'
+import { devedoresModalidade } from '@/lib/divida-engine'
+
+export async function GET(req: NextRequest) {
+  const session = getSession()
+  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  try {
+    const situacao = req.nextUrl.searchParams.get('situacao') || ''
+    const limite = Number(req.nextUrl.searchParams.get('limite')) || 10
+    const ano = Number(req.nextUrl.searchParams.get('ano')) || undefined
+    const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
+    const devedores = await devedoresModalidade(situacao, limite, ano, mes)
+    return NextResponse.json({ devedores })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
+}

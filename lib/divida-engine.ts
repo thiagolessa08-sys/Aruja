@@ -343,6 +343,73 @@ async function debitosNegociadosDividaRaw(ano?: number, mes?: number): Promise<D
     .sort((a, b) => b.valor - a.valor)
 }
 
+export interface TransacaoModalidade { situacao: string; label: string; quantidade: number; valor: number }
+
+const LABEL_MODALIDADE: Record<string, string> = {
+  Normal: 'Normal',
+  DividaAtiva: 'Dívida Ativa',
+  Ajuizada: 'Ajuizada',
+  'Em Ajuizamento': 'Em Ajuizamento',
+}
+
+// Transação por Modalidade (a pedido do usuário) — as MESMAS transações negociadas de
+// debitosNegociadosDivida acima (ds_setor_origem_baixa IN Parcelamento/Reparcelamento/
+// BxParcelamento), mas agrupadas pela situação da PARCELA (Normal/DividaAtiva/Ajuizada/
+// Em Ajuizamento) em vez do setor de origem da baixa — mostra em qual modalidade formal a
+// negociação ocorreu. As 4 situações têm volume real (validado ao vivo): Normal concentra a
+// maior parte (parcelas negociadas antes de qualquer formalização em dívida ativa).
+export async function transacoesPorModalidade(ano?: number, mes?: number): Promise<TransacaoModalidade[]> {
+  return cached(`divida:transacaoModalidade:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => transacoesPorModalidadeRaw(ano, mes))
+}
+
+async function transacoesPorModalidadeRaw(ano?: number, mes?: number): Promise<TransacaoModalidade[]> {
+  const cond = [`pb.ds_setor_origem_baixa IN ('${SETORES_NEGOCIADOS.join("','")}')`]
+  if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
+  if (mes) cond.push(`MONTH(pb.dt_baixa) <= ${mes}`)
+  const r = await agentQuery(`
+    SELECT p.ds_situacao sit, COUNT(DISTINCT pb.cd_parcelas) qtd, SUM(pm.vl_movimento) valor
+    FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+    JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    WHERE ${cond.join(' AND ')}
+    GROUP BY p.ds_situacao`, 20)
+  return r.rows
+    .map(row => ({ situacao: String(row[0] ?? '').trim(), quantidade: num(row[1]), valor: num(row[2]) }))
+    .filter(x => LABEL_MODALIDADE[x.situacao] && x.quantidade > 0)
+    .map(x => ({ ...x, label: LABEL_MODALIDADE[x.situacao] }))
+    .sort((a, b) => b.quantidade - a.quantidade)
+}
+
+export interface DevedorModalidade { cd: number; nome: string; cpfCnpj: string; valor: number; quantidade: number }
+
+// Drill de "Transação por Modalidade" (a pedido do usuário) — contribuintes cujas
+// transações negociadas (mesmo escopo de transacoesPorModalidade acima) se enquadram na
+// situação/modalidade clicada, agrupado por g.cd_contr (mesmo padrão tributo-agnóstico de
+// maioresDevedores).
+export async function devedoresModalidade(situacao: string, limite = 10, ano?: number, mes?: number): Promise<DevedorModalidade[]> {
+  if (!LABEL_MODALIDADE[situacao]) return []
+  return cached(`divida:devedoresModalidade:${situacao}:${limite}:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => devedoresModalidadeRaw(situacao, limite, ano, mes))
+}
+
+async function devedoresModalidadeRaw(situacao: string, limite: number, ano?: number, mes?: number): Promise<DevedorModalidade[]> {
+  const cond = [`pb.ds_setor_origem_baixa IN ('${SETORES_NEGOCIADOS.join("','")}')`, `p.ds_situacao = '${situacao}'`]
+  if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
+  if (mes) cond.push(`MONTH(pb.dt_baixa) <= ${mes}`)
+  const r = await agentQuery(`
+    SELECT TOP ${limite} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pm.vl_movimento) valor, COUNT(DISTINCT pb.cd_parcelas) qtd
+    FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+    JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
+    WHERE ${cond.join(' AND ')}
+    GROUP BY g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj
+    ORDER BY valor DESC`, limite)
+  return r.rows
+    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim(), cpfCnpj: String(row[2] ?? '').trim(), valor: num(row[3]), quantidade: num(row[4]) }))
+    .filter(x => x.valor > 0)
+}
 
 export interface HistoricoNegArr { ano: number; negociado: number; arrecadado: number }
 
