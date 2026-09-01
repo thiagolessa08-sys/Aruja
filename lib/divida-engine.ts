@@ -321,6 +321,17 @@ export interface DebitoNegociado { setor: string; valor: number; quantidade: num
 // parcelas que em geral nunca chegaram a ser inscritas em dívida ativa.
 const SETORES_NEGOCIADOS = ['Parcelamento', 'Reparcelamento', 'BxParcelamento']
 
+// ⚠️ Ao juntar tb_dsod_parcelas nessas baixas negociadas, usar pm.cd_parcela (da tabela de
+// MOVIMENTO), NUNCA pb.cd_parcelas (da tabela de BAIXA). Validado ao vivo: numa baixa de
+// Parcelamento/Reparcelamento, pb.cd_parcelas aponta pra parcela ANTIGA que está sendo
+// encerrada pela renegociação — esse número fica "órfão" (não existe mais em
+// tb_dsod_parcelas) pra praticamente 100% das baixas a partir de 2020 (ex.: jul/2022, 0 de
+// 111 resolvem via pb.cd_parcelas). Já pm.cd_parcela aponta pra parcela atual/resultante e
+// resolve ~100% em qualquer período. Usar pb.cd_parcelas nesse join (erro cometido antes)
+// subestimava o total negociado em quase metade (R$129mi vs R$254mi reais, all-time) por
+// excluir silenciosamente quase toda a negociação de 2020 em diante. Esse problema NÃO
+// existe do lado "arrecadado" (pb.cd_parcelas resolve ~99,7% ali, validado ao vivo) — é
+// específico de baixas de renegociação, que por natureza encerram a parcela antiga.
 export async function debitosNegociadosDivida(ano?: number, mes?: number): Promise<DebitoNegociado[]> {
   return cached(`divida:negociados:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => debitosNegociadosDividaRaw(ano, mes))
 }
@@ -330,10 +341,10 @@ async function debitosNegociadosDividaRaw(ano?: number, mes?: number): Promise<D
   if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
   if (mes) cond.push(`MONTH(pb.dt_baixa) <= ${mes}`)
   const r = await agentQuery(`
-    SELECT pb.ds_setor_origem_baixa setor, SUM(pm.vl_movimento) valor, COUNT(DISTINCT pb.cd_parcelas) qtd
+    SELECT pb.ds_setor_origem_baixa setor, SUM(pm.vl_movimento) valor, COUNT(DISTINCT pm.cd_parcela) qtd
     FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
     JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
-    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pm.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     WHERE ${cond.join(' AND ')}
     GROUP BY pb.ds_setor_origem_baixa`, 20)
@@ -367,10 +378,10 @@ async function transacoesPorModalidadeRaw(ano?: number, mes?: number): Promise<T
   if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
   if (mes) cond.push(`MONTH(pb.dt_baixa) <= ${mes}`)
   const r = await agentQuery(`
-    SELECT p.ds_situacao sit, COUNT(DISTINCT pb.cd_parcelas) qtd, SUM(pm.vl_movimento) valor
+    SELECT p.ds_situacao sit, COUNT(DISTINCT pm.cd_parcela) qtd, SUM(pm.vl_movimento) valor
     FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
     JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
-    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pm.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     WHERE ${cond.join(' AND ')}
     GROUP BY p.ds_situacao`, 20)
@@ -397,10 +408,10 @@ async function devedoresModalidadeRaw(situacao: string, limite: number, ano?: nu
   if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
   if (mes) cond.push(`MONTH(pb.dt_baixa) <= ${mes}`)
   const r = await agentQuery(`
-    SELECT TOP ${limite} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pm.vl_movimento) valor, COUNT(DISTINCT pb.cd_parcelas) qtd
+    SELECT TOP ${limite} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pm.vl_movimento) valor, COUNT(DISTINCT pm.cd_parcela) qtd
     FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
     JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
-    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pm.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
     WHERE ${cond.join(' AND ')}

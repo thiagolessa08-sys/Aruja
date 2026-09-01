@@ -702,7 +702,8 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                     <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', textTransform: 'uppercase', letterSpacing: 0.3 }}>Histórico · Débitos Negociados e Arrecadados (R$)</span>
                   )}
                   <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-                    {anoHistSel ? `Por mês da baixa em ${anoHistSel} (parcelamento/reparcelamento × arrecadação da dívida ativa)` : 'Por ano da baixa (parcelamento/reparcelamento × arrecadação da dívida ativa) · todos os exercícios · clique num ano para ver o detalhe mensal'}
+                    {anoHistSel ? `Por mês da baixa em ${anoHistSel} (parcelamento/reparcelamento × arrecadação da dívida ativa)`
+                      : 'Por ano da baixa (parcelamento/reparcelamento × arrecadação da dívida ativa) · todos os exercícios · clique num ano para ver o detalhe mensal'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: '#5b6477' }}>
