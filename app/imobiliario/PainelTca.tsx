@@ -413,7 +413,7 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
               <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 4 }}>
                 {drillMes ? 'Arrecadado por dia de baixa — ajuste o período acima para ver outro intervalo.'
                   : drillAno ? `Meses de ${drillAno} · lançado/em aberto por mês de vencimento, arrecadado por mês de baixa · clique num mês para detalhar por dia`
-                  : `Clique num ano para detalhar por mês · barras claras = previsão ${anoPrevisto ?? ''} (regressão linear dos últimos 5 anos)`}
+                  : `Clique num ano para detalhar por mês · barras claras = previsão ${anoPrevisto ?? ''} (regressão linear dos últimos 3 anos)`}
               </div>
             </div>
 
