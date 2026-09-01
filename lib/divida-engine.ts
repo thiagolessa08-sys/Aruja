@@ -500,3 +500,57 @@ async function historicoNegArrPorMesRaw(ano: number): Promise<HistoricoMes[]> {
   for (const row of arrR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) arr.set(m, num(row[1])) }
   return Array.from({ length: 12 }, (_, i) => i + 1).map(mes => ({ mes, negociado: neg.get(mes) ?? 0, arrecadado: arr.get(mes) ?? 0 }))
 }
+
+export interface HistoricoPerfil { perfil: string; label: string; negociado: number; arrecadado: number }
+
+const LABEL_PERFIL: Record<string, string> = { F: 'Pessoa Física', J: 'Pessoa Jurídica' }
+
+// Terceiro nível de drill do Histórico – Débitos Negociados e Arrecadados (a pedido do
+// usuário: Ano → Mês → Perfil de Contribuinte). Mesma lógica de historicoNegArrPorMes acima,
+// restrita a um único mês (YEAR/MONTH(dt_baixa) = ano/mês) e agrupada por
+// tb_dsod_contribuinte.ic_pessoa (F=Pessoa Física, J=Pessoa Jurídica) em vez de MONTH(dt_baixa).
+// Lado negociado junta tb_dsod_parcelas via pm.cd_parcela (não pb.cd_parcelas) — ver nota
+// grande em debitosNegociadosDividaRaw sobre por que esse é o join correto para baixas de
+// renegociação. Ao contrário do tributo (que se perde na renegociação, reclassificado num
+// código sintético "Parcelamento"), o contribuinte (g.cd_contr) é preservado normalmente, e
+// seu ic_pessoa dá uma quebra real em ambos os lados (validado ao vivo, ex.: jul/2022:
+// negociado F R$725k/92 contribuintes vs J R$118k/13 contribuintes).
+export async function historicoNegArrPorPerfil(ano: number, mes: number): Promise<HistoricoPerfil[]> {
+  return cached(`divida:historicoNegArrPerfil:${ano}:${mes}`, TTL_15MIN, () => historicoNegArrPorPerfilRaw(ano, mes))
+}
+
+async function historicoNegArrPorPerfilRaw(ano: number, mes: number): Promise<HistoricoPerfil[]> {
+  const [negR, arrR] = await Promise.all([
+    agentQuery(`
+      SELECT cp.ic_pessoa perfil, SUM(pm.vl_movimento) valor
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pm.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
+      WHERE pb.ds_setor_origem_baixa IN ('${SETORES_NEGOCIADOS.join("','")}')
+        AND YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mes}
+      GROUP BY cp.ic_pessoa`, 20),
+    agentQuery(`
+      SELECT cp.ic_pessoa perfil, SUM(pm.vl_movimento) valor
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tb ON tb.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
+      WHERE p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento')
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+        AND tb.ds_tipo_baixa <> 'Estorno de Baixa'
+        AND YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mes}
+      GROUP BY cp.ic_pessoa`, 20),
+  ])
+  const neg = new Map<string, number>(), arr = new Map<string, number>()
+  for (const row of negR.rows) { const p = String(row[0] ?? '').trim(); if (LABEL_PERFIL[p]) neg.set(p, (neg.get(p) ?? 0) + num(row[1])) }
+  for (const row of arrR.rows) { const p = String(row[0] ?? '').trim(); if (LABEL_PERFIL[p]) arr.set(p, (arr.get(p) ?? 0) + num(row[1])) }
+  const perfis = Array.from(new Set([...neg.keys(), ...arr.keys()]))
+  return perfis
+    .map(perfil => ({ perfil, label: LABEL_PERFIL[perfil], negociado: neg.get(perfil) ?? 0, arrecadado: arr.get(perfil) ?? 0 }))
+    .filter(x => x.negociado > 0 || x.arrecadado > 0)
+    .sort((a, b) => b.negociado - a.negociado)
+}

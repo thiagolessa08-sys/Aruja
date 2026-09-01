@@ -161,6 +161,11 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [mesesHist, setMesesHist] = useState<{ mes: number; negociado: number; arrecadado: number }[] | null>(null)
   const [mesesHistErro, setMesesHistErro] = useState(false)
   const [tipHistMes, setTipHistMes] = useState<{ left: string; top: string; mes: number; negociado: number; arrecadado: number } | null>(null)
+  // Terceiro nível: clique num mês → detalhe por perfil de contribuinte (Pessoa Física ×
+  // Jurídica) daquele mês/ano (historicoNegArrPorPerfil, lib/divida-engine.ts).
+  const [mesHistSel, setMesHistSel] = useState<number | null>(null)
+  const [perfisHist, setPerfisHist] = useState<{ perfil: string; label: string; negociado: number; arrecadado: number }[] | null>(null)
+  const [perfisHistErro, setPerfisHistErro] = useState(false)
   const [tipEvol, setTipEvol] = useState<{ left: string; top: string; ano: number; saldo: number; lancado: number } | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
@@ -253,6 +258,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
       }).catch(() => setMesesHistErro(true))
   }
   useEffect(() => {
+    setMesHistSel(null)
     if (!anoHistSel) { setMesesHist(null); setMesesHistErro(false); return }
     buscarMesesHist(anoHistSel)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,6 +266,25 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
 
   function selecionarAnoHist(ano: number) {
     setAnoHistSel(prev => prev === ano ? null : ano)
+  }
+
+  function buscarPerfisHist(ano: number, mes: number) {
+    setPerfisHist(null)
+    setPerfisHistErro(false)
+    fetch(`/api/divida/historico-perfil?ano=${ano}&mes=${mes}`).then(r => r.ok ? r.json() : null)
+      .then(x => {
+        if (x && !x.error && Array.isArray(x.perfis)) setPerfisHist(x.perfis)
+        else setPerfisHistErro(true)
+      }).catch(() => setPerfisHistErro(true))
+  }
+  useEffect(() => {
+    if (!anoHistSel || !mesHistSel) { setPerfisHist(null); setPerfisHistErro(false); return }
+    buscarPerfisHist(anoHistSel, mesHistSel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anoHistSel, mesHistSel])
+
+  function selecionarMesHist(mes: number) {
+    setMesHistSel(prev => prev === mes ? null : mes)
   }
 
   const g = d ?? FALLBACK
@@ -273,6 +298,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const ge = geomBarsStack(g.porExercicio, g.recuperacao?.porExercicio ?? [])
   const gh = geomLines(g.historicoNegArr ?? [])
   const ghMes = geomLines((mesesHist ?? []).map(m => ({ ano: m.mes, negociado: m.negociado, arrecadado: m.arrecadado })))
+  const maxPerfilHist = Math.max(1, ...(perfisHist ?? []).map(x => x.negociado))
 
   // Tendências: direção (regressão linear) das novas inscrições e da taxa de recuperação
   // nos últimos exercícios, mais a variação do último exercício vs o anterior.
@@ -693,7 +719,12 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
             <div style={card}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                 <div>
-                  {anoHistSel ? (
+                  {mesHistSel && anoHistSel ? (
+                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', textTransform: 'uppercase', letterSpacing: 0.3, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button onClick={() => setMesHistSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', cursor: 'pointer', borderRadius: 7, padding: '3px 9px', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', textTransform: 'none', letterSpacing: 0 }}>‹ Voltar</button>
+                      Histórico · Perfil de Contribuinte
+                    </span>
+                  ) : anoHistSel ? (
                     <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', textTransform: 'uppercase', letterSpacing: 0.3, display: 'flex', alignItems: 'center', gap: 8 }}>
                       <button onClick={() => setAnoHistSel(null)} style={{ border: 'none', background: '#eef1fb', color: '#283e93', cursor: 'pointer', borderRadius: 7, padding: '3px 9px', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', textTransform: 'none', letterSpacing: 0 }}>‹ Voltar</button>
                       Histórico · Detalhe Mensal {anoHistSel}
@@ -702,7 +733,8 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                     <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', textTransform: 'uppercase', letterSpacing: 0.3 }}>Histórico · Débitos Negociados e Arrecadados (R$)</span>
                   )}
                   <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-                    {anoHistSel ? `Por mês da baixa em ${anoHistSel} (parcelamento/reparcelamento × arrecadação da dívida ativa)`
+                    {mesHistSel && anoHistSel ? `Por perfil de contribuinte · baixas de ${MESES_LONGO[mesHistSel - 1]} de ${anoHistSel} (parcelamento/reparcelamento × arrecadação da dívida ativa)`
+                      : anoHistSel ? `Por mês da baixa em ${anoHistSel} (parcelamento/reparcelamento × arrecadação da dívida ativa) · clique num mês para ver o detalhe por perfil de contribuinte`
                       : 'Por ano da baixa (parcelamento/reparcelamento × arrecadação da dívida ativa) · todos os exercícios · clique num ano para ver o detalhe mensal'}
                   </div>
                 </div>
@@ -733,6 +765,34 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                     </div>
                   ) : null}
                 </div>
+              ) : mesHistSel ? (
+                perfisHistErro ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar o detalhe por perfil.</div>
+                    <button onClick={() => buscarPerfisHist(anoHistSel, mesHistSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                  </div>
+                ) : !perfisHist ? (
+                  <div style={{ height: 220, borderRadius: 10, background: '#eef1f7', marginTop: 14 }} />
+                ) : !perfisHist.length ? (
+                  <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '40px 0' }}>Nenhum contribuinte com movimento neste mês.</div>
+                ) : (
+                  <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {perfisHist.map(x => {
+                      const w = (x.negociado / maxPerfilHist) * 100
+                      return (
+                        <div key={x.perfil}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 }}>
+                            <span style={{ fontSize: 12.5, color: '#3a4256', fontWeight: 600 }}>{x.label}</span>
+                            <span style={{ fontSize: 12, color: '#1f2a44' }}>{fmtAbrev(x.negociado)} <span style={{ color: '#9098a8', fontWeight: 500 }}>· arrec. {fmtAbrev(x.arrecadado)}</span></span>
+                          </div>
+                          <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.max(2, w).toFixed(1)}%`, background: x.perfil === 'F' ? '#283e93' : '#e8962e', borderRadius: 5 }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
               ) : mesesHistErro ? (
                 <div style={{ textAlign: 'center', padding: '40px 0' }}>
                   <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar o detalhe mensal.</div>
@@ -751,7 +811,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                     {ghMes.negPts.map((p, i) => <circle key={`n${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#283e93" />)}
                     {ghMes.arrPts.map((p, i) => <circle key={`a${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#1fa463" />)}
                     {ghMes.labels.map((l, i) => <text key={i} x={l.x.toFixed(1)} y={String(ghMes.H - 6)} fontSize="8.5" fill="#3a4256" textAnchor="middle" style={axisFont}>{MESES_ABREV[l.ano - 1]}</text>)}
-                    {ghMes.negPts.map((p, i) => (<rect key={i} onMouseEnter={() => setTipHistMes({ left: `${(p.x / ghMes.W * 100).toFixed(1)}%`, top: `${(Math.min(p.y, ghMes.arrPts[i].y) / ghMes.H * 100).toFixed(1)}%`, mes: p.ano, negociado: p.valor, arrecadado: ghMes.arrPts[i].valor })} x={(p.x - ghMes.gw / 2).toFixed(1)} y="0" width={ghMes.gw.toFixed(1)} height={String(ghMes.H - 20)} fill="transparent" pointerEvents="all" />))}
+                    {ghMes.negPts.map((p, i) => (<rect key={i} onMouseEnter={() => setTipHistMes({ left: `${(p.x / ghMes.W * 100).toFixed(1)}%`, top: `${(Math.min(p.y, ghMes.arrPts[i].y) / ghMes.H * 100).toFixed(1)}%`, mes: p.ano, negociado: p.valor, arrecadado: ghMes.arrPts[i].valor })} onClick={() => selecionarMesHist(p.ano)} x={(p.x - ghMes.gw / 2).toFixed(1)} y="0" width={ghMes.gw.toFixed(1)} height={String(ghMes.H - 20)} fill="transparent" pointerEvents="all" />))}
                   </svg>
                   {tipHistMes ? (
                     <div style={{ position: 'absolute', left: tipHistMes.left, top: tipHistMes.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
