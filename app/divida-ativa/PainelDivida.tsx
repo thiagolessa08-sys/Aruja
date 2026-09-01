@@ -212,7 +212,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   function buscarDevedoresSituacao(codigo: string) {
     setDevedoresSituacao(null)
     setDevedoresSituacaoErro(false)
-    fetch(`/api/divida/devedores?limite=15&situacao=${encodeURIComponent(codigo)}`).then(r => r.ok ? r.json() : null)
+    const qs = new URLSearchParams({ limite: '15', situacao: codigo })
+    if (ano) qs.set('ano', String(ano))
+    if (mes) qs.set('mes', String(mes))
+    fetch(`/api/divida/devedores?${qs.toString()}`).then(r => r.ok ? r.json() : null)
       .then(x => {
         if (x && !x.error && Array.isArray(x.devedores)) setDevedoresSituacao(x.devedores)
         else setDevedoresSituacaoErro(true)
@@ -222,7 +225,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
     if (!situacaoSel || situacaoSel === 'Normal') { setDevedoresSituacao(null); setDevedoresSituacaoErro(false); return }
     buscarDevedoresSituacao(situacaoSel)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [situacaoSel])
+  }, [situacaoSel, ano, mes])
 
   function selecionarSituacao(codigo: string) {
     setSituacaoSel(prev => prev === codigo ? null : codigo)
@@ -322,6 +325,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   ].filter(Boolean)
 
   const mesNome = mes ? MESES_LONGO[mes - 1] : null
+  // Texto do filtro ativo, reaproveitado nos cards que agora reagem a Exercício/Mês (IPTU x
+  // Dívida Ativa, Débitos Passíveis, Situação das Parcelas, Estoque por Tributo), a pedido
+  // do usuário — os demais gráficos da tela continuam mostrando o histórico completo.
+  const filtroTxt = ano ? `Exercício ${ano}${mesNome ? ` · ${mesNome}` : ''}` : 'todos os exercícios'
 
   const kpis = [
     { label: 'Dívida Ativa Total', value: fmtMoney(gk.total), subLabel: 'estoque inscrito', subValue: '', pct: '', dir: 'flat' as const },
@@ -331,17 +338,18 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
     { label: 'Maior Tributo', value: gk.porTributo[0] ? fmtMoney(gk.porTributo[0].valor) : '—', subLabel: gk.porTributo[0]?.nome ?? '', subValue: '', pct: '', dir: 'flat' as const },
   ]
 
-  // Relatório (PDF/Excel): cards = KPIs da tela; tabela = Estoque por Tributo.
+  // Relatório (PDF/Excel): cards = KPIs da tela; tabela = Estoque por Tributo. Ambos já
+  // refletem o filtro de Exercício/Mês (gk), consistente com o que está na tela.
   async function gerarRelatorio(tipo: 'pdf' | 'excel') {
     if (!d || gerandoRelatorio) return
     setGerandoRelatorio(true)
     try {
       const dados: DadosRelatorio = {
         titulo: 'Dívida Ativa',
-        subtitulo: `Estoque total inscrito: ${fmtReais(g.total)}`,
+        subtitulo: `Estoque total inscrito: ${fmtReais(gk.total)} · ${filtroTxt}`,
         cards: kpis.map(k => ({ rotulo: k.label, valor: k.value })),
         colunas: ['Tributo', 'Dívida Ativa', '% do Estoque'],
-        linhas: g.porTributo.map(t => [t.nome, fmtReais(t.valor), fmtPct(g.total ? t.valor / g.total * 100 : 0)]),
+        linhas: gk.porTributo.map(t => [t.nome, fmtReais(t.valor), fmtPct(gk.total ? t.valor / gk.total * 100 : 0)]),
         arquivo: 'DividaAtiva',
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
@@ -386,8 +394,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         </div>
       ) : null}
 
-      {/* KPIs — únicos que respeitam o filtro de Exercício/Mês do topo; os demais gráficos
-          abaixo mostram o histórico completo (ver nota em cada um). */}
+      {/* KPIs — respeitam o filtro de Exercício/Mês do topo, junto com IPTU × Dívida Ativa,
+          Débitos Passíveis, Situação das Parcelas e Estoque por Tributo (a pedido do
+          usuário); os demais gráficos da tela mostram o histórico completo (ver nota em
+          cada um). */}
       <div style={{ margin: '20px 4px 0', fontSize: 12.5, fontWeight: 600, color: '#5b6477' }}>
         KPIs · Exercício {ano ?? '—'}{mesNome ? ` · ${mesNome}` : ''}
       </div>
@@ -873,14 +883,14 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         </div>
       ) : null}
 
-      {/* IPTU × Dívida Ativa */}
-      {g.iptuDivida ? (() => {
-        const iv = g.iptuDivida!
+      {/* IPTU × Dívida Ativa — reage ao filtro de Exercício/Mês do topo, a pedido do usuário. */}
+      {gk.iptuDivida ? (() => {
+        const iv = gk.iptuDivida!
         const pct = iv.imoveisComIptu ? (iv.imoveisEmDivida / iv.imoveisComIptu) * 100 : 0
         return (
           <div style={{ ...card, marginTop: 18 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>IPTU e Dívida Ativa</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Dos imóveis com IPTU lançado, quantos têm guia inscrita em dívida ativa · todos os exercícios</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Dos imóveis com IPTU lançado, quantos têm guia inscrita em dívida ativa · {filtroTxt}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginTop: 16 }}>
               <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Imóveis com IPTU lançado</div>
@@ -903,14 +913,15 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         )
       })() : null}
 
-      {/* Débitos passíveis de serem inscritos em Dívida Ativa */}
-      {g.debitosPassiveis ? (() => {
-        const dp = g.debitosPassiveis!
+      {/* Débitos passíveis de serem inscritos em Dívida Ativa — reage ao filtro de
+          Exercício/Mês do topo, a pedido do usuário. */}
+      {gk.debitosPassiveis ? (() => {
+        const dp = gk.debitosPassiveis!
         const maxTrib = Math.max(1, ...dp.porTributo.map(t => t.valor))
         return (
           <div style={{ ...card, marginTop: 18 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Débitos Passíveis de Inscrição em Dívida Ativa</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Parcelas já vencidas, ainda em situação Normal (não inscritas) — candidatas a virar dívida ativa · todos os exercícios</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Parcelas já vencidas, ainda em situação Normal (não inscritas) — candidatas a virar dívida ativa · {filtroTxt}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 16 }}>
               <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Valor total passível de inscrição</div>
@@ -942,27 +953,29 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         )
       })() : null}
 
-      {/* Situação das Parcelas — clique numa situação faz drill: nas 3 situações de dívida
-          real, mostra os maiores devedores; em "Normal" (sem valor por devedor confiável,
-          ver nota em lib/divida-engine.ts), mostra os débitos por tributo já carregados. */}
-      {g.situacoes ? (() => {
+      {/* Situação das Parcelas — reage ao filtro de Exercício/Mês do topo, a pedido do
+          usuário (inclusive o drill). Clique numa situação faz drill: nas 3 situações de
+          dívida real, mostra os maiores devedores; em "Normal" (sem valor por devedor
+          confiável, ver nota em lib/divida-engine.ts), mostra os débitos por tributo já
+          carregados. */}
+      {gk.situacoes ? (() => {
         const SIT_CORES: Record<string, string> = {
           'Normal': '#9cabd9',
           'Dívida Ativa (administrativa)': '#e8962e',
           'Ajuizada': '#d64545',
           'Em Ajuizamento': '#c5d0ee',
         }
-        const maxSit = Math.max(1, ...g.situacoes.map(s => s.quantidade))
-        const dp = g.debitosPassiveis
+        const maxSit = Math.max(1, ...gk.situacoes.map(s => s.quantidade))
+        const dp = gk.debitosPassiveis
         const maxDpTrib = dp ? Math.max(1, ...dp.porTributo.map(t => t.valor)) : 1
         const maxDevSit = devedoresSituacao ? Math.max(1, ...devedoresSituacao.map(x => x.saldo)) : 1
-        const situacaoAtual = g.situacoes.find(s => s.codigo === situacaoSel)
+        const situacaoAtual = gk.situacoes.find(s => s.codigo === situacaoSel)
         return (
           <div style={{ ...card, marginTop: 18 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação das Parcelas</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral, no universo completo (todos os tributos e exercícios). Clique numa situação para ver o detalhe.</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral · {filtroTxt}. Clique numa situação para ver o detalhe.</div>
             <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
-              {g.situacoes.map(s => {
+              {gk.situacoes.map(s => {
                 const w = (s.quantidade / maxSit) * 100
                 const ativo = situacaoSel === s.codigo
                 return (
@@ -1038,10 +1051,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         )
       })() : null}
 
-      {/* Tabela por tributo */}
+      {/* Tabela por tributo — reage ao filtro de Exercício/Mês do topo, a pedido do usuário. */}
       <div style={{ ...card, marginTop: 18 }}>
         <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Estoque por Tributo</span>
-        <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Estoque total inscrito por tributo · todos os exercícios</div>
+        <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Estoque total inscrito por tributo · {filtroTxt}</div>
         <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -1052,13 +1065,13 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
               </tr>
             </thead>
             <tbody>
-              {g.porTributo.map((row, ri) => {
+              {gk.porTributo.map((row, ri) => {
                 const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
                 return (
                   <tr key={row.nome}>
                     <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.nome}</td>
                     <td style={{ background: cellBg, color: '#c0612a', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.valor)}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(g.total ? row.valor / g.total * 100 : 0)}</td>
+                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(gk.total ? row.valor / gk.total * 100 : 0)}</td>
                   </tr>
                 )
               })}
