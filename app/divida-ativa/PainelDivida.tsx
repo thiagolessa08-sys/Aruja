@@ -14,13 +14,11 @@ interface Resumo {
   recuperacao?: { lancado: number; pago: number; taxa: number; porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[] }
   situacoes?: { codigo: string; situacao: string; quantidade: number; pct: number }[]
   negociados?: { setor: string; valor: number; quantidade: number }[]
-  modalidade?: { situacao: string; label: string; quantidade: number; valor: number }[]
   historicoNegArr?: { ano: number; negociado: number; arrecadado: number }[]
   dataAtualizacao?: string | null
   composicao?: { principal: number; correcao: number; juros: number; multa: number; honorarios: number }
 }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; crc?: string }
-interface DevedorModalidade { cd: number; nome: string; cpfCnpj: string; valor: number; quantidade: number }
 
 const fmtMoney = (v: number) => Math.abs(v) >= 1e9
   ? (v / 1e9).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' bi'
@@ -179,12 +177,6 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [devedoresSituacao, setDevedoresSituacao] = useState<Devedor[] | null>(null)
   const [devedoresSituacaoErro, setDevedoresSituacaoErro] = useState(false)
 
-  // Drill de "Transação por Modalidade": clique numa modalidade (situação da parcela nas
-  // transações negociadas) → contribuintes que se enquadram nela.
-  const [modalidadeSel, setModalidadeSel] = useState<string | null>(null)
-  const [devedoresModalidade, setDevedoresModalidade] = useState<DevedorModalidade[] | null>(null)
-  const [devedoresModalidadeErro, setDevedoresModalidadeErro] = useState(false)
-
   // Gráficos/tabelas seguem mostrando o histórico completo acumulado (sem ano/mes) —
   // só os KPIs do topo são filtrados (ver dKpi abaixo).
   useEffect(() => {
@@ -227,25 +219,6 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
 
   function selecionarSituacao(codigo: string) {
     setSituacaoSel(prev => prev === codigo ? null : codigo)
-  }
-
-  function buscarDevedoresModalidade(situacao: string) {
-    setDevedoresModalidade(null)
-    setDevedoresModalidadeErro(false)
-    fetch(`/api/divida/devedores-modalidade?limite=10&situacao=${encodeURIComponent(situacao)}`).then(r => r.ok ? r.json() : null)
-      .then(x => {
-        if (x && !x.error && Array.isArray(x.devedores)) setDevedoresModalidade(x.devedores)
-        else setDevedoresModalidadeErro(true)
-      }).catch(() => setDevedoresModalidadeErro(true))
-  }
-  useEffect(() => {
-    if (!modalidadeSel) { setDevedoresModalidade(null); setDevedoresModalidadeErro(false); return }
-    buscarDevedoresModalidade(modalidadeSel)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modalidadeSel])
-
-  function selecionarModalidade(situacao: string) {
-    setModalidadeSel(prev => prev === situacao ? null : situacao)
   }
 
   function buscarMesesHist(ano: number) {
@@ -329,15 +302,6 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const totNeg = negItens.reduce((a, x) => a + x.v, 0) || 1
   let _offNeg = 0
   const negDonut = negItens.map(x => { const len = (x.v / totNeg) * donutC; const s = { ...x, len, off: -_offNeg, pct: x.v / totNeg * 100 }; _offNeg += len; return s })
-
-  // "Transação por Modalidade" — as mesmas transações negociadas acima, por situação da
-  // parcela (Normal/Dívida Ativa/Ajuizada/Em Ajuizamento), a pedido do usuário. Clicar numa
-  // modalidade faz drill pros contribuintes que se enquadram nela (devedoresModalidade).
-  const MOD_CORES: Record<string, string> = { Normal: '#9cabd9', DividaAtiva: '#e8962e', Ajuizada: '#d64545', 'Em Ajuizamento': '#c5d0ee' }
-  const modItens = (g.modalidade ?? []).map(x => ({ ...x, cor: MOD_CORES[x.situacao] ?? '#9098a8' }))
-  const maxMod = Math.max(1, ...modItens.map(x => x.quantidade))
-  const maxDevMod = devedoresModalidade ? Math.max(1, ...devedoresModalidade.map(x => x.valor)) : 1
-  const modalidadeAtual = modItens.find(x => x.situacao === modalidadeSel)
 
   const insights = [
     `Dívida ativa de ${fmtReais(g.total)} — ${fmtMoney(g.administrativa)} administrativa (${fmtPct(pctAdm)}) e ${fmtMoney(g.judicial)} já ajuizada (${fmtPct(pctJud)}).`,
@@ -706,11 +670,9 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           Débitos", a pedido do usuário) — baixas de parcela originadas por parcelamento
           (ds_setor_origem_baixa), nos nomes exatos da tabela: Parcelamento, Reparcelamento,
           BxParcelamento. Abrange todos os tributos/exercícios — não só as 3 situações de
-          dívida ativa (ver nota em debitosNegociadosDivida, lib/divida-engine.ts). Ao lado,
-          "Transação por Modalidade" mostra as mesmas transações negociadas, por situação
-          da parcela, com drill por contribuinte. */}
-      {gh.negPts.length || negDonut.length || modItens.length ? (
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+          dívida ativa (ver nota em debitosNegociadosDivida, lib/divida-engine.ts). */}
+      {gh.negPts.length || negDonut.length ? (
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
           {/* Histórico – Débitos Negociados e Arrecadados (R$), por ano — gráfico de linha,
               a pedido do usuário (conforme imagem em anexo). Mesmo eixo de tempo pras duas
               séries: ano em que a baixa de fato ocorreu (dt_baixa), não o exercício de
@@ -855,77 +817,6 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                   ))}
                 </div>
               </div>
-            </div>
-          ) : null}
-
-          {/* Transação por Modalidade — mesmas transações negociadas de "Débitos Negociados
-              por Situação" (ao lado), agrupadas pela situação da parcela (Normal/Dívida
-              Ativa/Ajuizada/Em Ajuizamento) em vez do setor de origem da baixa. Clique numa
-              modalidade faz drill pros contribuintes que se enquadram nela. */}
-          {modItens.length ? (
-            <div style={card}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                <div>
-                  <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Transação por Modalidade</span>
-                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Transações negociadas por situação da parcela · clique para ver os contribuintes</div>
-                </div>
-                <span style={reportBadge}>Negociação</span>
-              </div>
-              <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {modItens.map(x => {
-                  const w = (x.quantidade / maxMod) * 100
-                  const ativo = modalidadeSel === x.situacao
-                  return (
-                    <div key={x.situacao} onClick={() => selecionarModalidade(x.situacao)}
-                      style={{ cursor: 'pointer', borderRadius: 8, padding: '4px 6px', margin: '-4px -6px', background: ativo ? '#eef1fb' : 'transparent', border: ativo ? '1px solid #cdd5ef' : '1px solid transparent' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12.5, color: ativo ? '#283e93' : '#3a4256', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="3" style={{ flex: 'none', transform: ativo ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}><path d="M9 6l6 6-6 6" /></svg>
-                          {x.label}
-                        </span>
-                        <span style={{ fontSize: 12, color: '#1f2a44' }}>{x.quantidade.toLocaleString('pt-BR')} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {fmtAbrev(x.valor)}</span></span>
-                      </div>
-                      <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: x.cor, borderRadius: 5 }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {modalidadeSel ? (
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #eef1f7' }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: '#1f2a44', marginBottom: 8 }}>Contribuintes · {modalidadeAtual?.label ?? modalidadeSel}</div>
-                  {devedoresModalidadeErro ? (
-                    <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                      <div style={{ fontSize: 11, color: '#d64545' }}>Não foi possível carregar os contribuintes.</div>
-                      <button onClick={() => buscarDevedoresModalidade(modalidadeSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
-                    </div>
-                  ) : !devedoresModalidade ? (
-                    <div style={{ height: 50, borderRadius: 10, background: '#eef1f7' }} />
-                  ) : !devedoresModalidade.length ? (
-                    <div style={{ fontSize: 11, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Nenhum contribuinte identificado.</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {devedoresModalidade.map((dv, i) => (
-                        <div key={dv.cd} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '7px 10px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-                            <span style={{ fontSize: 11, color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {dv.nome || '—'}</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#c0612a', flex: 'none' }}>{fmtAbrev(dv.valor)}</span>
-                          </div>
-                          <div style={{ fontSize: 9.5, color: '#9098a8', marginTop: 1, display: 'flex', justifyContent: 'space-between' }}>
-                            <span>{dv.cpfCnpj || '—'}</span>
-                            <span>{dv.quantidade.toLocaleString('pt-BR')} negociação(ões)</span>
-                          </div>
-                          <div style={{ height: 6, borderRadius: 3, background: '#e9edf8', overflow: 'hidden', marginTop: 4 }}>
-                            <div style={{ height: '100%', width: `${Math.max(3, 100 * dv.valor / maxDevMod).toFixed(1)}%`, borderRadius: 3, background: '#c0612a' }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : null}
             </div>
           ) : null}
         </div>
