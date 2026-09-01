@@ -453,3 +453,39 @@ async function historicoNegociadosArrecadadosRaw(): Promise<HistoricoNegArr[]> {
   const anos = Array.from(new Set([...neg.keys(), ...arr.keys()])).sort((a, b) => a - b)
   return anos.map(ano => ({ ano, negociado: neg.get(ano) ?? 0, arrecadado: arr.get(ano) ?? 0 }))
 }
+
+export interface HistoricoMes { mes: number; negociado: number; arrecadado: number }
+
+// Drill mensal do Histórico – Débitos Negociados e Arrecadados (a pedido do usuário, clique
+// num ponto do gráfico de linha por ano). Mesma lógica de historicoNegociadosArrecadados
+// acima, restrita a um único ano (YEAR(dt_baixa) = ano) e agrupada por MONTH(dt_baixa) em
+// vez de YEAR(dt_baixa). Preenche os 12 meses (mesmo os sem baixa nenhuma) pra manter o eixo
+// do tempo contínuo dentro do ano, ao contrário da série anual que só lista anos com dado.
+export async function historicoNegArrPorMes(ano: number): Promise<HistoricoMes[]> {
+  return cached(`divida:historicoNegArrMes:${ano}`, TTL_15MIN, () => historicoNegArrPorMesRaw(ano))
+}
+
+async function historicoNegArrPorMesRaw(ano: number): Promise<HistoricoMes[]> {
+  const [negR, arrR] = await Promise.all([
+    agentQuery(`
+      SELECT MONTH(pb.dt_baixa) mes, SUM(pm.vl_movimento) valor
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      WHERE pb.ds_setor_origem_baixa IN ('${SETORES_NEGOCIADOS.join("','")}') AND YEAR(pb.dt_baixa) = ${ano}
+      GROUP BY MONTH(pb.dt_baixa)`, 20),
+    agentQuery(`
+      SELECT MONTH(pb.dt_baixa) mes, SUM(pm.vl_movimento) valor
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tb ON tb.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      WHERE p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento')
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+        AND tb.ds_tipo_baixa <> 'Estorno de Baixa' AND YEAR(pb.dt_baixa) = ${ano}
+      GROUP BY MONTH(pb.dt_baixa)`, 20),
+  ])
+  const neg = new Map<number, number>(), arr = new Map<number, number>()
+  for (const row of negR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) neg.set(m, num(row[1])) }
+  for (const row of arrR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) arr.set(m, num(row[1])) }
+  return Array.from({ length: 12 }, (_, i) => i + 1).map(mes => ({ mes, negociado: neg.get(mes) ?? 0, arrecadado: arr.get(mes) ?? 0 }))
+}

@@ -29,6 +29,7 @@ const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFract
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 const fmtData = (d: string | null | undefined) => d ? d.split('-').reverse().join('/') : '—'
 const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 const FALLBACK: Resumo = {
   total: 148123000, administrativa: 76900000, judicial: 70900000, ajuizamento: 323000,
@@ -154,6 +155,12 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [dKpi, setDKpi] = useState<Resumo | null>(null)
   const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
   const [tipHist, setTipHist] = useState<{ left: string; top: string; ano: number; negociado: number; arrecadado: number } | null>(null)
+  // Drill mensal do Histórico – Débitos Negociados e Arrecadados: clique num ano da linha →
+  // detalhe por mês daquele ano (historicoNegArrPorMes, lib/divida-engine.ts).
+  const [anoHistSel, setAnoHistSel] = useState<number | null>(null)
+  const [mesesHist, setMesesHist] = useState<{ mes: number; negociado: number; arrecadado: number }[] | null>(null)
+  const [mesesHistErro, setMesesHistErro] = useState(false)
+  const [tipHistMes, setTipHistMes] = useState<{ left: string; top: string; mes: number; negociado: number; arrecadado: number } | null>(null)
   const [tipEvol, setTipEvol] = useState<{ left: string; top: string; ano: number; saldo: number; lancado: number } | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
@@ -236,6 +243,25 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
     setModalidadeSel(prev => prev === situacao ? null : situacao)
   }
 
+  function buscarMesesHist(ano: number) {
+    setMesesHist(null)
+    setMesesHistErro(false)
+    fetch(`/api/divida/historico-mes?ano=${ano}`).then(r => r.ok ? r.json() : null)
+      .then(x => {
+        if (x && !x.error && Array.isArray(x.meses)) setMesesHist(x.meses)
+        else setMesesHistErro(true)
+      }).catch(() => setMesesHistErro(true))
+  }
+  useEffect(() => {
+    if (!anoHistSel) { setMesesHist(null); setMesesHistErro(false); return }
+    buscarMesesHist(anoHistSel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anoHistSel])
+
+  function selecionarAnoHist(ano: number) {
+    setAnoHistSel(prev => prev === ano ? null : ano)
+  }
+
   const g = d ?? FALLBACK
   const gk = dKpi ?? g
   const pctJud = g.total ? (g.judicial / g.total) * 100 : 0
@@ -246,6 +272,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const gr = geomBarsPar(g.recuperacao?.porExercicio ?? [])
   const ge = geomBarsStack(g.porExercicio, g.recuperacao?.porExercicio ?? [])
   const gh = geomLines(g.historicoNegArr ?? [])
+  const ghMes = geomLines((mesesHist ?? []).map(m => ({ ano: m.mes, negociado: m.negociado, arrecadado: m.arrecadado })))
 
   // Tendências: direção (regressão linear) das novas inscrições e da taxa de recuperação
   // nos últimos exercícios, mais a variação do último exercício vs o anterior.
@@ -667,7 +694,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                 <div>
                   <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', textTransform: 'uppercase', letterSpacing: 0.3 }}>Histórico · Débitos Negociados e Arrecadados (R$)</span>
-                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Por ano da baixa (parcelamento/reparcelamento × arrecadação da dívida ativa) · todos os exercícios</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Por ano da baixa (parcelamento/reparcelamento × arrecadação da dívida ativa) · todos os exercícios · clique num ano para ver o detalhe mensal</div>
                 </div>
                 <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: '#5b6477' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: '#283e93' }}></span>Valor dos Débitos Negociados (R$)</span>
@@ -679,12 +706,13 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                   {gh.ticksNeg.map((t, i) => (<g key={`n${i}`}><line x1="0" y1={t.y.toFixed(1)} x2={String(gh.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#283e93" style={axisFont}>{fmtAbrev(t.v)}</text></g>))}
                   {gh.ticksArr.map((t, i) => (<text key={`a${i}`} x={String(gh.W - 2)} y={(t.y - 2).toFixed(1)} fontSize="8" fill="#1fa463" textAnchor="end" style={axisFont}>{fmtAbrev(t.v)}</text>))}
                   <line x1="0" y1={gh.bottom} x2={String(gh.W)} y2={gh.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+                  {anoHistSel ? (() => { const p = gh.negPts.find(pt => pt.ano === anoHistSel); return p ? <line x1={p.x.toFixed(1)} y1="0" x2={p.x.toFixed(1)} y2={String(gh.H - 20)} stroke="#cdd5ef" strokeWidth="10" /> : null })() : null}
                   <path d={gh.negPath} fill="none" stroke="#283e93" strokeWidth="2.2" />
                   <path d={gh.arrPath} fill="none" stroke="#1fa463" strokeWidth="2.2" />
-                  {gh.negPts.map((p, i) => <circle key={`n${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#283e93" />)}
-                  {gh.arrPts.map((p, i) => <circle key={`a${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#1fa463" />)}
-                  {gh.labels.map((l, i) => (i % 2 === 0 || gh.labels.length < 10) ? <text key={i} x={l.x.toFixed(1)} y={String(gh.H - 6)} fontSize="8.5" fill="#3a4256" textAnchor="middle" style={axisFont}>{l.ano}</text> : null)}
-                  {gh.negPts.map((p, i) => (<rect key={i} onMouseEnter={() => setTipHist({ left: `${(p.x / gh.W * 100).toFixed(1)}%`, top: `${(Math.min(p.y, gh.arrPts[i].y) / gh.H * 100).toFixed(1)}%`, ano: p.ano, negociado: p.valor, arrecadado: gh.arrPts[i].valor })} x={(p.x - gh.gw / 2).toFixed(1)} y="0" width={gh.gw.toFixed(1)} height={String(gh.H - 20)} fill="transparent" pointerEvents="all" />))}
+                  {gh.negPts.map((p, i) => <circle key={`n${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.ano === anoHistSel ? 4.5 : 3} fill="#283e93" />)}
+                  {gh.arrPts.map((p, i) => <circle key={`a${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.ano === anoHistSel ? 4.5 : 3} fill="#1fa463" />)}
+                  {gh.labels.map((l, i) => (i % 2 === 0 || gh.labels.length < 10) ? <text key={i} x={l.x.toFixed(1)} y={String(gh.H - 6)} fontSize="8.5" fontWeight={l.ano === anoHistSel ? 700 : 400} fill={l.ano === anoHistSel ? '#283e93' : '#3a4256'} textAnchor="middle" style={axisFont}>{l.ano}</text> : null)}
+                  {gh.negPts.map((p, i) => (<rect key={i} onMouseEnter={() => setTipHist({ left: `${(p.x / gh.W * 100).toFixed(1)}%`, top: `${(Math.min(p.y, gh.arrPts[i].y) / gh.H * 100).toFixed(1)}%`, ano: p.ano, negociado: p.valor, arrecadado: gh.arrPts[i].valor })} onClick={() => selecionarAnoHist(p.ano)} x={(p.x - gh.gw / 2).toFixed(1)} y="0" width={gh.gw.toFixed(1)} height={String(gh.H - 20)} fill="transparent" pointerEvents="all" />))}
                 </svg>
                 {tipHist ? (
                   <div style={{ position: 'absolute', left: tipHist.left, top: tipHist.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
@@ -694,6 +722,44 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                   </div>
                 ) : null}
               </div>
+
+              {anoHistSel ? (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #eef1f7' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: '#1f2a44' }}>Detalhe mensal · {anoHistSel}</span>
+                    <button onClick={() => setAnoHistSel(null)} style={{ border: 'none', background: 'transparent', color: '#9098a8', cursor: 'pointer', fontSize: 15, lineHeight: 1, fontFamily: 'inherit', padding: 2 }} aria-label="Fechar detalhe mensal">×</button>
+                  </div>
+                  {mesesHistErro ? (
+                    <div style={{ textAlign: 'center', padding: '14px 0' }}>
+                      <div style={{ fontSize: 11, color: '#d64545' }}>Não foi possível carregar o detalhe mensal.</div>
+                      <button onClick={() => buscarMesesHist(anoHistSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                    </div>
+                  ) : !mesesHist ? (
+                    <div style={{ height: 130, borderRadius: 10, background: '#eef1f7' }} />
+                  ) : (
+                    <div onMouseLeave={() => setTipHistMes(null)} style={{ position: 'relative', cursor: 'pointer' }}>
+                      <svg viewBox={`0 0 ${ghMes.W} ${ghMes.H}`} width="100%" style={{ display: 'block' }}>
+                        {ghMes.ticksNeg.map((t, i) => (<g key={`n${i}`}><line x1="0" y1={t.y.toFixed(1)} x2={String(ghMes.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#283e93" style={axisFont}>{fmtAbrev(t.v)}</text></g>))}
+                        {ghMes.ticksArr.map((t, i) => (<text key={`a${i}`} x={String(ghMes.W - 2)} y={(t.y - 2).toFixed(1)} fontSize="8" fill="#1fa463" textAnchor="end" style={axisFont}>{fmtAbrev(t.v)}</text>))}
+                        <line x1="0" y1={ghMes.bottom} x2={String(ghMes.W)} y2={ghMes.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+                        <path d={ghMes.negPath} fill="none" stroke="#283e93" strokeWidth="2.2" />
+                        <path d={ghMes.arrPath} fill="none" stroke="#1fa463" strokeWidth="2.2" />
+                        {ghMes.negPts.map((p, i) => <circle key={`n${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#283e93" />)}
+                        {ghMes.arrPts.map((p, i) => <circle key={`a${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#1fa463" />)}
+                        {ghMes.labels.map((l, i) => <text key={i} x={l.x.toFixed(1)} y={String(ghMes.H - 6)} fontSize="8.5" fill="#3a4256" textAnchor="middle" style={axisFont}>{MESES_ABREV[l.ano - 1]}</text>)}
+                        {ghMes.negPts.map((p, i) => (<rect key={i} onMouseEnter={() => setTipHistMes({ left: `${(p.x / ghMes.W * 100).toFixed(1)}%`, top: `${(Math.min(p.y, ghMes.arrPts[i].y) / ghMes.H * 100).toFixed(1)}%`, mes: p.ano, negociado: p.valor, arrecadado: ghMes.arrPts[i].valor })} x={(p.x - ghMes.gw / 2).toFixed(1)} y="0" width={ghMes.gw.toFixed(1)} height={String(ghMes.H - 20)} fill="transparent" pointerEvents="all" />))}
+                      </svg>
+                      {tipHistMes ? (
+                        <div style={{ position: 'absolute', left: tipHistMes.left, top: tipHistMes.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{MESES_LONGO[tipHistMes.mes - 1]}</div>
+                          <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>Negociado: {fmtAbrev(tipHistMes.negociado)}</div>
+                          <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 2 }}>Arrecadado: {fmtAbrev(tipHistMes.arrecadado)}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
