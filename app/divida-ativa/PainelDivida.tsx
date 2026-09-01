@@ -14,6 +14,7 @@ interface Resumo {
   recuperacao?: { lancado: number; pago: number; taxa: number; porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[] }
   situacoes?: { codigo: string; situacao: string; quantidade: number; pct: number }[]
   negociados?: { setor: string; valor: number; quantidade: number }[]
+  modalidade?: { situacao: string; label: string; quantidade: number; valor: number }[]
   dataAtualizacao?: string | null
   composicao?: { principal: number; correcao: number; juros: number; multa: number; honorarios: number }
 }
@@ -225,6 +226,12 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const totNeg = negItens.reduce((a, x) => a + x.v, 0) || 1
   let _offNeg = 0
   const negDonut = negItens.map(x => { const len = (x.v / totNeg) * donutC; const s = { ...x, len, off: -_offNeg, pct: x.v / totNeg * 100 }; _offNeg += len; return s })
+
+  // "Transação por Modalidade" — as mesmas transações negociadas acima, por situação da
+  // parcela (Normal/Dívida Ativa/Ajuizada/Em Ajuizamento), a pedido do usuário.
+  const MOD_CORES: Record<string, string> = { Normal: '#9cabd9', DividaAtiva: '#e8962e', Ajuizada: '#d64545', 'Em Ajuizamento': '#c5d0ee' }
+  const modItens = (g.modalidade ?? []).map(x => ({ ...x, cor: MOD_CORES[x.situacao] ?? '#9098a8' }))
+  const maxMod = Math.max(1, ...modItens.map(x => x.quantidade))
 
   const insights = [
     `Dívida ativa de ${fmtReais(g.total)} — ${fmtMoney(g.administrativa)} administrativa (${fmtPct(pctAdm)}) e ${fmtMoney(g.judicial)} já ajuizada (${fmtPct(pctJud)}).`,
@@ -593,37 +600,73 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           usuário) — baixas de parcela originadas por parcelamento (ds_setor_origem_baixa),
           nos nomes exatos da tabela: Parcelamento, Reparcelamento, BxParcelamento. Abrange
           todos os tributos/exercícios — não só as 3 situações de dívida ativa (ver nota em
-          debitosNegociadosDivida, lib/divida-engine.ts). */}
-      {negDonut.length ? (
-        <div style={{ ...card, marginTop: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Débitos Negociados por Situação</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Baixas de parcela por parcelamento (setor de origem da baixa) · todos os tributos e exercícios, não restrito à dívida ativa</div>
-            </div>
-            <span style={reportBadge}>Parcelamento</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 24, alignItems: 'center', marginTop: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <svg viewBox="0 0 200 200" width="220" height="220" style={{ maxWidth: '100%' }}>
-                <g transform="rotate(-90 100 100)">
-                  {negDonut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
-                </g>
-                <text x="100" y="96" fontSize="15" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtAbrev(totNeg)}</text>
-                <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>negociado</text>
-              </svg>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {negDonut.map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                  <span style={{ flex: 1, fontSize: 12.5, color: '#3a4256' }}>{s.label} <span style={{ color: '#9098a8' }}>({s.qtd.toLocaleString('pt-BR')} baixas)</span></span>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1f2a44' }}>{fmtAbrev(s.v)}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#9098a8', width: 44, textAlign: 'right' }}>{fmtPct(s.pct)}</span>
+          debitosNegociadosDivida, lib/divida-engine.ts). Ao lado, "Transação por Modalidade"
+          mostra as mesmas transações negociadas, por situação da parcela. */}
+      {negDonut.length || modItens.length ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+          {negDonut.length ? (
+            <div style={card}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Débitos Negociados por Situação</span>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Baixas de parcela por parcelamento (setor de origem da baixa) · todos os tributos e exercícios, não restrito à dívida ativa</div>
                 </div>
-              ))}
+                <span style={reportBadge}>Parcelamento</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 20, alignItems: 'center', marginTop: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <svg viewBox="0 0 200 200" width="200" height="200" style={{ maxWidth: '100%' }}>
+                    <g transform="rotate(-90 100 100)">
+                      {negDonut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
+                    </g>
+                    <text x="100" y="96" fontSize="15" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtAbrev(totNeg)}</text>
+                    <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>negociado</text>
+                  </svg>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {negDonut.map((s, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label} <span style={{ color: '#9098a8' }}>({s.qtd.toLocaleString('pt-BR')})</span></span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44', flex: 'none' }}>{fmtAbrev(s.v)}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#9098a8', width: 40, textAlign: 'right', flex: 'none' }}>{fmtPct(s.pct)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : null}
+
+          {/* Transação por Modalidade — mesmas transações negociadas de "Débitos Negociados
+              por Situação" (ao lado), agrupadas pela situação da parcela (Normal/Dívida
+              Ativa/Ajuizada/Em Ajuizamento) em vez do setor de origem da baixa. */}
+          {modItens.length ? (
+            <div style={card}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                <div>
+                  <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Transação por Modalidade</span>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Transações negociadas (parcelamento/reparcelamento) por situação da parcela · todos os tributos e exercícios</div>
+                </div>
+                <span style={reportBadge}>Negociação</span>
+              </div>
+              <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {modItens.map(x => {
+                  const w = (x.quantidade / maxMod) * 100
+                  return (
+                    <div key={x.situacao}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12.5, color: '#3a4256', fontWeight: 600 }}>{x.label}</span>
+                        <span style={{ fontSize: 12, color: '#1f2a44' }}>{x.quantidade.toLocaleString('pt-BR')} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {fmtAbrev(x.valor)}</span></span>
+                      </div>
+                      <div style={{ height: 14, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: x.cor, borderRadius: 5 }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
