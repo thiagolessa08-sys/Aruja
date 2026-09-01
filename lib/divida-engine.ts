@@ -24,6 +24,7 @@ export interface ResumoDivida {
     porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[]
   }
   composicao: { principal: number; correcao: number; juros: number; multa: number; honorarios: number }
+  composicaoPorExercicio: { ano: number; principal: number; correcao: number; juros: number; multa: number; honorarios: number }[]
 }
 
 const num = (v: unknown) => Number(v) || 0
@@ -92,6 +93,7 @@ async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida
   const trib = new Map<string, number>()
   const exerc = new Map<number, number>()
   const exercRec = new Map<number, { lancado: number; pago: number }>()
+  const exercComposicao = new Map<number, { principal: number; correcao: number; juros: number; multa: number; honorarios: number }>()
 
   for (const row of r.rows) {
     const sit = String(row[0] ?? '').trim()
@@ -114,10 +116,16 @@ async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida
     else if (tipo === 'judicial') judicial += saldo
     else ajuizamento += saldo
 
-    cPrincipal += num(row[6]); cCorrecao += num(row[7]); cJuros += num(row[8]); cMulta += num(row[9]); cHonorarios += num(row[10])
+    const principal = num(row[6]), correcao = num(row[7]), juros = num(row[8]), multa = num(row[9]), honorarios = num(row[10])
+    cPrincipal += principal; cCorrecao += correcao; cJuros += juros; cMulta += multa; cHonorarios += honorarios
 
     trib.set(nome, (trib.get(nome) ?? 0) + saldo)
-    if (exAno >= 2005 && exAno <= 2030) exerc.set(exAno, (exerc.get(exAno) ?? 0) + saldo)
+    if (exAno >= 2005 && exAno <= 2030) {
+      exerc.set(exAno, (exerc.get(exAno) ?? 0) + saldo)
+      const ce = exercComposicao.get(exAno) ?? { principal: 0, correcao: 0, juros: 0, multa: 0, honorarios: 0 }
+      ce.principal += principal; ce.correcao += correcao; ce.juros += juros; ce.multa += multa; ce.honorarios += honorarios
+      exercComposicao.set(exAno, ce)
+    }
   }
 
   const porTributo = Array.from(trib.entries())
@@ -134,6 +142,10 @@ async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida
     .filter(x => x.lancado > 0)
     .sort((a, b) => a.ano - b.ano)
 
+  const composicaoPorExercicio = Array.from(exercComposicao.entries())
+    .map(([ano, c]) => ({ ano, ...c }))
+    .sort((a, b) => a.ano - b.ano)
+
   return {
     total: administrativa + judicial + ajuizamento, administrativa, judicial, ajuizamento, porTributo, porExercicio,
     recuperacao: {
@@ -141,6 +153,7 @@ async function resumoDividaRaw(ano?: number, mes?: number): Promise<ResumoDivida
       porExercicio: recPorExercicio,
     },
     composicao: { principal: cPrincipal, correcao: cCorrecao, juros: cJuros, multa: cMulta, honorarios: cHonorarios },
+    composicaoPorExercicio,
   }
 }
 

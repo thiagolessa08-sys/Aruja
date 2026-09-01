@@ -17,6 +17,7 @@ interface Resumo {
   historicoNegArr?: { ano: number; negociado: number; arrecadado: number }[]
   dataAtualizacao?: string | null
   composicao?: { principal: number; correcao: number; juros: number; multa: number; honorarios: number }
+  composicaoPorExercicio?: { ano: number; principal: number; correcao: number; juros: number; multa: number; honorarios: number }[]
 }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; crc?: string }
 
@@ -167,6 +168,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const [perfisHist, setPerfisHist] = useState<{ perfil: string; label: string; negociado: number; arrecadado: number }[] | null>(null)
   const [perfisHistErro, setPerfisHistErro] = useState(false)
   const [tipEvol, setTipEvol] = useState<{ left: string; top: string; ano: number; saldo: number; lancado: number } | null>(null)
+  // Drill de "Evolução da Dívida Ativa": clique numa barra → composição detalhada (Principal
+  // + atualização monetária + juros + multa + honorários) daquele exercício. Já vem no mesmo
+  // fetch de resumoDivida (composicaoPorExercicio) — sem chamada extra.
+  const [anoEvolSel, setAnoEvolSel] = useState<number | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
@@ -243,6 +248,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
     setAnoHistSel(prev => prev === ano ? null : ano)
   }
 
+  function selecionarAnoEvol(ano: number) {
+    setAnoEvolSel(prev => prev === ano ? null : ano)
+  }
+
   function buscarPerfisHist(ano: number, mes: number) {
     setPerfisHist(null)
     setPerfisHistErro(false)
@@ -271,6 +280,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const maxTrib = Math.max(1, ...g.porTributo.map(t => t.valor))
   const grPct = geomBarsPct(g.recuperacao?.porExercicio ?? [])
   const ge = geomBarsStack(g.porExercicio, g.recuperacao?.porExercicio ?? [])
+  const composicaoEvolSel = g.composicaoPorExercicio?.find(x => x.ano === anoEvolSel)
   const gh = geomLines(g.historicoNegArr ?? [])
   const ghMes = geomLines((mesesHist ?? []).map(m => ({ ano: m.mes, negociado: m.negociado, arrecadado: m.arrecadado })))
   const maxPerfilHist = Math.max(1, ...(perfisHist ?? []).map(x => x.negociado))
@@ -586,7 +596,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Evolução da Dívida Ativa (Total + Lançado)</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo em dívida ativa hoje + total historicamente inscrito, por exercício de origem (todos os exercícios) — total do gráfico: {fmtMoney(ge.total)}</div>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo em dívida ativa hoje + total historicamente inscrito, por exercício de origem (todos os exercícios) — total do gráfico: {fmtMoney(ge.total)} · clique numa barra para ver a composição daquele exercício</div>
             </div>
             <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Total Inscrito (Lançado)</span>
@@ -609,7 +619,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                   <text x={b.cx.toFixed(1)} y={String(ge.H - 6)} fontSize="9" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
                 </g>
               ))}
-              {ge.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTipEvol({ left: `${(b.cx / ge.W * 100).toFixed(1)}%`, top: `${(b.saldoTop.y / ge.H * 100).toFixed(1)}%`, ano: b.ano, saldo: b.saldo, lancado: b.lancado })} x={(b.cx - ge.bw).toFixed(1)} y="0" width={(ge.bw * 2).toFixed(1)} height={String(ge.H - 20)} fill="transparent" pointerEvents="all" />))}
+              {ge.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTipEvol({ left: `${(b.cx / ge.W * 100).toFixed(1)}%`, top: `${(b.saldoTop.y / ge.H * 100).toFixed(1)}%`, ano: b.ano, saldo: b.saldo, lancado: b.lancado })} onClick={() => selecionarAnoEvol(b.ano)} x={(b.cx - ge.bw).toFixed(1)} y="0" width={(ge.bw * 2).toFixed(1)} height={String(ge.H - 20)} fill="transparent" pointerEvents="all" />))}
             </svg>
             {tipEvol ? (
               <div style={{ position: 'absolute', left: tipEvol.left, top: tipEvol.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '9px 12px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
@@ -621,6 +631,48 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
             ) : null}
           </div>
           <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 10 }}>O total inscrito (lançado) já inclui o que foi pago desde então — não é uma métrica independente do saldo, e sim o histórico bruto de inscrições; some as duas por exercício de origem, a pedido.</div>
+
+          {anoEvolSel ? (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#1f2a44' }}>Composição da Dívida Ativa · {anoEvolSel}</span>
+                  {composicaoEvolSel ? <span style={{ fontSize: 13, fontWeight: 700, color: '#283e93' }}>{fmtMoney(composicaoEvolSel.principal + composicaoEvolSel.correcao + composicaoEvolSel.juros + composicaoEvolSel.multa + composicaoEvolSel.honorarios)}</span> : null}
+                </div>
+                <button onClick={() => setAnoEvolSel(null)} style={{ border: 'none', background: 'transparent', color: '#9098a8', cursor: 'pointer', fontSize: 15, lineHeight: 1, fontFamily: 'inherit', padding: 2 }} aria-label="Fechar composição do exercício">×</button>
+              </div>
+              {!composicaoEvolSel || (composicaoEvolSel.principal + composicaoEvolSel.correcao + composicaoEvolSel.juros + composicaoEvolSel.multa + composicaoEvolSel.honorarios <= 0) ? (
+                <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '16px 0' }}>Sem saldo em dívida ativa nesse exercício (quitado ou nunca inscrito).</div>
+              ) : (() => {
+                const c = composicaoEvolSel
+                const totC = c.principal + c.correcao + c.juros + c.multa + c.honorarios || 1
+                const partes = [
+                  { l: 'Principal', v: c.principal, cor: '#283e93' },
+                  { l: 'Atualização monetária', v: c.correcao, cor: '#7d8fce' },
+                  { l: 'Juros de mora', v: c.juros, cor: '#e8962e' },
+                  { l: 'Multa', v: c.multa, cor: '#d64545' },
+                  { l: 'Encargos legais (honorários)', v: c.honorarios, cor: '#5b6477' },
+                ].filter(p => p.v > 0)
+                return (
+                  <>
+                    <div style={{ height: 14, borderRadius: 7, background: '#eef1f7', overflow: 'hidden', display: 'flex', marginTop: 12 }}>
+                      {partes.map(p => (<div key={p.l} title={p.l} style={{ width: `${(100 * p.v / totC).toFixed(2)}%`, background: p.cor }} />))}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 12 }}>
+                      {partes.map(p => (
+                        <div key={p.l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: 3, background: p.cor, flex: 'none' }} />
+                          <span style={{ fontSize: 11.5, color: '#3a4256' }}>{p.l}</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44' }}>{fmtAbrev(p.v)}</span>
+                          <span style={{ fontSize: 10.5, color: '#9098a8' }}>({fmtPct(100 * p.v / totC)})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
