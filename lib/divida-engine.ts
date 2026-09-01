@@ -380,3 +380,46 @@ async function transacoesPorModalidadeRaw(ano?: number, mes?: number): Promise<T
     .map(x => ({ ...x, label: LABEL_MODALIDADE[x.situacao] }))
     .sort((a, b) => b.quantidade - a.quantidade)
 }
+
+export interface HistoricoNegArr { ano: number; negociado: number; arrecadado: number }
+
+const EX_FLOOR_HISTORICO = 2016
+
+// Histórico – Débitos Negociados e Arrecadados, por ano (a pedido do usuário, gráfico de
+// linha ao lado de "Débitos Negociados por Situação"). "Negociado" é a mesma métrica de
+// debitosNegociadosDivida, agora por YEAR(dt_baixa) — o ano em que a baixa por parcelamento/
+// reparcelamento de fato ocorreu (não o exercício de origem da guia). "Arrecadado" usa a
+// fórmula padrão de arrecadação por baixa (mov 11/14, lançamento 0/4/7/10, exclui Estorno de
+// Baixa — mesma convenção usada nas telas de tributo), restrita às 3 situações de dívida
+// ativa, também por ano de baixa — assim as duas séries comparam o MESMO eixo de tempo (ano
+// em que o evento aconteceu), não o ano de origem do débito.
+export async function historicoNegociadosArrecadados(): Promise<HistoricoNegArr[]> {
+  return cached('divida:historicoNegArr', TTL_15MIN, historicoNegociadosArrecadadosRaw)
+}
+
+async function historicoNegociadosArrecadadosRaw(): Promise<HistoricoNegArr[]> {
+  const [negR, arrR] = await Promise.all([
+    agentQuery(`
+      SELECT YEAR(pb.dt_baixa) ano, SUM(pm.vl_movimento) valor
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      WHERE pb.ds_setor_origem_baixa IN ('${SETORES_NEGOCIADOS.join("','")}') AND YEAR(pb.dt_baixa) >= ${EX_FLOOR_HISTORICO}
+      GROUP BY YEAR(pb.dt_baixa)`, 40),
+    agentQuery(`
+      SELECT YEAR(pb.dt_baixa) ano, SUM(pm.vl_movimento) valor
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tb ON tb.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      WHERE p.ds_situacao IN ('DividaAtiva','Ajuizada','Em Ajuizamento')
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+        AND tb.ds_tipo_baixa <> 'Estorno de Baixa' AND YEAR(pb.dt_baixa) >= ${EX_FLOOR_HISTORICO}
+      GROUP BY YEAR(pb.dt_baixa)`, 40),
+  ])
+  const neg = new Map<number, number>(), arr = new Map<number, number>()
+  const okAno = (a: number) => a >= 2005 && a <= 2035
+  for (const row of negR.rows) { const a = num(row[0]); if (okAno(a)) neg.set(a, num(row[1])) }
+  for (const row of arrR.rows) { const a = num(row[0]); if (okAno(a)) arr.set(a, num(row[1])) }
+  const anos = Array.from(new Set([...neg.keys(), ...arr.keys()])).sort((a, b) => a - b)
+  return anos.map(ano => ({ ano, negociado: neg.get(ano) ?? 0, arrecadado: arr.get(ano) ?? 0 }))
+}

@@ -15,6 +15,7 @@ interface Resumo {
   situacoes?: { codigo: string; situacao: string; quantidade: number; pct: number }[]
   negociados?: { setor: string; valor: number; quantidade: number }[]
   modalidade?: { situacao: string; label: string; quantidade: number; valor: number }[]
+  historicoNegArr?: { ano: number; negociado: number; arrecadado: number }[]
   dataAtualizacao?: string | null
   composicao?: { principal: number; correcao: number; juros: number; multa: number; honorarios: number }
 }
@@ -126,10 +127,32 @@ function geomBarsStack(saldoPorAno: { ano: number; valor: number }[], lancPorAno
   return { bars, ticks, W, H, bottom, bw, total }
 }
 
+// Duas linhas (Débitos Negociados × Arrecadado) por ano — histórico, a pedido do usuário.
+// Eixo Y duplo (escala própria por série): o valor negociado é ~100x maior que o arrecadado
+// nos dados reais da dívida ativa (validado ao vivo), então um eixo único deixava a linha de
+// Arrecadado achatada perto de zero, sem conseguir mostrar sua própria variação.
+function geomLines(d: { ano: number; negociado: number; arrecadado: number }[]) {
+  const W = 460, H = 220, top = 18, bottom = 170, padX = 10
+  const span = bottom - top
+  const maxNeg = Math.max(1, ...d.map(x => x.negociado))
+  const maxArr = Math.max(1, ...d.map(x => x.arrecadado))
+  const n = Math.max(1, d.length - 1)
+  const gw = (W - padX * 2) / n
+  const x = (i: number) => padX + i * gw
+  const path = (vals: number[], max: number) => vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${(bottom - (v / max) * span).toFixed(1)}`).join(' ')
+  const negPts = d.map((x2, i) => ({ x: x(i), y: bottom - (x2.negociado / maxNeg) * span, ano: x2.ano, valor: x2.negociado }))
+  const arrPts = d.map((x2, i) => ({ x: x(i), y: bottom - (x2.arrecadado / maxArr) * span, ano: x2.ano, valor: x2.arrecadado }))
+  const ticksNeg = [maxNeg, maxNeg / 2, 0].map(v => ({ v, y: bottom - (v / maxNeg) * span }))
+  const ticksArr = [maxArr, maxArr / 2, 0].map(v => ({ v, y: bottom - (v / maxArr) * span }))
+  const labels = d.map((x2, i) => ({ ano: x2.ano, x: x(i) }))
+  return { W, H, bottom, negPts, arrPts, negPath: path(d.map(v => v.negociado), maxNeg), arrPath: path(d.map(v => v.arrecadado), maxArr), ticksNeg, ticksArr, labels, gw }
+}
+
 export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?: number; onAnos?: (anos: number[]) => void } = {}) {
   const [d, setD] = useState<Resumo | null>(null)
   const [dKpi, setDKpi] = useState<Resumo | null>(null)
   const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
+  const [tipHist, setTipHist] = useState<{ left: string; top: string; ano: number; negociado: number; arrecadado: number } | null>(null)
   const [tipEvol, setTipEvol] = useState<{ left: string; top: string; ano: number; saldo: number; lancado: number } | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
@@ -196,6 +219,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const maxTrib = Math.max(1, ...g.porTributo.map(t => t.valor))
   const gr = geomBarsPar(g.recuperacao?.porExercicio ?? [])
   const ge = geomBarsStack(g.porExercicio, g.recuperacao?.porExercicio ?? [])
+  const gh = geomLines(g.historicoNegArr ?? [])
 
   // Tendências: direção (regressão linear) das novas inscrições e da taxa de recuperação
   // nos últimos exercícios, mais a variação do último exercício vs o anterior.
@@ -596,14 +620,54 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         </div>
       ) : null}
 
-      {/* ROW 2 — Débitos Negociados por Situação (substitui "Idade dos Débitos", a pedido do
-          usuário) — baixas de parcela originadas por parcelamento (ds_setor_origem_baixa),
-          nos nomes exatos da tabela: Parcelamento, Reparcelamento, BxParcelamento. Abrange
-          todos os tributos/exercícios — não só as 3 situações de dívida ativa (ver nota em
-          debitosNegociadosDivida, lib/divida-engine.ts). Ao lado, "Transação por Modalidade"
-          mostra as mesmas transações negociadas, por situação da parcela. */}
-      {negDonut.length || modItens.length ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+      {/* ROW 2 — Histórico (linha) + Débitos Negociados por Situação (substitui "Idade dos
+          Débitos", a pedido do usuário) — baixas de parcela originadas por parcelamento
+          (ds_setor_origem_baixa), nos nomes exatos da tabela: Parcelamento, Reparcelamento,
+          BxParcelamento. Abrange todos os tributos/exercícios — não só as 3 situações de
+          dívida ativa (ver nota em debitosNegociadosDivida, lib/divida-engine.ts). Ao lado,
+          "Transação por Modalidade" mostra as mesmas transações negociadas, por situação
+          da parcela. */}
+      {gh.negPts.length || negDonut.length || modItens.length ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+          {/* Histórico – Débitos Negociados e Arrecadados (R$), por ano — gráfico de linha,
+              a pedido do usuário (conforme imagem em anexo). Mesmo eixo de tempo pras duas
+              séries: ano em que a baixa de fato ocorreu (dt_baixa), não o exercício de
+              origem do débito. */}
+          {gh.negPts.length ? (
+            <div style={card}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <div>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', textTransform: 'uppercase', letterSpacing: 0.3 }}>Histórico · Débitos Negociados e Arrecadados (R$)</span>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Por ano da baixa (parcelamento/reparcelamento × arrecadação da dívida ativa) · todos os exercícios</div>
+                </div>
+                <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: '#5b6477' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: '#283e93' }}></span>Valor dos Débitos Negociados (R$)</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: '50%', background: '#1fa463' }}></span>Valor Arrecadado (R$)</span>
+                </div>
+              </div>
+              <div onMouseLeave={() => setTipHist(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
+                <svg viewBox={`0 0 ${gh.W} ${gh.H}`} width="100%" style={{ display: 'block' }}>
+                  {gh.ticksNeg.map((t, i) => (<g key={`n${i}`}><line x1="0" y1={t.y.toFixed(1)} x2={String(gh.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#283e93" style={axisFont}>{fmtAbrev(t.v)}</text></g>))}
+                  {gh.ticksArr.map((t, i) => (<text key={`a${i}`} x={String(gh.W - 2)} y={(t.y - 2).toFixed(1)} fontSize="8" fill="#1fa463" textAnchor="end" style={axisFont}>{fmtAbrev(t.v)}</text>))}
+                  <line x1="0" y1={gh.bottom} x2={String(gh.W)} y2={gh.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+                  <path d={gh.negPath} fill="none" stroke="#283e93" strokeWidth="2.2" />
+                  <path d={gh.arrPath} fill="none" stroke="#1fa463" strokeWidth="2.2" />
+                  {gh.negPts.map((p, i) => <circle key={`n${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#283e93" />)}
+                  {gh.arrPts.map((p, i) => <circle key={`a${i}`} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="3" fill="#1fa463" />)}
+                  {gh.labels.map((l, i) => (i % 2 === 0 || gh.labels.length < 10) ? <text key={i} x={l.x.toFixed(1)} y={String(gh.H - 6)} fontSize="8.5" fill="#3a4256" textAnchor="middle" style={axisFont}>{l.ano}</text> : null)}
+                  {gh.negPts.map((p, i) => (<rect key={i} onMouseEnter={() => setTipHist({ left: `${(p.x / gh.W * 100).toFixed(1)}%`, top: `${(Math.min(p.y, gh.arrPts[i].y) / gh.H * 100).toFixed(1)}%`, ano: p.ano, negociado: p.valor, arrecadado: gh.arrPts[i].valor })} x={(p.x - gh.gw / 2).toFixed(1)} y="0" width={gh.gw.toFixed(1)} height={String(gh.H - 20)} fill="transparent" pointerEvents="all" />))}
+                </svg>
+                {tipHist ? (
+                  <div style={{ position: 'absolute', left: tipHist.left, top: tipHist.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tipHist.ano}</div>
+                    <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>Negociado: {fmtAbrev(tipHist.negociado)}</div>
+                    <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 2 }}>Arrecadado: {fmtAbrev(tipHist.arrecadado)}</div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           {negDonut.length ? (
             <div style={card}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
