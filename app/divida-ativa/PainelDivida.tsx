@@ -24,6 +24,7 @@ const fmtMoney = (v: number) => Math.abs(v) >= 1e9
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 const fmtData = (d: string | null | undefined) => d ? d.split('-').reverse().join('/') : '—'
+const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 const FALLBACK: Resumo = {
   total: 148123000, administrativa: 76900000, judicial: 70900000, ajuizamento: 323000,
@@ -241,6 +242,8 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
     (() => { const r = [...g.porExercicio].sort((a, b) => b.valor - a.valor)[0]; return r ? `Os débitos de ${r.ano} são os mais pesados do estoque, com ${fmtMoney(r.valor)}.` : '' })(),
   ].filter(Boolean)
 
+  const mesNome = mes ? MESES_LONGO[mes - 1] : null
+
   const kpis = [
     { label: 'Dívida Ativa Total', value: fmtMoney(gk.total), subLabel: 'estoque inscrito', subValue: '', pct: '', dir: 'flat' as const },
     { label: 'Administrativa', value: fmtMoney(gk.administrativa), subLabel: 'do total', subValue: fmtPct(pctAdmK), pct: fmtPct(pctAdmK), dir: 'flat' as const },
@@ -304,8 +307,12 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         </div>
       ) : null}
 
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 20 }}>
+      {/* KPIs — únicos que respeitam o filtro de Exercício/Mês do topo; os demais gráficos
+          abaixo mostram o histórico completo (ver nota em cada um). */}
+      <div style={{ margin: '20px 4px 0', fontSize: 12.5, fontWeight: 600, color: '#5b6477' }}>
+        KPIs · Exercício {ano ?? '—'}{mesNome ? ` · ${mesNome}` : ''}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 16, marginTop: 8 }}>
         {kpis.map((k, i) => {
           const azul = i === 0
           return (
@@ -347,7 +354,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
               <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Composição da Dívida Ativa</span>
               <span style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{fmtMoney(totC)}</span>
             </div>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Principal + atualização monetária + juros de mora + multa + encargos legais previstos na legislação (Lei 6.830/80)</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Principal + atualização monetária + juros de mora + multa + encargos legais previstos na legislação (Lei 6.830/80) · histórico completo (todos os exercícios)</div>
             <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden', display: 'flex', marginTop: 16 }}>
               {partes.map(p => (<div key={p.l} title={p.l} style={{ width: `${(100 * p.v / totC).toFixed(2)}%`, background: p.cor }} />))}
             </div>
@@ -370,7 +377,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         {/* Ranked bars por tributo */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Dívida Ativa por Tributo</span>
+            <div>
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Dívida Ativa por Tributo</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Estoque total inscrito · todos os exercícios</div>
+            </div>
             <span style={reportBadge}>Estoque</span>
           </div>
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
@@ -413,7 +423,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         {/* Donut composição */}
         <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Administrativa × Judicial</span>
+            <div>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Administrativa × Judicial</span>
+              <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 2 }}>Todos os exercícios</div>
+            </div>
             <span style={dots}>···</span>
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
@@ -445,7 +458,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Taxa de Recuperação da Dívida Ativa</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Do que foi inscrito em dívida ativa (lançado), quanto já foi pago, por exercício de origem</div>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Do que foi inscrito em dívida ativa (lançado), quanto já foi pago, por exercício de origem · todos os exercícios</div>
             </div>
             <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Lançado</span>
@@ -507,7 +520,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Evolução da Dívida Ativa (Total + Lançado)</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo em dívida ativa hoje + total historicamente inscrito, por exercício de origem — total do gráfico: {fmtMoney(ge.total)}</div>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo em dívida ativa hoje + total historicamente inscrito, por exercício de origem (todos os exercícios) — total do gráfico: {fmtMoney(ge.total)}</div>
             </div>
             <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#5b6477' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: '#283e93' }}></span>Total Inscrito (Lançado)</span>
@@ -591,7 +604,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Idade dos Débitos</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>saldo em dívida ativa por exercício de origem</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>saldo em dívida ativa por exercício de origem · todos os exercícios</div>
           </div>
           <span style={reportBadge}>Aging</span>
         </div>
@@ -624,7 +637,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         return (
           <div style={{ ...card, marginTop: 18 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>IPTU e Dívida Ativa</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Dos imóveis com IPTU lançado, quantos têm guia inscrita em dívida ativa</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Dos imóveis com IPTU lançado, quantos têm guia inscrita em dívida ativa · todos os exercícios</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginTop: 16 }}>
               <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Imóveis com IPTU lançado</div>
@@ -654,7 +667,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         return (
           <div style={{ ...card, marginTop: 18 }}>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Débitos Passíveis de Inscrição em Dívida Ativa</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Parcelas já vencidas, ainda em situação Normal (não inscritas) — candidatas a virar dívida ativa</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Parcelas já vencidas, ainda em situação Normal (não inscritas) — candidatas a virar dívida ativa · todos os exercícios</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 16 }}>
               <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Valor total passível de inscrição</div>
@@ -785,6 +798,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
       {/* Tabela por tributo */}
       <div style={{ ...card, marginTop: 18 }}>
         <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Estoque por Tributo</span>
+        <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Estoque total inscrito por tributo · todos os exercícios</div>
         <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -816,7 +830,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>200 Maiores Devedores</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo em dívida ativa (administrativa + judicial + em ajuizamento) por contribuinte</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Saldo em dívida ativa (administrativa + judicial + em ajuizamento) por contribuinte · todos os exercícios</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
