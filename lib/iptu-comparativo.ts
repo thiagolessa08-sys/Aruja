@@ -17,7 +17,11 @@ async function contagensAno(ano: number, bairro: string | null): Promise<Record<
   const from = `FROM ${S}.tb_dsod_guias g
     JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_devedor
     JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep`
-  const where = `WHERE g.cd_tributo = 1 AND g.no_exercicio_lancamento = ${ano}${wb}`
+  // Exclui Recalculo/Validacao — mesmo criterio usado em "Imóveis com IPTU (base)"
+  // (resumoIptu/comIptu) e em "IPTU por Bairro" (lancado); sem isso, "Total de Imóveis"
+  // ficava ~280-840 unidades acima do resto da tela (validado ao vivo: 31.481 aqui vs
+  // 31.199/31.197 nos outros dois, para o exercicio de 2026).
+  const where = `WHERE g.cd_tributo = 1 AND g.no_exercicio_lancamento = ${ano} AND g.ds_situacao NOT IN ('Recalculo','Validacao')${wb}`
   const itbiSub = `SELECT iiu.cd_imovel_urbano FROM ${S}.tb_dsod_itbi itb JOIN ${S}.tb_dsod_itbi_imovel_urbano iiu ON iiu.cd_itbi = itb.cd_itbi WHERE itb.dt_lancamento BETWEEN '${ano}-01-01' AND getdate()-1 AND itb.vl_total > 0`
   const [attrR, vincR, itbiR] = await Promise.all([
     // atributos do imóvel/proprietário (CASE simples, sem subquery)
