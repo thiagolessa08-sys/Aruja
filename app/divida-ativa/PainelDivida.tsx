@@ -13,6 +13,7 @@ interface Resumo {
   debitosPassiveis?: { total: number; quantidade: number; porTributo: { nome: string; valor: number }[] }
   recuperacao?: { lancado: number; pago: number; taxa: number; porExercicio: { ano: number; lancado: number; pago: number; taxa: number }[] }
   situacoes?: { codigo: string; situacao: string; quantidade: number; pct: number }[]
+  negociados?: { setor: string; valor: number; quantidade: number }[]
   dataAtualizacao?: string | null
   composicao?: { principal: number; correcao: number; juros: number; multa: number; honorarios: number }
 }
@@ -124,27 +125,9 @@ function geomBarsStack(saldoPorAno: { ano: number; valor: number }[], lancPorAno
   return { bars, ticks, W, H, bottom, bw, total }
 }
 
-// Barras verticais aging
-function geomBars(d: { ano: number; valor: number }[]) {
-  const W = 960, H = 300, top = 26, bottom = 250
-  const span = bottom - top - 8
-  const max = Math.max(1, ...d.map(x => x.valor))
-  const n = Math.max(1, d.length)
-  const gw = W / n
-  const bw = Math.min(46, gw * 0.5)
-  const bars = d.map((x, i) => {
-    const cx = i * gw + gw / 2
-    const h = (x.valor / max) * span
-    return { cx, ano: x.ano, valor: x.valor, x: cx - bw / 2, y: bottom - h, h }
-  })
-  const ticks = [max, max / 2, 0].map(v => ({ v: Math.round(v / 1e6), y: bottom - (v / max) * span }))
-  return { bars, ticks, W, H, bottom, bw }
-}
-
 export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?: number; onAnos?: (anos: number[]) => void } = {}) {
   const [d, setD] = useState<Resumo | null>(null)
   const [dKpi, setDKpi] = useState<Resumo | null>(null)
-  const [tip, setTip] = useState<{ left: string; top: string; ano: number; valor: number } | null>(null)
   const [tipRec, setTipRec] = useState<{ left: string; top: string; ano: number; lancado: number; pago: number; taxa: number } | null>(null)
   const [tipEvol, setTipEvol] = useState<{ left: string; top: string; ano: number; saldo: number; lancado: number } | null>(null)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
@@ -210,7 +193,6 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const pctJudK = gk.total ? (gk.judicial / gk.total) * 100 : 0
   const pctAdmK = gk.total ? (gk.administrativa / gk.total) * 100 : 0
   const maxTrib = Math.max(1, ...g.porTributo.map(t => t.valor))
-  const gb = geomBars(g.porExercicio)
   const gr = geomBarsPar(g.recuperacao?.porExercicio ?? [])
   const ge = geomBarsStack(g.porExercicio, g.recuperacao?.porExercicio ?? [])
 
@@ -235,6 +217,14 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const donutC = 2 * Math.PI * 56
   let _off = 0
   const donut = comp.map(x => { const len = (x.v / totComp) * donutC; const s = { ...x, len, off: -_off, pct: x.v / totComp * 100 }; _off += len; return s })
+
+  // Donut "Débitos Negociados por Situação" — baixas de parcela por parcelamento
+  // (tb_dsod_parcela_baixas.ds_setor_origem_baixa), a pedido do usuário.
+  const NEG_CORES: Record<string, string> = { Parcelamento: '#283e93', Reparcelamento: '#e8962e', BxParcelamento: '#aab8e3' }
+  const negItens = (g.negociados ?? []).map(x => ({ label: x.setor, v: x.valor, qtd: x.quantidade, cor: NEG_CORES[x.setor] ?? '#9098a8' })).filter(x => x.v > 0)
+  const totNeg = negItens.reduce((a, x) => a + x.v, 0) || 1
+  let _offNeg = 0
+  const negDonut = negItens.map(x => { const len = (x.v / totNeg) * donutC; const s = { ...x, len, off: -_offNeg, pct: x.v / totNeg * 100 }; _offNeg += len; return s })
 
   const insights = [
     `Dívida ativa de ${fmtReais(g.total)} — ${fmtMoney(g.administrativa)} administrativa (${fmtPct(pctAdm)}) e ${fmtMoney(g.judicial)} já ajuizada (${fmtPct(pctJud)}).`,
@@ -599,36 +589,43 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         </div>
       ) : null}
 
-      {/* ROW 2 — aging */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Idade dos Débitos</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>saldo em dívida ativa por exercício de origem · todos os exercícios</div>
-          </div>
-          <span style={reportBadge}>Aging</span>
-        </div>
-        <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, cursor: 'pointer' }}>
-          <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" style={{ display: 'block' }}>
-            <defs><linearGradient id="divBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#7d8fce" /></linearGradient></defs>
-            {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v} mi</text></g>))}
-            <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-            {gb.bars.map((b, i) => (
-              <g key={i}>
-                <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="5" fill="url(#divBar)" />
-                <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="9" fill="#3a4256" textAnchor="middle" style={axisFont}>{b.ano}</text>
-              </g>
-            ))}
-            {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip({ left: `${(b.cx / gb.W * 100).toFixed(1)}%`, top: `${(b.y / gb.H * 100).toFixed(1)}%`, ano: b.ano, valor: b.valor })} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />))}
-          </svg>
-          {tip ? (
-            <div style={{ position: 'absolute', left: tip.left, top: tip.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tip.ano}</div>
-              <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>Dívida: {fmtAbrev(tip.valor)}</div>
+      {/* ROW 2 — Débitos Negociados por Situação (substitui "Idade dos Débitos", a pedido do
+          usuário) — baixas de parcela originadas por parcelamento (ds_setor_origem_baixa),
+          nos nomes exatos da tabela: Parcelamento, Reparcelamento, BxParcelamento. Abrange
+          todos os tributos/exercícios — não só as 3 situações de dívida ativa (ver nota em
+          debitosNegociadosDivida, lib/divida-engine.ts). */}
+      {negDonut.length ? (
+        <div style={{ ...card, marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Débitos Negociados por Situação</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Baixas de parcela por parcelamento (setor de origem da baixa) · todos os tributos e exercícios, não restrito à dívida ativa</div>
             </div>
-          ) : null}
+            <span style={reportBadge}>Parcelamento</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 24, alignItems: 'center', marginTop: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <svg viewBox="0 0 200 200" width="220" height="220" style={{ maxWidth: '100%' }}>
+                <g transform="rotate(-90 100 100)">
+                  {negDonut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
+                </g>
+                <text x="100" y="96" fontSize="15" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtAbrev(totNeg)}</text>
+                <text x="100" y="113" fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>negociado</text>
+              </svg>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {negDonut.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                  <span style={{ flex: 1, fontSize: 12.5, color: '#3a4256' }}>{s.label} <span style={{ color: '#9098a8' }}>({s.qtd.toLocaleString('pt-BR')} baixas)</span></span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1f2a44' }}>{fmtAbrev(s.v)}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#9098a8', width: 44, textAlign: 'right' }}>{fmtPct(s.pct)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* IPTU × Dívida Ativa */}
       {g.iptuDivida ? (() => {

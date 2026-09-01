@@ -310,3 +310,35 @@ async function situacaoParcelasRaw(ano?: number, mes?: number): Promise<Situacao
     .map(x => ({ codigo: x.situacao, situacao: LABEL_SITUACAO[x.situacao] ?? x.situacao, quantidade: x.quantidade, pct: (x.quantidade / total) * 100 }))
     .sort((a, b) => b.quantidade - a.quantidade)
 }
+
+export interface DebitoNegociado { setor: string; valor: number; quantidade: number }
+
+// Débitos Negociados por Situação (a pedido do usuário) — baixas de parcela originadas por
+// parcelamento, via tb_dsod_parcela_baixas.ds_setor_origem_baixa (nomes exatos da tabela:
+// 'Parcelamento', 'Reparcelamento', 'BxParcelamento'). Abrange TODOS os tributos/exercícios,
+// não só as 3 situações formais de dívida ativa — restringir a elas (testado ao vivo) faz
+// 'Reparcelamento' e 'BxParcelamento' sumirem (0 linhas), pois essas baixas ocorrem em
+// parcelas que em geral nunca chegaram a ser inscritas em dívida ativa.
+const SETORES_NEGOCIADOS = ['Parcelamento', 'Reparcelamento', 'BxParcelamento']
+
+export async function debitosNegociadosDivida(ano?: number, mes?: number): Promise<DebitoNegociado[]> {
+  return cached(`divida:negociados:${ano ?? 'all'}:${mes ?? ''}`, TTL_15MIN, () => debitosNegociadosDividaRaw(ano, mes))
+}
+
+async function debitosNegociadosDividaRaw(ano?: number, mes?: number): Promise<DebitoNegociado[]> {
+  const cond = [`pb.ds_setor_origem_baixa IN ('${SETORES_NEGOCIADOS.join("','")}')`]
+  if (ano) cond.push(`g.no_exercicio_lancamento = ${ano}`)
+  if (mes) cond.push(`MONTH(pb.dt_baixa) <= ${mes}`)
+  const r = await agentQuery(`
+    SELECT pb.ds_setor_origem_baixa setor, SUM(pm.vl_movimento) valor, COUNT(DISTINCT pb.cd_parcelas) qtd
+    FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+    JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    WHERE ${cond.join(' AND ')}
+    GROUP BY pb.ds_setor_origem_baixa`, 20)
+  return r.rows
+    .map(row => ({ setor: String(row[0] ?? '').trim(), valor: num(row[1]), quantidade: num(row[2]) }))
+    .filter(x => x.valor > 0)
+    .sort((a, b) => b.valor - a.valor)
+}
