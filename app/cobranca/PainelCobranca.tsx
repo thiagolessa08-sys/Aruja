@@ -17,8 +17,8 @@ interface DamTributo { nome: string; codigos: number[]; qt: number; pagas: numbe
 interface DamTributoMes { nome: string; qt: number; pagas: number }
 interface DamOperador { nome: string; qt: number; pagas: number }
 interface DamsGeradas { ano: number; total: number; totalPagas: number; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
-interface ResultadoMes { mes: number; geradas: number; recebidas: number; pagas: number }
-interface ResultadoMensal { ano: number; totalGeradas: number; totalRecebidas: number; totalPagas: number; porMes: ResultadoMes[] }
+interface ResultadoMes { mes: number; geradas: number; pagas: number }
+interface ResultadoMensal { ano: number; totalGeradas: number; totalPagas: number; porMes: ResultadoMes[] }
 interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
 interface ComparativoDamId { ano: number; totalGeradas: number; totalPagas: number; porMes: ComparativoDamIdMes[] }
 interface ConversaoItem { nome: string; lancado: number; arrecadado: number; conversao: number }
@@ -98,14 +98,14 @@ const FALLBACK_DAMS: DamsGeradas = {
 }
 
 const FALLBACK_RESULTADO: ResultadoMensal = {
-  ano: 2025, totalGeradas: 1240924, totalRecebidas: 294786, totalPagas: 268000,
+  ano: 2025, totalGeradas: 1240924, totalPagas: 268000,
   porMes: [
-    { mes: 1, geradas: 73192, recebidas: 16297, pagas: 14000 }, { mes: 2, geradas: 43244, recebidas: 30827, pagas: 28706 },
-    { mes: 3, geradas: 44118, recebidas: 29493, pagas: 27675 }, { mes: 4, geradas: 30754, recebidas: 27124, pagas: 25276 },
-    { mes: 5, geradas: 22646, recebidas: 26331, pagas: 24265 }, { mes: 6, geradas: 42330, recebidas: 26188, pagas: 24114 },
-    { mes: 7, geradas: 23636, recebidas: 25939, pagas: 24057 }, { mes: 8, geradas: 23447, recebidas: 24847, pagas: 23250 },
-    { mes: 9, geradas: 24308, recebidas: 25272, pagas: 23668 }, { mes: 10, geradas: 23563, recebidas: 25477, pagas: 23178 },
-    { mes: 11, geradas: 42396, recebidas: 24687, pagas: 19201 }, { mes: 12, geradas: 847290, recebidas: 12304, pagas: 10367 },
+    { mes: 1, geradas: 73192, pagas: 14000 }, { mes: 2, geradas: 43244, pagas: 28706 },
+    { mes: 3, geradas: 44118, pagas: 27675 }, { mes: 4, geradas: 30754, pagas: 25276 },
+    { mes: 5, geradas: 22646, pagas: 24265 }, { mes: 6, geradas: 42330, pagas: 24114 },
+    { mes: 7, geradas: 23636, pagas: 24057 }, { mes: 8, geradas: 23447, pagas: 23250 },
+    { mes: 9, geradas: 24308, pagas: 23668 }, { mes: 10, geradas: 23563, pagas: 23178 },
+    { mes: 11, geradas: 42396, pagas: 19201 }, { mes: 12, geradas: 847290, pagas: 10367 },
   ],
 }
 
@@ -186,7 +186,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
   const [tipQV, setTipQV] = useState<{ left: number; top: number; label: string; saldo: number } | null>(null)
   const [tipDam, setTipDam] = useState<{ left: number; top: number; label: string; qt: number; pagas: number } | null>(null)
-  const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; recebidas: number; pagas: number } | null>(null)
+  const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number } | null>(null)
   const [tipCompDamId, setTipCompDamId] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number } | null>(null)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
@@ -1028,49 +1028,37 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
       </div>
 
-      {/* Resultado Mensal da Arrecadação — DAM Geradas × DAM Recebidas pelo setor de
-          Cobrança, por mês. São eventos independentes (data de geração da guia vs. data da
-          baixa/pagamento); uma guia gerada num mês só "vira" recebida quando o contribuinte
+      {/* Resultado Mensal da Arrecadação — DAM Geradas × DAM Pagas pelo setor de Cobrança,
+          por mês. São eventos independentes (data de geração da guia vs. data da
+          baixa/pagamento); uma guia gerada num mês só "vira" paga quando o contribuinte
           efetivamente paga, meses depois. Sobe pra ficar logo abaixo de "Análise de Conversão",
-          a pedido do usuário. */}
+          a pedido do usuário. "DAM Recebidas" (todo tipo de baixa, não só pagamento) removida
+          a pedido do usuário — ficou só Geradas × Pagas. */}
       <div style={{ ...card, marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Resultado Mensal da Arrecadação</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas × DAM Recebidas × DAM Pagas pelo setor de Cobrança, por mês — {(resultado ?? FALLBACK_RESULTADO).ano}.</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas × DAM Pagas pelo setor de Cobrança, por mês — {(resultado ?? FALLBACK_RESULTADO).ano}.</div>
           </div>
-          <span style={reportBadge}>Geradas × Recebidas × Pagas</span>
+          <span style={reportBadge}>Geradas × Pagas</span>
         </div>
 
         {(() => {
           const rm = resultado ?? FALLBACK_RESULTADO
-          const pctRecebidas = rm.totalGeradas ? (rm.totalRecebidas / rm.totalGeradas) * 100 : 0
-          const pctPagas = rm.totalRecebidas ? (rm.totalPagas / rm.totalRecebidas) * 100 : 0
-          const mesDestaque = [...rm.porMes].sort((a, b) => (b.geradas - b.recebidas) - (a.geradas - a.recebidas))[0]
+          const pctPagas = rm.totalGeradas ? (rm.totalPagas / rm.totalGeradas) * 100 : 0
           return (
             <>
-              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
                 <div style={{ background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 14, padding: '14px 16px' }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>DAM Geradas em {rm.ano}</div>
                   <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalGeradas)}</div>
                 </div>
-                <div style={{ background: '#fdf3e6', border: '1px solid #f2ddb8', borderRadius: 14, padding: '14px 16px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#c07a2e' }}>DAM Recebidas em {rm.ano}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalRecebidas)}</div>
-                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctRecebidas)} das geradas no ano</div>
-                </div>
                 <div style={{ background: '#eafaf0', border: '1px solid #bfe8d1', borderRadius: 14, padding: '14px 16px' }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#1fa463' }}>DAM Pagas em {rm.ano}</div>
                   <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalPagas)}</div>
-                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctPagas)} das recebidas no ano</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctPagas)} das geradas no ano</div>
                 </div>
               </div>
-
-              {!resultado ? null : (
-                <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
-                  {MESES_ABREV[mesDestaque.mes - 1]}/{rm.ano} tem o maior descompasso: {fmtInt(mesDestaque.geradas)} geradas × {fmtInt(mesDestaque.recebidas)} recebidas — geração e recebimento são eventos independentes (guia gerada num mês só é recebida quando o contribuinte paga, meses depois).
-                </div>
-              )}
 
               <div style={{ height: 220, marginTop: 16, position: 'relative' }} onMouseLeave={() => setTipResultado(null)}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -1080,13 +1068,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                     <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
-                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas, pagas: p.pagas }) }}
-                      onMouseLeave={() => setTipResultado(null)} />
-                    <Bar dataKey="recebidas" name="Recebidas" fill="#e8962e" radius={[4, 4, 0, 0]} maxBarSize={26}
-                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas, pagas: p.pagas }) }}
+                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas }) }}
                       onMouseLeave={() => setTipResultado(null)} />
                     <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={26}
-                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, recebidas: p.recebidas, pagas: p.pagas }) }}
+                      onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas }) }}
                       onMouseLeave={() => setTipResultado(null)} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -1094,7 +1079,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   <div style={{ position: 'absolute', left: tipResultado.left, top: tipResultado.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
                     {tipBox(tipResultado.label, [
                       { texto: `Geradas: ${fmtInt(tipResultado.geradas)} DAMs`, cor: '#283e93' },
-                      { texto: `Recebidas: ${fmtInt(tipResultado.recebidas)} DAMs`, cor: '#e8962e' },
                       { texto: `Pagas: ${fmtInt(tipResultado.pagas)} DAMs`, cor: '#1fa463' },
                     ])}
                   </div>
