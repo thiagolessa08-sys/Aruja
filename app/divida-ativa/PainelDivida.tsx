@@ -363,6 +363,9 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
+  // Badge do filtro ativo (Exercício/Mês) — a pedido do usuário, exibido em cada gráfico que
+  // reage ao filtro do topo, pra não precisar subir a tela pra lembrar o que está selecionado.
+  const filtroBadge: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, color: '#283e93', background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 14, padding: '4px 12px', whiteSpace: 'nowrap', flex: 'none' }
   const dots: React.CSSProperties = { color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14, flex: 'none' }
   const axisFont: React.CSSProperties = { fontFamily: "var(--font-poppins), 'Poppins', sans-serif", fontWeight: 500 }
 
@@ -889,8 +892,13 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         const pct = iv.imoveisComIptu ? (iv.imoveisEmDivida / iv.imoveisComIptu) * 100 : 0
         return (
           <div style={{ ...card, marginTop: 18 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>IPTU e Dívida Ativa</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Dos imóveis com IPTU lançado, quantos têm guia inscrita em dívida ativa · {filtroTxt}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <div>
+                <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>IPTU e Dívida Ativa</span>
+                <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Dos imóveis com IPTU lançado, quantos têm guia inscrita em dívida ativa</div>
+              </div>
+              <span style={filtroBadge}>{filtroTxt}</span>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginTop: 16 }}>
               <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Imóveis com IPTU lançado</div>
@@ -920,8 +928,13 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         const maxTrib = Math.max(1, ...dp.porTributo.map(t => t.valor))
         return (
           <div style={{ ...card, marginTop: 18 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Débitos Passíveis de Inscrição em Dívida Ativa</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Parcelas já vencidas, ainda em situação Normal (não inscritas) — candidatas a virar dívida ativa · {filtroTxt}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <div>
+                <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Débitos Passíveis de Inscrição em Dívida Ativa</span>
+                <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Parcelas já vencidas, ainda em situação Normal (não inscritas) — candidatas a virar dívida ativa</div>
+              </div>
+              <span style={filtroBadge}>{filtroTxt}</span>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginTop: 16 }}>
               <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>Valor total passível de inscrição</div>
@@ -972,8 +985,13 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
         const situacaoAtual = gk.situacoes.find(s => s.codigo === situacaoSel)
         return (
           <div style={{ ...card, marginTop: 18 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação das Parcelas</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral · {filtroTxt}. Clique numa situação para ver o detalhe.</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <div>
+                <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Situação das Parcelas</span>
+                <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de parcelas por situação cadastral. Clique numa situação para ver o detalhe.</div>
+              </div>
+              <span style={filtroBadge}>{filtroTxt}</span>
+            </div>
             <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
               {gk.situacoes.map(s => {
                 const w = (s.quantidade / maxSit) * 100
@@ -1053,8 +1071,13 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
 
       {/* Tabela por tributo — reage ao filtro de Exercício/Mês do topo, a pedido do usuário. */}
       <div style={{ ...card, marginTop: 18 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Estoque por Tributo</span>
-        <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Estoque total inscrito por tributo · {filtroTxt}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Estoque por Tributo</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Estoque total inscrito por tributo</div>
+          </div>
+          <span style={filtroBadge}>{filtroTxt}</span>
+        </div>
         <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
