@@ -11,6 +11,7 @@ interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; en
 interface PotTrib { nome: string; codigos: number[]; vencido: number; aVencer: number }
 interface Potencial { vencido: number; aVencer: number; porTributo: PotTrib[] }
 interface PotMes { ano: number; mes: number; saldo: number; vencido: boolean }
+interface DevedorBairro { bairro: string; saldo: number; qtd: number }
 interface DamMes { mes: number; qt: number; pagas: number }
 interface DamTributo { nome: string; codigos: number[]; qt: number; pagas: number }
 interface DamTributoMes { nome: string; qt: number; pagas: number }
@@ -193,6 +194,15 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [potMesSel, setPotMesSel] = useState<PotMes | null>(null)
   const [devedoresMes, setDevedoresMes] = useState<Devedor[] | null>(null)
   const [devedoresMesErro, setDevedoresMesErro] = useState(false)
+  // Drill "por bairro" do Potencial de Arrecadação — mesmo princípio do "IPTU por Bairro"
+  // (nível geográfico in-place, com "‹ Voltar"), inserido ENTRE o mês e os devedores: ao
+  // clicar num mês, mostra o saldo agrupado por bairro (endereço cadastral do contribuinte,
+  // já que Potencial cobre todos os tributos, não só os ligados a imóvel) em vez de já pular
+  // pros devedores; só ao clicar num bairro é que a lista de devedores aparece, filtrada
+  // aquele bairro.
+  const [potBairros, setPotBairros] = useState<DevedorBairro[] | null>(null)
+  const [potBairrosErro, setPotBairrosErro] = useState(false)
+  const [potBairroSel, setPotBairroSel] = useState<string | null>(null)
   const [dams, setDams] = useState<DamsGeradas | null>(null)
   const [resultado, setResultado] = useState<ResultadoMensal | null>(null)
   const [compDamId, setCompDamId] = useState<ComparativoDamId | null>(null)
@@ -247,6 +257,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setPotMesSel(null)
     setDevedoresMes(null)
     setDevedoresMesErro(false)
+    setPotBairros(null)
+    setPotBairrosErro(false)
+    setPotBairroSel(null)
     setDamDrillTributo(null)
     setDamDrillOperador(null)
     setDamDrillMesData(null)
@@ -281,6 +294,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setPotMesSel(null)
     setDevedoresMes(null)
     setDevedoresMesErro(false)
+    setPotBairros(null)
+    setPotBairrosErro(false)
+    setPotBairroSel(null)
     if (potSel?.nome === t.nome) { setPotSel(null); setPotMensal(null); return }
     setPotSel(t)
     setPotMensal(null)
@@ -289,11 +305,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       .then(res => { if (res && !res.error && Array.isArray(res.itens)) setPotMensal(res.itens) }).catch(() => {})
   }
 
-  function buscarDevedoresMes(m: PotMes) {
+  function buscarDevedoresMes(m: PotMes, bairro?: string) {
     if (!potSel) return
     setDevedoresMes(null)
     setDevedoresMesErro(false)
-    const qs = new URLSearchParams({ codigos: potSel.codigos.join(','), anoVenc: String(m.ano), mesVenc: String(m.mes) })
+    const qs = new URLSearchParams({ codigos: potSel.codigos.join(','), anoVenc: String(m.ano), mesVenc: String(m.mes), ...(bairro ? { bairro } : {}) })
     fetch(`/api/cobranca/devedores-tributo-mes?${qs}`).then(r => r.ok ? r.json() : null)
       .then(res => {
         if (res && !res.error && Array.isArray(res.itens)) setDevedoresMes(res.itens)
@@ -301,11 +317,40 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       }).catch(() => setDevedoresMesErro(true))
   }
 
+  function buscarPotBairros(m: PotMes) {
+    if (!potSel) return
+    setPotBairros(null)
+    setPotBairrosErro(false)
+    const qs = new URLSearchParams({ codigos: potSel.codigos.join(','), anoVenc: String(m.ano), mesVenc: String(m.mes) })
+    fetch(`/api/cobranca/devedores-bairro-tributo-mes?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => {
+        if (res && !res.error && Array.isArray(res.itens)) setPotBairros(res.itens)
+        else setPotBairrosErro(true)
+      }).catch(() => setPotBairrosErro(true))
+  }
+
   function selecionarMes(m: PotMes) {
     if (!potSel) return
-    if (potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes) { setPotMesSel(null); setDevedoresMes(null); setDevedoresMesErro(false); return }
+    setPotBairroSel(null)
+    setPotBairros(null)
+    setPotBairrosErro(false)
+    setDevedoresMes(null)
+    setDevedoresMesErro(false)
+    if (potMesSel && potMesSel.ano === m.ano && potMesSel.mes === m.mes) { setPotMesSel(null); return }
     setPotMesSel(m)
-    buscarDevedoresMes(m)
+    buscarPotBairros(m)
+  }
+
+  // Clique num bairro do drill "Saldo por Bairro" (Potencial de Arrecadação) — desce mais um
+  // nível mostrando os devedores daquele bairro específico, igual ao bairro→rua→imóvel do
+  // IPTU por Bairro (in-place, com Voltar). O balde "Demais bairros (N)" não é clicável — a
+  // cauda longa de bairros (nomes cadastrais em texto livre, com muita variação) não vale a
+  // pena listar devedor a devedor.
+  function selecionarPotBairro(b: DevedorBairro) {
+    if (!potSel || !potMesSel || /^Demais bairros/.test(b.bairro)) return
+    if (potBairroSel === b.bairro) { setPotBairroSel(null); setDevedoresMes(null); setDevedoresMesErro(false); return }
+    setPotBairroSel(b.bairro)
+    buscarDevedoresMes(potMesSel, b.bairro)
   }
 
   function selecionarDamTributo(t: DamTributo) {
@@ -1193,13 +1238,53 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
 
               {potMesSel ? (
                 <div style={{ marginTop: 16, background: '#f7f9fd', borderRadius: 10, padding: '10px 10px 4px' }}>
-                  <div style={{ fontSize: 10.5, color: '#5b6477', fontWeight: 600, padding: '0 4px 8px' }}>
-                    Maiores devedores · vencimento {String(potMesSel.mes).padStart(2, '0')}/{potMesSel.ano}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 4px 8px' }}>
+                    <span style={{ fontSize: 10.5, color: '#5b6477', fontWeight: 600 }}>
+                      {potBairroSel ? `Devedores · ${potBairroSel}` : 'Saldo por bairro'} · vencimento {String(potMesSel.mes).padStart(2, '0')}/{potMesSel.ano}
+                    </span>
+                    {potBairroSel ? (
+                      <button onClick={() => { setPotBairroSel(null); setDevedoresMes(null); setDevedoresMesErro(false) }} style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '3px 10px', fontSize: 10.5, flex: 'none' }}>‹ Voltar aos bairros</button>
+                    ) : null}
                   </div>
-                  {devedoresMesErro ? (
+
+                  {!potBairroSel ? (
+                    // Nível "por bairro" — igual ao 1º nível de IPTU por Bairro (in-place,
+                    // ordenado por saldo, "Demais bairros (N)" agrupa a cauda longa).
+                    potBairrosErro ? (
+                      <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                        <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar os bairros.</div>
+                        <button onClick={() => buscarPotBairros(potMesSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                      </div>
+                    ) : !potBairros ? <Spinner label="Carregando…" size={26} padding={16} />
+                      : !potBairros.length ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Nenhum bairro identificado.</div>
+                      : (() => {
+                        const maxBairro = Math.max(1, ...potBairros.map(x => x.saldo))
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingBottom: 6, maxHeight: 260, overflowY: 'auto', paddingRight: 2 }}>
+                            {potBairros.map((b, i) => {
+                              const demais = /^Demais bairros/.test(b.bairro)
+                              return (
+                                <div key={b.bairro} onClick={demais ? undefined : () => selecionarPotBairro(b)} style={{ cursor: demais ? 'default' : 'pointer' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5, marginBottom: 1 }}>
+                                    <span style={{ color: demais ? '#9098a8' : '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                      {!demais ? <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="3" style={{ flex: 'none' }}><path d="M9 6l6 6-6 6" /></svg> : null}
+                                      {i + 1}. {b.bairro} <span style={{ color: '#9098a8', fontWeight: 500 }}>· {fmtInt(b.qtd)} contrib.</span>
+                                    </span>
+                                    <span style={{ color: '#d64545', fontWeight: 700, flex: 'none' }}>{fmtAbrev(b.saldo)}</span>
+                                  </div>
+                                  <div style={{ height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${Math.max(3, 100 * b.saldo / maxBairro).toFixed(1)}%`, borderRadius: 5, background: demais ? '#c2c9d6' : '#d64545' }} />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()
+                  ) : devedoresMesErro ? (
                     <div style={{ textAlign: 'center', padding: '12px 0' }}>
                       <div style={{ fontSize: 11.5, color: '#d64545' }}>Não foi possível carregar os devedores.</div>
-                      <button onClick={() => potMesSel && buscarDevedoresMes(potMesSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                      <button onClick={() => potMesSel && potBairroSel && buscarDevedoresMes(potMesSel, potBairroSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
                     </div>
                   ) : !devedoresMes ? <Spinner label="Carregando…" size={26} padding={16} />
                     : !devedoresMes.length ? <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Nenhum devedor identificado.</div>

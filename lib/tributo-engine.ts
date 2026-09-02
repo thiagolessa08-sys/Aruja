@@ -350,12 +350,17 @@ export interface DevedorTributo { cd: number; nome: string; cpfCnpj: string; sal
  * do contribuinte, não necessariamente o do imóvel gerador da guia (podem divergir, ex.:
  * empresa com sede fora de Arujá).
  */
-export async function devedoresPorTributoMes(codigos: number[], anoVenc: number, mesVenc: number, top = 15): Promise<DevedorTributo[]> {
+export async function devedoresPorTributoMes(codigos: number[], anoVenc: number, mesVenc: number, top = 15, bairro?: string): Promise<DevedorTributo[]> {
   const chave = [...codigos].sort((a, b) => a - b).join('.')
-  return cached(`devedoresTributoMes:${chave}:${anoVenc}:${mesVenc}:${top}`, TTL_15MIN, () => devedoresPorTributoMesRaw(codigos, anoVenc, mesVenc, top))
+  return cached(`devedoresTributoMes:${chave}:${anoVenc}:${mesVenc}:${top}:${bairro ?? ''}`, TTL_15MIN, () => devedoresPorTributoMesRaw(codigos, anoVenc, mesVenc, top, bairro))
 }
 
-async function devedoresPorTributoMesRaw(codigos: number[], anoVenc: number, mesVenc: number, top: number): Promise<DevedorTributo[]> {
+const BAIRRO_NAO_INFORMADO = 'Bairro não informado'
+
+async function devedoresPorTributoMesRaw(codigos: number[], anoVenc: number, mesVenc: number, top: number, bairro?: string): Promise<DevedorTributo[]> {
+  const filtroBairro = !bairro ? '' : bairro === BAIRRO_NAO_INFORMADO
+    ? ` AND (ce.nm_bairro IS NULL OR LTRIM(RTRIM(ce.nm_bairro)) = '')`
+    : ` AND ce.nm_bairro = '${bairro.replace(/'/g, "''")}'`
   const r = await agentQuery(`
     SELECT TOP ${top} g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj, SUM(pp.vl_saldo) saldo,
            MIN(ce.ds_endereco) rua, MIN(e.no_logr) numero, MIN(ce.nm_bairro) bairro, MIN(ce.no_cep) cep
@@ -365,22 +370,69 @@ async function devedoresPorTributoMesRaw(codigos: number[], anoVenc: number, mes
     JOIN ${SCHEMA}.tb_dsod_contribuinte cp ON cp.cd_contr = g.cd_contr
     LEFT JOIN ${SCHEMA}.tb_dsod_contribuinte_endereco e ON e.cd_contr = g.cd_contr
     LEFT JOIN ${SCHEMA}.tb_dsod_cep ce ON ce.cd_cep = e.cd_cep
-    WHERE g.cd_tributo IN (${codigos.join(',')}) AND YEAR(p.dt_vencimento) = ${anoVenc} AND MONTH(p.dt_vencimento) = ${mesVenc}
+    WHERE g.cd_tributo IN (${codigos.join(',')}) AND YEAR(p.dt_vencimento) = ${anoVenc} AND MONTH(p.dt_vencimento) = ${mesVenc}${filtroBairro}
     GROUP BY g.cd_contr, cp.nm_rsocial, cp.no_cpf_cnpj
     ORDER BY saldo DESC`, top)
   return r.rows
     .map(row => {
       const rua = String(row[4] ?? '').trim()
       const numero = String(row[5] ?? '').trim()
-      const bairro = String(row[6] ?? '').trim()
+      const bairroLinha = String(row[6] ?? '').trim()
       const cep = String(row[7] ?? '').trim()
-      const partes = [rua && (numero ? `${rua}, ${numero}` : rua), bairro, cep ? `CEP ${cep}` : ''].filter(Boolean)
+      const partes = [rua && (numero ? `${rua}, ${numero}` : rua), bairroLinha, cep ? `CEP ${cep}` : ''].filter(Boolean)
       return {
         cd: num(row[0]), nome: String(row[1] ?? '').trim() || 'Não informado', cpfCnpj: String(row[2] ?? '').trim(), saldo: num(row[3]),
         endereco: partes.join(' — ') || 'Endereço não cadastrado',
       }
     })
     .filter(x => x.saldo > 0)
+}
+
+export interface DevedorBairro { bairro: string; saldo: number; qtd: number }
+
+/**
+ * Drill "por bairro" do Potencial de Arrecadação — um nível a mais entre o mês (potMesSel) e
+ * a lista de devedores, no mesmo espírito geográfico do "IPTU por Bairro"
+ * (bairro→rua→imóvel), mas aqui usando o endereço CADASTRAL do contribuinte
+ * (tb_dsod_contribuinte_endereco + tb_dsod_cep), já que Potencial cobre todos os tributos —
+ * não só os ligados a imóvel como IPTU. `nm_bairro` é texto livre digitado ao longo dos anos
+ * (achamos ~1.800 variantes distintas pra um único tributo/mês — validado ao vivo), por isso
+ * top N + "Demais bairros (N)" pra cauda longa, igual ao padrão de "Demais tributos" já usado
+ * em potencialArrecadacaoRaw. O balde "Demais bairros" não tem uma lista de nomes exposta —
+ * não vale reconstruir um filtro SQL pra centenas de bairros de saldo residual.
+ */
+export async function devedoresPorBairroTributoMes(codigos: number[], anoVenc: number, mesVenc: number): Promise<DevedorBairro[]> {
+  const chave = [...codigos].sort((a, b) => a - b).join('.')
+  return cached(`devedoresBairroTributoMes:${chave}:${anoVenc}:${mesVenc}`, TTL_15MIN, () => devedoresPorBairroTributoMesRaw(codigos, anoVenc, mesVenc))
+}
+
+async function devedoresPorBairroTributoMesRaw(codigos: number[], anoVenc: number, mesVenc: number): Promise<DevedorBairro[]> {
+  const r = await agentQuery(`
+    SELECT ce.nm_bairro AS bairro, SUM(pp.vl_saldo) AS saldo, COUNT(DISTINCT g.cd_contr) AS qtd
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    LEFT JOIN ${SCHEMA}.tb_dsod_contribuinte_endereco e ON e.cd_contr = g.cd_contr
+    LEFT JOIN ${SCHEMA}.tb_dsod_cep ce ON ce.cd_cep = e.cd_cep
+    WHERE g.cd_tributo IN (${codigos.join(',')}) AND YEAR(p.dt_vencimento) = ${anoVenc} AND MONTH(p.dt_vencimento) = ${mesVenc}
+    GROUP BY ce.nm_bairro`, 5000)
+
+  const lista = r.rows
+    .map(row => ({ bairro: String(row[0] ?? '').trim() || BAIRRO_NAO_INFORMADO, saldo: num(row[1]), qtd: num(row[2]) }))
+    .filter(x => x.saldo > 0)
+    .sort((a, b) => b.saldo - a.saldo)
+
+  const top = lista.slice(0, TOP_N_POTENCIAL)
+  const resto = lista.slice(TOP_N_POTENCIAL)
+  const resultado: DevedorBairro[] = [...top]
+  if (resto.length) {
+    resultado.push({
+      bairro: `Demais bairros (${resto.length})`,
+      saldo: resto.reduce((s, x) => s + x.saldo, 0),
+      qtd: resto.reduce((s, x) => s + x.qtd, 0),
+    })
+  }
+  return resultado
 }
 
 /**
