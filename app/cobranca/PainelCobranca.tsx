@@ -454,20 +454,61 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     { label: 'Baixas Processadas', value: fmtInt(g.totalBaixas), subLabel: `no exercício ${g.ano}`, subValue: '', pct: '', cor: '' },
   ]
 
-  // Relatório (PDF/Excel): cards = KPIs da tela; tabela = conversão por tributo (mesma
-  // usada na tabela final da página).
+  // Relatório (PDF/Excel) — reflete a análise ativa em "Potencial de Arrecadação"/"Quando
+  // Vence" (tributo selecionado, opcionalmente aprofundado por mês e por bairro), sempre com
+  // o Exercício/Mês do filtro superior no título. Sem nenhuma análise selecionada (potSel
+  // nulo), volta ao relatório geral: os 5 KPIs do topo + conversão por tributo (mesma tabela
+  // final da página) — comportamento a pedido do usuário.
   async function gerarRelatorio(tipo: 'pdf' | 'excel') {
-    if (!g.tributos.length || gerandoRelatorio) return
-    setGerandoRelatorio(true)
-    try {
-      const dados: DadosRelatorio = {
-        titulo: `Cobrança — Exercício ${g.ano}${mes ? ` (até ${MESES_ABREV[mes - 1]})` : ''}`,
+    if (gerandoRelatorio) return
+    const sufMes = mes ? ` (até ${MESES_ABREV[mes - 1]})` : ''
+    let dados: DadosRelatorio
+    if (potSel) {
+      const cardsPot = [
+        { rotulo: 'Vencido · cobrável agora', valor: fmtReais(potSel.vencido) },
+        { rotulo: 'A Vencer · potencial futuro', valor: fmtReais(potSel.aVencer) },
+      ]
+      if (potBairroSel) {
+        dados = {
+          titulo: `Cobrança — Potencial de Arrecadação · ${potSel.nome} · ${potBairroSel}`,
+          subtitulo: `Exercício ${g.ano}${sufMes}${potMesSel ? ` · Vencimento ${String(potMesSel.mes).padStart(2, '0')}/${potMesSel.ano}` : ''} · Devedores do bairro selecionado`,
+          cards: cardsPot,
+          colunas: ['Devedor', 'CPF/CNPJ', 'Saldo', 'Endereço'],
+          linhas: (devedoresMes ?? []).map(dv => [dv.nome, dv.cpfCnpj, fmtReais(dv.saldo), dv.endereco ?? '']),
+          arquivo: `Cobranca-Potencial-${potSel.nome}-${potBairroSel}`,
+        }
+      } else if (potMesSel) {
+        dados = {
+          titulo: `Cobrança — Potencial de Arrecadação · ${potSel.nome} — vencimento ${String(potMesSel.mes).padStart(2, '0')}/${potMesSel.ano}`,
+          subtitulo: `Exercício ${g.ano}${sufMes} · Saldo por bairro`,
+          cards: cardsPot,
+          colunas: ['Bairro', 'Contribuintes', 'Saldo'],
+          linhas: (potBairros ?? []).map(b => [b.bairro, fmtInt(b.qtd), fmtReais(b.saldo)]),
+          arquivo: `Cobranca-Potencial-${potSel.nome}-${potMesSel.mes}-${potMesSel.ano}`,
+        }
+      } else {
+        dados = {
+          titulo: `Cobrança — Potencial de Arrecadação · ${potSel.nome}`,
+          subtitulo: `Exercício ${g.ano}${sufMes} · Saldo por mês de vencimento`,
+          cards: cardsPot,
+          colunas: ['Mês/Ano', 'Situação', 'Saldo'],
+          linhas: (potMensal ?? []).map(m => [`${String(m.mes).padStart(2, '0')}/${m.ano}`, m.vencido ? 'Vencido' : 'A Vencer', fmtReais(m.saldo)]),
+          arquivo: `Cobranca-Potencial-${potSel.nome}`,
+        }
+      }
+    } else {
+      if (!g.tributos.length) return
+      dados = {
+        titulo: `Cobrança — Exercício ${g.ano}${sufMes}`,
         subtitulo: `Lançado ${fmtReais(g.lancado)} · Arrecadado ${fmtReais(g.arrecadado)} (${fmtPct(g.conversao)})`,
         cards: kpis.map(k => ({ rotulo: k.label, valor: k.value })),
         colunas: ['Tributo', 'Lançado', 'Arrecadado', 'A Recuperar', 'Conversão'],
         linhas: g.tributos.map(t => [t.nome, fmtReais(t.lancado), fmtReais(t.arrecadado), fmtReais(t.saldo), fmtPct(t.conversao)]),
         arquivo: `Cobranca-${g.ano}`,
       }
+    }
+    setGerandoRelatorio(true)
+    try {
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
       await fn(dados)
     } catch {
@@ -494,11 +535,15 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     <div style={{ position: 'relative' }}>
       {!d ? <LoadingOverlay label="Carregando…" /> : null}
 
-      {/* Barra de relatórios (Excel/PDF a partir dos KPIs + conversão por tributo) */}
+      {/* Barra de relatórios (Excel/PDF) — reflete a análise ativa em "Potencial de
+          Arrecadação"/"Quando Vence" quando houver uma; senão, os 5 KPIs + conversão por
+          tributo do Exercício/Mês selecionado. */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, margin: '0 4px' }}>
         <div style={{ display: 'flex', gap: 8 }}>
           {([['pdf', 'Baixar PDF'], ['excel', 'Baixar Excel']] as const).map(([tp, lbl]) => (
-            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
+            <button key={tp} onClick={() => gerarRelatorio(tp)} disabled={gerandoRelatorio}
+              title={potSel ? `Relatório da análise selecionada em Potencial de Arrecadação (${potSel.nome})` : 'Relatório com os KPIs e a conversão por tributo do período selecionado'}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoRelatorio ? 'default' : 'pointer', opacity: gerandoRelatorio ? 0.6 : 1, borderRadius: 12, padding: '7px 14px', fontSize: 12, fontFamily: 'inherit' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoRelatorio ? 'Gerando…' : lbl}
             </button>
           ))}
