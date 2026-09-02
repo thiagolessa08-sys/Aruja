@@ -15,6 +15,7 @@ import VolumeNfseEmitidasTomadas from '../_components/VolumeNfseEmitidasTomadas'
 import NfseAcompanhamento from '../_components/NfseAcompanhamento'
 import IssTomadorCcmCrc from '../_components/IssTomadorCcmCrc'
 import LimiteFaturamento from '../_components/LimiteFaturamento'
+import TabelaExerciciosTributo from '../_components/TabelaExerciciosTributo'
 import MeiEnquadramentoLancamento from '../_components/MeiEnquadramentoLancamento'
 import { SITUACOES, type SituacaoOpt } from '@/lib/mobiliario-filtros'
 import type { PrevisaoForaResp, Cenario } from '@/lib/iss-fora-previsao'
@@ -183,7 +184,10 @@ export default function MobiliarioPage() {
         </div>
 
         {/* ===== PAINEL ===== */}
-        {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
+        {/* A pedido do usuário, "Exercícios de ISS / ISSQN" (a tabela que ficava dentro do
+            PainelTributo) sai daqui e vai renderizada por último na aba, depois de
+            LimiteFaturamento — ver TabelaExerciciosTributo e a nota em PainelTributo.tsx. */}
+        {aba === 'iss' && <PainelTributo grupo="iss" titulo="ISS / ISSQN" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} ocultarTabela />}
         {aba === 'iss' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, alignItems: 'start' }}>
             <IssSegmentoPrestador ano={anoTrib || undefined} mes={mesTrib || undefined} crescimentoPct={crescimentoPctIss} onSegmentoChange={setSegmentoIssSel} />
@@ -195,6 +199,7 @@ export default function MobiliarioPage() {
         {aba === 'iss' && <NfseAcompanhamento mes={mesTrib || undefined} />}
         {aba === 'iss' && <IssTomadorCcmCrc />}
         {aba === 'iss' && <LimiteFaturamento cenario={cenarioIss} />}
+        {aba === 'iss' && <TabelaExerciciosTributo grupo="iss" titulo="ISS / ISSQN" mes={mesTrib || undefined} />}
         {aba === 'tfe' && <PainelTributo grupo="tfe" titulo="Taxa de Fiscalização de Estabelecimento" ano={anoTrib || undefined} mes={mesTrib || undefined} onAnos={handleAnosTrib} />}
         {aba === 'tfe' && <TfePorSegmento ano={anoTrib || undefined} mes={mesTrib || undefined} />}
         {aba === 'tfe' && <MeiEnquadramentoLancamento ano={anoTrib || undefined} mes={mesTrib || undefined} />}

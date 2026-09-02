@@ -125,7 +125,7 @@ function geomGauge(pct: number) {
   return { bgPath, fillPath, p, cx, cy, nx, ny }
 }
 
-export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos }: { grupo: string; titulo: string; ano?: number; mes?: number; onAnos?: (anos: number[]) => void }) {
+export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos, ocultarTabela }: { grupo: string; titulo: string; ano?: number; mes?: number; onAnos?: (anos: number[]) => void; ocultarTabela?: boolean }) {
   const [tip, setTip] = useState<Tip | null>(null)
   const [serie, setSerie] = useState<SerieItem[] | null>(null)
   const [drillAno, setDrillAno] = useState<number | null>(null)
@@ -498,35 +498,42 @@ export default function PainelTributo({ grupo, titulo, ano: anoSel, mes, onAnos 
       </div>
 
       {/* ===== Tabela ===== */}
-      <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Exercícios de {titulo}</span>
-        <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Exercício', 'Lançado', 'Arrecadado', 'Inadimplência', '% Arrec.'].map((h, i) => (
-                  <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[...s].reverse().map((row, ri) => {
-                const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
-                const pa = row.lancado ? (row.arrecadado / row.lancado) * 100 : 0
-                return (
-                  <tr key={row.ano}>
-                    <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.ano}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.lancado)}</td>
-                    <td style={{ background: cellBg, color: '#1fa463', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.arrecadado)}</td>
-                    <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.saldo)}</td>
-                    <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(pa)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      {/* Na aba ISS, a pedido do usuário, essa tabela é ocultada aqui e renderizada de novo
+          via TabelaExerciciosTributo no fim da tela (app/mobiliario/page.tsx) — PainelTributo
+          é o primeiro bloco da aba, então "por último dentro do componente" não bastava pra
+          ficar "por último na tela" quando há outros cards de ISS depois dele. Em TFE/TFHS
+          (onde PainelTributo já é o único conteúdo da aba) o comportamento não muda. */}
+      {!ocultarTabela ? (
+        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)', marginTop: 18 }}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Exercícios de {titulo}</span>
+          <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Exercício', 'Lançado', 'Arrecadado', 'Inadimplência', '% Arrec.'].map((h, i) => (
+                    <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...s].reverse().map((row, ri) => {
+                  const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
+                  const pa = row.lancado ? (row.arrecadado / row.lancado) * 100 : 0
+                  return (
+                    <tr key={row.ano}>
+                      <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.ano}</td>
+                      <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.lancado)}</td>
+                      <td style={{ background: cellBg, color: '#1fa463', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.arrecadado)}</td>
+                      <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.saldo)}</td>
+                      <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(pa)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : null}
     </>
   )
 }
