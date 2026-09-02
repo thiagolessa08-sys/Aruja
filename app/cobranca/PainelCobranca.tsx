@@ -1039,13 +1039,17 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
       </div>
 
+      {/* Resultado Mensal da Arrecadação lado a lado com Comparativo de DAM por ID — a pedido
+          do usuário, mesma largura (repeat(2,1fr)), já que os dois cards têm a mesma
+          estrutura (2 KPIs + 1 gráfico de barras por mês). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 18, marginTop: 18, alignItems: 'start' }}>
       {/* Resultado Mensal da Arrecadação — DAM Geradas × DAM Pagas pelo setor de Cobrança,
           por mês. São eventos independentes (data de geração da guia vs. data da
           baixa/pagamento); uma guia gerada num mês só "vira" paga quando o contribuinte
           efetivamente paga, meses depois. Sobe pra ficar logo abaixo de "Análise de Conversão",
           a pedido do usuário. "DAM Recebidas" (todo tipo de baixa, não só pagamento) removida
           a pedido do usuário — ficou só Geradas × Pagas. */}
-      <div style={{ ...card, marginTop: 18 }}>
+      <div style={card}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Resultado Mensal da Arrecadação</span>
@@ -1105,7 +1109,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           (ex.: IPTU em várias cotas) gera uma baixa "paga" por parcela — por isso o número de
           eventos pagos (gráfico acima) é sempre maior que o número de DAMs distintas pagas
           (aqui). Uma DAM com parcelas pagas em meses diferentes conta em mais de um mês. */}
-      <div style={{ ...card, marginTop: 18 }}>
+      <div style={card}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Comparativo de DAM por ID — Geradas × Pagas</span>
@@ -1158,6 +1162,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </>
           )
         })()}
+      </div>
       </div>
 
       {/* Potencial de Arrecadação — painel: do saldo devedor, quanto já VENCEU (inadimplência
