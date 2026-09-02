@@ -172,6 +172,10 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   // + atualização monetária + juros + multa + honorários) daquele exercício. Já vem no mesmo
   // fetch de resumoDivida (composicaoPorExercicio) — sem chamada extra.
   const [anoEvolSel, setAnoEvolSel] = useState<number | null>(null)
+  // Slider de exercício do card "Composição da Dívida Ativa" (a pedido do usuário) — índice
+  // 0 = "Todos os exercícios" (padrão, agregado); 1..N mapeiam pra anosComposicao[i-1]. Usa o
+  // mesmo composicaoPorExercicio já buscado no resumo — sem chamada extra.
+  const [composAnoIdx, setComposAnoIdx] = useState(0)
   const [devedores, setDevedores] = useState<Devedor[] | null>(null)
   const [buscaDevedor, setBuscaDevedor] = useState('')
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
@@ -284,6 +288,12 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
   const grPct = geomBarsPct(g.recuperacao?.porExercicio ?? [])
   const ge = geomBarsStack(g.porExercicio, g.recuperacao?.porExercicio ?? [])
   const composicaoEvolSel = g.composicaoPorExercicio?.find(x => x.ano === anoEvolSel)
+  // Slider de exercício do card "Composição da Dívida Ativa" — anosComposicao vem do mesmo
+  // composicaoPorExercicio já usado no drill da Evolução acima.
+  const anosComposicao = (g.composicaoPorExercicio ?? []).map(x => x.ano).sort((a, b) => a - b)
+  const anoComposSel = composAnoIdx > 0 ? anosComposicao[composAnoIdx - 1] : null
+  const composSelData = anoComposSel ? g.composicaoPorExercicio?.find(x => x.ano === anoComposSel) : null
+  const composAtual = anoComposSel && composSelData ? composSelData : g.composicao
   const gh = geomLines(g.historicoNegArr ?? [])
   const ghMes = geomLines((mesesHist ?? []).map(m => ({ ano: m.mes, negociado: m.negociado, arrecadado: m.arrecadado })))
   const maxPerfilHist = Math.max(1, ...(perfisHist ?? []).map(x => x.negociado))
@@ -431,7 +441,7 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           ajuizada), via tb_dsod_parcelas_atualizadas — antes só refletia o principal em
           aberto (vl_saldo). */}
       {g.composicao ? (() => {
-        const c = g.composicao!
+        const c = composAtual!
         const totC = c.principal + c.correcao + c.juros + c.multa + c.honorarios || 1
         const partes = [
           { l: 'Principal', v: c.principal, cor: '#283e93' },
@@ -440,13 +450,14 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
           { l: 'Multa', v: c.multa, cor: '#d64545' },
           { l: 'Encargos legais (honorários)', v: c.honorarios, cor: '#5b6477' },
         ].filter(p => p.v > 0)
+        const temAnos = anosComposicao.length > 0
         return (
           <div style={{ ...card, marginTop: 18 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Composição da Dívida Ativa</span>
               <span style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{fmtMoney(totC)}</span>
             </div>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Principal + atualização monetária + juros de mora + multa + encargos legais previstos na legislação (Lei 6.830/80) · histórico completo (todos os exercícios)</div>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Principal + atualização monetária + juros de mora + multa + encargos legais previstos na legislação (Lei 6.830/80) · {anoComposSel ? `exercício ${anoComposSel}` : 'histórico completo (todos os exercícios)'}</div>
             <div style={{ height: 16, borderRadius: 8, background: '#eef1f7', overflow: 'hidden', display: 'flex', marginTop: 16 }}>
               {partes.map(p => (<div key={p.l} title={p.l} style={{ width: `${(100 * p.v / totC).toFixed(2)}%`, background: p.cor }} />))}
             </div>
@@ -460,6 +471,20 @@ export default function PainelDivida({ ano, mes, onAnos }: { ano?: number; mes?:
                 </div>
               ))}
             </div>
+
+            {temAnos ? (
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: '#3a4256' }}>Visualizar por exercício</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#283e93' }}>{anoComposSel ?? 'Todos os exercícios'}</span>
+                </div>
+                <input type="range" min={0} max={anosComposicao.length} step={1} value={composAnoIdx} onChange={e => setComposAnoIdx(Number(e.target.value))}
+                  style={{ width: '100%', accentColor: '#283e93', cursor: 'pointer' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#aeb6c6', marginTop: 2 }}>
+                  <span>Todos</span><span>{anosComposicao[anosComposicao.length - 1]}</span>
+                </div>
+              </div>
+            ) : null}
           </div>
         )
       })() : null}
