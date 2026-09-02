@@ -551,13 +551,19 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         <span style={{ fontSize: 12, color: '#5b6477', background: '#fff', borderRadius: 20, padding: '6px 14px', boxShadow: '0 4px 12px rgba(40,80,180,0.04)' }}>
           Dados atualizados em <b style={{ color: '#283e93' }}>{fmtData(dataAtualizacao)}</b>
         </span>
+        {/* "Limpar filtro" sobe pra junto de Baixar PDF/Excel — a pedido do usuário, com
+            imagem de referência. Some o botão duplicado do banner abaixo (que fica só com o
+            texto informativo) pra não ter dois botões fazendo a mesma coisa na tela ao mesmo
+            tempo. */}
+        {mes ? (
+          <button onClick={onLimparMes} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 20, padding: '9px 18px', fontSize: 12.5, fontFamily: 'inherit', boxShadow: '0 4px 12px rgba(40,62,147,0.18)' }}>Limpar filtro</button>
+        ) : null}
       </div>
 
       {/* Banner de filtro global por mês (acumulado até o mês selecionado) */}
       {mes ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#eef1fb', border: '1px solid #d6ddf6', borderRadius: 12, padding: '8px 14px', margin: '14px 4px 0' }}>
           <span style={{ fontSize: 12.5, color: '#283e93', fontWeight: 600 }}>Toda a tela filtrada pelo mês: <b>até {MESES[mes - 1]}</b></span>
-          <button onClick={onLimparMes} style={{ border: 'none', background: '#283e93', color: '#fff', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Limpar filtro</button>
         </div>
       ) : null}
 
