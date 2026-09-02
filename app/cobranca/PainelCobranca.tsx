@@ -215,6 +215,15 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // do painel DAM passa a mostrar os meses DAQUELE ano em vez do exercício global da tela.
   const [conversaoPeriodoAno, setConversaoPeriodoAno] = useState<number | null>(null)
   const [damsPeriodo, setDamsPeriodo] = useState<DamsGeradas | null>(null)
+  // Drill de 2º nível DENTRO da própria "Análise de Conversão" — ao clicar num item nas
+  // lentes "Por Período" ou "Por Operador", a mesma card troca pra mostrar a conversão
+  // daquele período/operador quebrada por tributo (in-place, com botão "‹ Voltar"; "Por
+  // Tributo" já É essa visão, então não tem pra onde descer mais). Em "Por Período" o clique
+  // também continua disparando selecionarPeriodoAno (efeito existente no painel DAM ao lado)
+  // — os dois convivem, cada um com seu próprio toggle.
+  const [conversaoDrillItem, setConversaoDrillItem] = useState<ConversaoItem | null>(null)
+  const [conversaoDrillData, setConversaoDrillData] = useState<ConversaoItem[] | null>(null)
+  const [conversaoDrillErro, setConversaoDrillErro] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
@@ -236,6 +245,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setBuscaDam('')
     setConversaoPeriodoAno(null)
     setDamsPeriodo(null)
+    setConversaoDrillItem(null)
+    setConversaoDrillData(null)
+    setConversaoDrillErro(false)
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => {
@@ -312,6 +324,32 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/dams?ano=${anoSel}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDamsPeriodo(x) }).catch(() => {})
+  }
+
+  function buscarConversaoDrill(dim: 'periodo' | 'operador', item: ConversaoItem) {
+    setConversaoDrillData(null)
+    setConversaoDrillErro(false)
+    const qs = new URLSearchParams({
+      tipo: dim, ano: String(ano), ...(mes ? { mes: String(mes) } : {}),
+      ...(dim === 'periodo' ? { anoDrill: item.nome } : { nome: item.nome }),
+    })
+    fetch(`/api/cobranca/analise-conversao-drill?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => {
+        if (res && !res.error && Array.isArray(res.itens)) setConversaoDrillData(res.itens)
+        else setConversaoDrillErro(true)
+      }).catch(() => setConversaoDrillErro(true))
+  }
+
+  // Clique num item de "Por Período"/"Por Operador" na Análise de Conversão — desce um
+  // nível mostrando aquele período/operador quebrado por tributo, na própria card.
+  function selecionarConversaoItem(dim: 'periodo' | 'operador', item: ConversaoItem) {
+    if (conversaoDrillItem?.nome === item.nome) {
+      setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false)
+    } else {
+      setConversaoDrillItem(item)
+      buscarConversaoDrill(dim, item)
+    }
+    if (dim === 'periodo') selecionarPeriodoAno(Number(item.nome))
   }
 
   const g = d ?? FALLBACK
@@ -435,7 +473,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null) }}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false) }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',
@@ -451,6 +489,58 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           {(() => {
             const an = analise ?? FALLBACK_ANALISE
             const dimAtual = conversaoDim ?? 'tributo'
+            const podeDrill = dimAtual === 'periodo' || dimAtual === 'operador'
+
+            // Drill in-place: item selecionado em Por Período/Por Operador, quebrado por
+            // tributo — troca o conteúdo da própria card (não abre uma card nova).
+            if (podeDrill && conversaoDrillItem) {
+              const rotulo = dimAtual === 'periodo' ? `Exercício ${conversaoDrillItem.nome}` : conversaoDrillItem.nome
+              const maxLancDrill = Math.max(1, ...(conversaoDrillData ?? []).map(i => i.lancado))
+              return (
+                <>
+                  <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span title={rotulo} style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rotulo} — por tributo</span>
+                    <button onClick={() => { setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false) }}
+                      style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
+                  </div>
+                  {conversaoDrillErro ? (
+                    <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                      <div style={{ fontSize: 12, color: '#9098a8' }}>Não foi possível carregar o detalhe por tributo.</div>
+                      <button onClick={() => buscarConversaoDrill(dimAtual as 'periodo' | 'operador', conversaoDrillItem)}
+                        style={{ marginTop: 8, border: '1px solid #e3e8f1', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 11.5, fontWeight: 600, color: '#283e93', cursor: 'pointer' }}>Tentar novamente</button>
+                    </div>
+                  ) : !conversaoDrillData ? (
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13 }}>
+                      {[0, 1, 2, 3].map(i => (<div key={i} style={{ height: 32, borderRadius: 8, background: '#eef1f7' }} />))}
+                    </div>
+                  ) : !conversaoDrillData.length ? (
+                    <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem lançamento por tributo para esta seleção.</div>
+                  ) : (
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13, maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
+                      {conversaoDrillData.map(item => {
+                        const cor = convCor(item.conversao)
+                        const w = Math.max(3, 100 * item.lancado / maxLancDrill)
+                        return (
+                          <div key={item.nome}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
+                              <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: cor, flex: 'none', textAlign: 'right' }}>
+                                {fmtPct(item.conversao)}
+                                <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>{fmtAbrev(item.arrecadado)} de {fmtAbrev(item.lancado)} lançado</span>
+                              </span>
+                            </div>
+                            <div style={{ height: 13, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
+              )
+            }
+
             const itens = dimAtual === 'tributo' ? an.porTributo : dimAtual === 'periodo' ? an.porPeriodo : an.porOperador
             if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados para esta visão.</div>
             // Por Período ordena pelo ano (não pelo lançado) — "maior p/ menor" = mais recente
@@ -488,12 +578,12 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 {itensFiltrados.map(item => {
                   const cor = convCor(item.conversao)
                   const w = Math.max(3, 100 * item.lancado / maxLanc)
-                  const selecionado = dimAtual === 'periodo' && conversaoPeriodoAno === Number(item.nome)
+                  const selecionado = podeDrill && conversaoDrillItem?.nome === item.nome
                   return (
                     <div key={item.nome}
-                      onClick={dimAtual === 'periodo' ? () => selecionarPeriodoAno(Number(item.nome)) : undefined}
-                      title={dimAtual === 'periodo' ? 'Clique para ver os meses deste ano no gráfico DAM' : undefined}
-                      style={dimAtual === 'periodo' ? { cursor: 'pointer', padding: 6, margin: -6, borderRadius: 8, background: selecionado ? '#eef1fb' : 'transparent' } : undefined}>
+                      onClick={podeDrill ? () => selecionarConversaoItem(dimAtual as 'periodo' | 'operador', item) : undefined}
+                      title={podeDrill ? 'Clique para detalhar por tributo' : undefined}
+                      style={podeDrill ? { cursor: 'pointer', padding: 6, margin: -6, borderRadius: 8, background: selecionado ? '#eef1fb' : 'transparent' } : undefined}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
                         <span style={{ fontSize: 11.5, color: selecionado ? '#283e93' : '#3a4256', fontWeight: selecionado ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
                         <span style={{ fontSize: 11.5, fontWeight: 700, color: cor, flex: 'none', textAlign: 'right' }}>

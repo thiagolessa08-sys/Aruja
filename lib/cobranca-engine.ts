@@ -509,3 +509,49 @@ async function analiseConversaoRaw(ano: number, mes?: number): Promise<AnaliseCo
 
   return { ano, porTributo, porPeriodo, porOperador }
 }
+
+export type ConversaoDrillFiltro =
+  | { tipo: 'periodo'; ano: number }
+  | { tipo: 'operador'; nome: string }
+
+/**
+ * Drill de 2º nível da Análise de Conversão — ao clicar num item nas lentes "Por Período" ou
+ * "Por Operador", quebra a conversão daquele período/operador POR TRIBUTO, na própria card
+ * (in-place). Usa o mesmo modelo tb_dsod_parcela_posicao já usado por porPeriodo/porOperador
+ * acima — SEM a correção de IPTU oficial que porTributo aplica pro card principal — pra a
+ * soma dos tributos aqui bater exatamente com o lançado/arrecadado já exibido na linha
+ * clicada (que também vem do modelo posicao, não do oficial de Imobiliário). "Internet" em
+ * operador reproduz a mesma composição usada no balde por diferença logo acima
+ * (analiseConversaoRaw) e em damsDrillMesRaw: o literal "Internet" mais todo
+ * cd_usuario_gerador sem letra (autoemitido pelo portal).
+ */
+export async function conversaoDrillTributo(ano: number, mes: number | undefined, filtro: ConversaoDrillFiltro): Promise<ConversaoItem[]> {
+  const chave = filtro.tipo === 'periodo' ? `periodo:${filtro.ano}` : `operador:${filtro.nome}`
+  return cached(`conversaoDrillTributo:${ano}:${mes ?? ''}:${chave}`, TTL_15MIN, () => conversaoDrillTributoRaw(ano, mes, filtro))
+}
+
+async function conversaoDrillTributoRaw(ano: number, mes: number | undefined, filtro: ConversaoDrillFiltro): Promise<ConversaoItem[]> {
+  const excl = CODIGOS_EXCLUIDOS.join(',')
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
+  const anoFiltro = filtro.tipo === 'periodo' ? filtro.ano : ano
+  const filtroOperador = filtro.tipo === 'operador'
+    ? (filtro.nome === 'Internet'
+        ? ` AND (g.cd_usuario_gerador = 'Internet' OR PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) = 0)`
+        : ` AND g.cd_usuario_gerador = '${filtro.nome.replace(/'/g, "''")}'`)
+    : ''
+
+  const r = await agentQuery(`
+    SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+    WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${anoFiltro}${filtroMes}${filtroOperador}
+    GROUP BY g.cd_tributo, t.ds_tributo`, 200)
+
+  return r.rows
+    .map(row => ({ nome: String(row[1] ?? '').trim() || `Tributo ${num(row[0])}`, lancado: num(row[2]), arrecadado: num(row[3]) }))
+    .filter(x => x.lancado > 0)
+    .sort((a, b) => b.lancado - a.lancado)
+    .map(x => ({ ...x, conversao: x.lancado ? (x.arrecadado / x.lancado) * 100 : 0 }))
+}
