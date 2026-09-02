@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react'
 
 interface Contagem { nome: string; qt: number }
-interface Resp { total: number; porTipo: Contagem[]; porSituacao: Contagem[] }
+interface Resp { total: number; porTipo: Contagem[]; porSituacao: Contagem[]; valorServicoAtivos: number; issEstimadoAtivos: number }
 
 const TIPO_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e', '#c0612a']
 const SITUACAO_COR = (s: string) => /^ativ/i.test(s) ? '#1fa463' : /cancel|baix/i.test(s) ? '#d64545' : /suspens/i.test(s) ? '#e8962e' : '#9098a8'
 const n = (v: number) => v.toLocaleString('pt-BR')
+const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -19,6 +20,10 @@ const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color:
 // Cancelado, Suspenso...). Fonte: /api/mobiliario/iss-segmento-enquadramento — retrato do
 // CADASTRO atual (tb_dsod_contribuinte_mobiliario), não filtrado por ano/mês, já que é um
 // perfil cadastral e não uma série financeira (mesma convenção da aba cadastral Mobiliário).
+// A pedido do usuário, quando a situação é Ativo (ou variantes ativas — Ativo título
+// precário, Abertura), soma-se o Valor de Serviço das NFS-e válidas dessas empresas no
+// segmento e aplica-se uma alíquota média assumida de 3,5% como "ISS Estimado" — não é a
+// alíquota real de nenhuma nota, é uma média fixa pra estimativa.
 export default function IssSegmentoEnquadramento({ segmento }: { segmento: string | null }) {
   const [dados, setDados] = useState<Resp | null>(null)
 
@@ -97,6 +102,12 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
                 </div>
               )
             })}
+          </div>
+
+          <div style={{ marginTop: 16, background: '#e6f6ee', border: '1px solid #bfe6cd', borderRadius: 12, padding: '10px 14px' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: '#1fa463' }}>ISS Estimado (empresas Ativas)</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtReais(dados.issEstimadoAtivos)}</div>
+            <div style={{ fontSize: 9.5, color: '#5b6477', marginTop: 3 }}>Valor de Serviço das NFS-e válidas ({fmtReais(dados.valorServicoAtivos)}) × alíquota média assumida de 3,5%</div>
           </div>
         </>
       )}
