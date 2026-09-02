@@ -32,7 +32,11 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
   // as empresas por trás daquele número, dentro do segmento já selecionado.
   const [drillSel, setDrillSel] = useState<DrillSel | null>(null)
   const [drillItens, setDrillItens] = useState<EmpresaDetalhe[] | null>(null)
+  const [drillTruncado, setDrillTruncado] = useState(false)
   const [drillErro, setDrillErro] = useState(false)
+  // Top 10 (a pedido do usuário): opção de ver só as 10 primeiras em vez da lista completa —
+  // volta a "ver tudo" por padrão a cada novo drill.
+  const [apenasTop10, setApenasTop10] = useState(false)
 
   useEffect(() => {
     setDados(null)
@@ -45,21 +49,23 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
   function buscarDrill(sel: DrillSel) {
     if (!segmento) return
     setDrillItens(null)
+    setDrillTruncado(false)
     setDrillErro(false)
     const qs = new URLSearchParams({ segmento, dimensao: sel.dimensao, valor: sel.valor })
     fetch(`/api/mobiliario/iss-enquadramento-detalhe?${qs.toString()}`).then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d && !d.error && Array.isArray(d.itens)) setDrillItens(d.itens)
+        if (d && !d.error && Array.isArray(d.itens)) { setDrillItens(d.itens); setDrillTruncado(Boolean(d.truncado)) }
         else setDrillErro(true)
       }).catch(() => setDrillErro(true))
   }
 
   function selecionarDrill(sel: DrillSel) {
+    setApenasTop10(false)
     setDrillSel(prev => (prev && prev.dimensao === sel.dimensao && prev.valor === sel.valor) ? null : sel)
   }
 
   useEffect(() => {
-    if (!drillSel) { setDrillItens(null); setDrillErro(false); return }
+    if (!drillSel) { setDrillItens(null); setDrillTruncado(false); setDrillErro(false); return }
     buscarDrill(drillSel)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drillSel])
@@ -147,46 +153,57 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
             <div style={{ fontSize: 9.5, color: '#5b6477', marginTop: 3 }}>Valor de Serviço das NFS-e válidas ({fmtReais(dados.valorServicoAtivos)}) × alíquota média assumida de 3,5%</div>
           </div>
 
-          {drillSel ? (
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Quem são · {drillSel.valor}{drillItens ? ` (${n(drillItens.length)})` : ''}</span>
-                <button onClick={() => setDrillSel(null)} style={{ border: 'none', background: 'transparent', color: '#9098a8', cursor: 'pointer', fontSize: 15, lineHeight: 1, fontFamily: 'inherit', padding: 2 }} aria-label="Fechar detalhe">×</button>
-              </div>
-              {drillErro ? (
-                <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                  <div style={{ fontSize: 11, color: '#d64545' }}>Não foi possível carregar as empresas.</div>
-                  <button onClick={() => buscarDrill(drillSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+          {drillSel ? (() => {
+            const itensExibidos = drillItens ? (apenasTop10 ? drillItens.slice(0, 10) : drillItens) : null
+            return (
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Quem são · {drillSel.valor}{itensExibidos ? ` (${n(itensExibidos.length)}${apenasTop10 && drillItens && drillItens.length > 10 ? ` de ${n(drillItens.length)}` : ''})` : ''}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {drillItens && drillItens.length > 10 ? (
+                      <div style={{ display: 'flex', border: '1px solid #cdd5ef', borderRadius: 10, overflow: 'hidden' }}>
+                        <button onClick={() => setApenasTop10(true)} style={{ border: 'none', background: apenasTop10 ? '#283e93' : '#fff', color: apenasTop10 ? '#fff' : '#283e93', cursor: 'pointer', padding: '4px 10px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit' }}>Top 10</button>
+                        <button onClick={() => setApenasTop10(false)} style={{ border: 'none', background: !apenasTop10 ? '#283e93' : '#fff', color: !apenasTop10 ? '#fff' : '#283e93', cursor: 'pointer', padding: '4px 10px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit' }}>Ver todos</button>
+                      </div>
+                    ) : null}
+                    <button onClick={() => setDrillSel(null)} style={{ border: 'none', background: 'transparent', color: '#9098a8', cursor: 'pointer', fontSize: 15, lineHeight: 1, fontFamily: 'inherit', padding: 2 }} aria-label="Fechar detalhe">×</button>
+                  </div>
                 </div>
-              ) : !drillItens ? (
-                <div style={{ height: 60, borderRadius: 10, background: '#eef1f7' }} />
-              ) : !drillItens.length ? (
-                <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Nenhuma empresa encontrada.</div>
-              ) : (
-                <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr>
-                        {['Nome', 'CPF/CNPJ', 'CCM'].map((h, i) => (
-                          <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 2 ? 'center' : 'left' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {drillItens.map((it, ri) => (
-                        <tr key={`${it.cpfCnpj}-${ri}`} style={{ background: ri % 2 === 0 ? '#fff' : '#f7f9fd' }}>
-                          <td style={{ fontSize: 11, color: '#1f2a44', fontWeight: 600, padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>{it.nome}</td>
-                          <td style={{ fontSize: 11, color: '#3a4256', padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>{it.cpfCnpj || '—'}</td>
-                          <td style={{ fontSize: 11, color: '#3a4256', padding: '7px 10px', borderBottom: '1px solid #eef1f7', textAlign: 'center' }}>{it.ccm || '—'}</td>
+                {drillErro ? (
+                  <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                    <div style={{ fontSize: 11, color: '#d64545' }}>Não foi possível carregar as empresas.</div>
+                    <button onClick={() => buscarDrill(drillSel)} style={{ marginTop: 6, border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontFamily: 'inherit' }}>Tentar novamente</button>
+                  </div>
+                ) : !itensExibidos ? (
+                  <div style={{ height: 60, borderRadius: 10, background: '#eef1f7' }} />
+                ) : !itensExibidos.length ? (
+                  <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Nenhuma empresa encontrada.</div>
+                ) : (
+                  <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          {['Nome', 'CPF/CNPJ', 'CCM'].map((h, i) => (
+                            <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 2 ? 'center' : 'left' }}>{h}</th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {drillItens.length >= 20000 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', padding: '6px 0', background: '#fff' }}>Mostrando as primeiras 20.000.</div> : null}
-                </div>
-              )}
-            </div>
-          ) : null}
+                      </thead>
+                      <tbody>
+                        {itensExibidos.map((it, ri) => (
+                          <tr key={`${it.cpfCnpj}-${ri}`} style={{ background: ri % 2 === 0 ? '#fff' : '#f7f9fd' }}>
+                            <td style={{ fontSize: 11, color: '#1f2a44', fontWeight: 600, padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>{it.nome}</td>
+                            <td style={{ fontSize: 11, color: '#3a4256', padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>{it.cpfCnpj || '—'}</td>
+                            <td style={{ fontSize: 11, color: '#3a4256', padding: '7px 10px', borderBottom: '1px solid #eef1f7', textAlign: 'center' }}>{it.ccm || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!apenasTop10 && drillTruncado ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', padding: '6px 0', background: '#fff' }}>Grupo muito grande — mostrando as primeiras {n(drillItens?.length ?? 0)} (ordem alfabética).</div> : null}
+                  </div>
+                )}
+              </div>
+            )
+          })() : null}
         </>
       )}
     </div>

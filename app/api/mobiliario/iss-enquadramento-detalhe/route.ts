@@ -25,26 +25,33 @@ function filtroDimensao(dimensao: 'tipo' | 'situacao', valor: string): string {
   return `LTRIM(RTRIM(${coluna})) = '${esc(valor)}'`
 }
 
-// Sem TOP: é uma listagem completa dos cadastros do grupo, ordenada por nome (não é um
-// ranking por valor) — truncar alfabeticamente esconderia o final da lista de forma
-// enganosa. Buckets reais chegam a ~15 mil linhas (ex.: "Ativo" em segmentos grandes,
-// validado ao vivo); o teto de 20 mil é só uma proteção contra caso patológico, não um
-// limite esperado de atingir na prática.
-const TETO_SEGURANCA = 20000
+// Sem TOP na SQL: é uma listagem completa dos cadastros do grupo, ordenada por nome (não é
+// um ranking por valor) — truncar alfabeticamente esconderia o final da lista de forma
+// enganosa. ⚠️ Validado ao vivo: o agente (lib/agent.ts) tem um teto FIXO de 5.000 linhas por
+// consulta, que ele mesmo aplica sempre — pedir um limit maior (testado até 20.000) não muda
+// nada, ele devolve exatamente 5.000 e `truncated: true`. Não adianta subir esse número;
+// usa-se o próprio flag `truncated` da resposta pra avisar o usuário quando um grupo (ex.:
+// "Ativo" em segmentos grandes, ~15 mil linhas) excede esse teto.
+const LIMITE_AGENTE = 5000
 
-async function detalhe(segmento: string, dimensao: 'tipo' | 'situacao', valor: string): Promise<EmpresaDetalhe[]> {
+interface DetalheResp { itens: EmpresaDetalhe[]; truncado: boolean }
+
+async function detalhe(segmento: string, dimensao: 'tipo' | 'situacao', valor: string): Promise<DetalheResp> {
   return cached(`iss:enqDetalhe:${segmento}:${dimensao}:${valor}`, TTL_15MIN, async () => {
     const r = await agentQuery(`
       SELECT cp.nm_rsocial nome, cp.no_cpf_cnpj cpfCnpj, mob.cd_contr_mob ccm
       FROM ${S}.tb_dsod_contribuinte_mobiliario mob
       JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = mob.cd_contr
       WHERE ${filtroSegmento(segmento)} AND ${filtroDimensao(dimensao, valor)}
-      ORDER BY cp.nm_rsocial`, TETO_SEGURANCA)
-    return r.rows.map(row => ({
-      nome: String(row[0] ?? '').trim() || 'Não identificado',
-      cpfCnpj: String(row[1] ?? '').trim(),
-      ccm: String(row[2] ?? '').trim(),
-    }))
+      ORDER BY cp.nm_rsocial`, LIMITE_AGENTE)
+    return {
+      itens: r.rows.map(row => ({
+        nome: String(row[0] ?? '').trim() || 'Não identificado',
+        cpfCnpj: String(row[1] ?? '').trim(),
+        ccm: String(row[2] ?? '').trim(),
+      })),
+      truncado: r.truncated,
+    }
   })
 }
 
@@ -58,8 +65,7 @@ export async function GET(req: NextRequest) {
     if (!segmento || (dimensao !== 'tipo' && dimensao !== 'situacao') || !valor) {
       return NextResponse.json({ error: 'Parâmetros segmento, dimensao (tipo|situacao) e valor são obrigatórios' }, { status: 400 })
     }
-    const itens = await detalhe(segmento, dimensao, valor)
-    return NextResponse.json({ itens })
+    return NextResponse.json(await detalhe(segmento, dimensao, valor))
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
