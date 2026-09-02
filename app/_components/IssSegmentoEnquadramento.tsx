@@ -34,9 +34,10 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
   const [drillItens, setDrillItens] = useState<EmpresaDetalhe[] | null>(null)
   const [drillTruncado, setDrillTruncado] = useState(false)
   const [drillErro, setDrillErro] = useState(false)
-  // Top 10 (a pedido do usuário): opção de ver só as 10 primeiras em vez da lista completa —
-  // volta a "ver tudo" por padrão a cada novo drill.
-  const [apenasTop10, setApenasTop10] = useState(false)
+  // Top 10 por padrão (a pedido do usuário) — sem busca, mostra só as 10 primeiras; a busca
+  // por nome/CPF-CNPJ/CCM (sobre a lista já carregada, sem chamada extra) revela qualquer
+  // empresa além dessas 10. Busca volta a vazio a cada novo drill.
+  const [busca, setBusca] = useState('')
 
   useEffect(() => {
     setDados(null)
@@ -60,7 +61,7 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
   }
 
   function selecionarDrill(sel: DrillSel) {
-    setApenasTop10(false)
+    setBusca('')
     setDrillSel(prev => (prev && prev.dimensao === sel.dimensao && prev.valor === sel.valor) ? null : sel)
   }
 
@@ -154,21 +155,24 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
           </div>
 
           {drillSel ? (() => {
-            const itensExibidos = drillItens ? (apenasTop10 ? drillItens.slice(0, 10) : drillItens) : null
+            const buscaNorm = busca.trim().toLowerCase()
+            const itensExibidos = drillItens
+              ? (buscaNorm
+                ? drillItens.filter(it => it.nome.toLowerCase().includes(buscaNorm) || it.cpfCnpj.toLowerCase().includes(buscaNorm) || it.ccm.toLowerCase().includes(buscaNorm))
+                : drillItens.slice(0, 10))
+              : null
             return (
               <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Quem são · {drillSel.valor}{itensExibidos ? ` (${n(itensExibidos.length)}${apenasTop10 && drillItens && drillItens.length > 10 ? ` de ${n(drillItens.length)}` : ''})` : ''}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {drillItens && drillItens.length > 10 ? (
-                      <div style={{ display: 'flex', border: '1px solid #cdd5ef', borderRadius: 10, overflow: 'hidden' }}>
-                        <button onClick={() => setApenasTop10(true)} style={{ border: 'none', background: apenasTop10 ? '#283e93' : '#fff', color: apenasTop10 ? '#fff' : '#283e93', cursor: 'pointer', padding: '4px 10px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit' }}>Top 10</button>
-                        <button onClick={() => setApenasTop10(false)} style={{ border: 'none', background: !apenasTop10 ? '#283e93' : '#fff', color: !apenasTop10 ? '#fff' : '#283e93', cursor: 'pointer', padding: '4px 10px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit' }}>Ver todos</button>
-                      </div>
-                    ) : null}
-                    <button onClick={() => setDrillSel(null)} style={{ border: 'none', background: 'transparent', color: '#9098a8', cursor: 'pointer', fontSize: 15, lineHeight: 1, fontFamily: 'inherit', padding: 2 }} aria-label="Fechar detalhe">×</button>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Quem são · {drillSel.valor}{itensExibidos ? ` (${n(itensExibidos.length)}${!buscaNorm && drillItens && drillItens.length > 10 ? ` de ${n(drillItens.length)}` : ''})` : ''}</span>
+                  <button onClick={() => setDrillSel(null)} style={{ border: 'none', background: 'transparent', color: '#9098a8', cursor: 'pointer', fontSize: 15, lineHeight: 1, fontFamily: 'inherit', padding: 2 }} aria-label="Fechar detalhe">×</button>
                 </div>
+                {drillItens && drillItens.length > 10 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px', marginBottom: 10 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                    <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por Nome, CPF/CNPJ ou CCM… (sem busca, mostra o Top 10)" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 11.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+                  </div>
+                ) : null}
                 {drillErro ? (
                   <div style={{ textAlign: 'center', padding: '12px 0' }}>
                     <div style={{ fontSize: 11, color: '#d64545' }}>Não foi possível carregar as empresas.</div>
@@ -198,7 +202,7 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
                         ))}
                       </tbody>
                     </table>
-                    {!apenasTop10 && drillTruncado ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', padding: '6px 0', background: '#fff' }}>Grupo muito grande — mostrando as primeiras {n(drillItens?.length ?? 0)} (ordem alfabética).</div> : null}
+                    {drillTruncado ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', padding: '6px 0', background: '#fff' }}>Grupo muito grande — {buscaNorm ? 'a busca cobre' : 'mostrando'} as primeiras {n(drillItens?.length ?? 0)} (ordem alfabética).</div> : null}
                   </div>
                 )}
               </div>
