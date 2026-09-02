@@ -598,7 +598,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div>
               <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Análise de Conversão</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Arrecadado ÷ lançado — {(analise ?? FALLBACK_ANALISE).ano}, sob 3 lentes.</div>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Lançado × Arrecadado — {(analise ?? FALLBACK_ANALISE).ano}, sob 3 lentes.</div>
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
@@ -624,7 +624,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             // tributo — troca o conteúdo da própria card (não abre uma card nova).
             if (podeDrill && conversaoDrillItem) {
               const rotulo = dimAtual === 'periodo' ? `Exercício ${conversaoDrillItem.nome}` : conversaoDrillItem.nome
-              const maxLancDrill = Math.max(1, ...(conversaoDrillData ?? []).map(i => i.lancado))
+              const maxLancDrill = Math.max(1, ...(conversaoDrillData ?? []).flatMap(i => [i.lancado, i.arrecadado]))
               return (
                 <>
                   <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -647,19 +647,22 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   ) : (
                     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13, maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
                       {conversaoDrillData.map(item => {
-                        const cor = convCor(item.conversao)
-                        const w = Math.max(3, 100 * item.lancado / maxLancDrill)
+                        const wLanc = Math.max(3, 100 * item.lancado / maxLancDrill)
+                        const wArr = Math.max(3, 100 * item.arrecadado / maxLancDrill)
                         return (
                           <div key={item.nome}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
-                              <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
-                              <span style={{ fontSize: 11.5, fontWeight: 700, color: cor, flex: 'none', textAlign: 'right' }}>
-                                {fmtPct(item.conversao)}
-                                <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>{fmtAbrev(item.arrecadado)} de {fmtAbrev(item.lancado)} lançado</span>
-                              </span>
+                            <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginBottom: 4 }}>{item.nome}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                              <div style={{ flex: 1, height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${wLanc.toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
+                              </div>
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 54, textAlign: 'right' }}>{fmtAbrev(item.lancado)}</span>
                             </div>
-                            <div style={{ height: 13, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ flex: 1, height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${wArr.toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
+                              </div>
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 54, textAlign: 'right' }}>{fmtAbrev(item.arrecadado)}</span>
                             </div>
                           </div>
                         )
@@ -680,14 +683,18 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
               ? itens.filter(i => i.nome.toLowerCase().includes(buscaConversao.trim().toLowerCase()))
               : [...itens]
             ).sort((a, b) => ordemConversao === 'desc' ? valorOrdenacao(b) - valorOrdenacao(a) : valorOrdenacao(a) - valorOrdenacao(b))
-            const maxLanc = Math.max(1, ...itensFiltrados.map(i => i.lancado))
+            const maxLanc = Math.max(1, ...itensFiltrados.flatMap(i => [i.lancado, i.arrecadado]))
             const placeholderLabel = dimAtual === 'tributo' ? 'tributo' : dimAtual === 'periodo' ? 'período' : 'operador'
             // "Por Operador" traz todos os atendentes nomeados (sem cortar num "Demais") — pode
             // passar de 80 linhas. Altura travada com scroll interno pra não esticar o card;
             // Por Tributo/Por Período (poucos itens) cabem inteiros aqui, sem barra de rolagem.
             return (
               <>
-                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 14 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: '#5b6477' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#283e93' }} />Lançado</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: '#5b6477' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#1fa463' }} />Arrecadado</span>
+                </div>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
                     <input value={buscaConversao} onChange={e => setBuscaConversao(e.target.value)} placeholder={`Buscar por ${placeholderLabel}…`}
@@ -706,23 +713,26 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 ) : (
                 <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13, maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
                 {itensFiltrados.map(item => {
-                  const cor = convCor(item.conversao)
-                  const w = Math.max(3, 100 * item.lancado / maxLanc)
+                  const wLanc = Math.max(3, 100 * item.lancado / maxLanc)
+                  const wArr = Math.max(3, 100 * item.arrecadado / maxLanc)
                   const selecionado = podeDrill && conversaoDrillItem?.nome === item.nome
                   return (
                     <div key={item.nome}
                       onClick={podeDrill ? () => selecionarConversaoItem(dimAtual as 'periodo' | 'operador', item) : undefined}
                       title={podeDrill ? 'Clique para detalhar por tributo' : undefined}
                       style={podeDrill ? { cursor: 'pointer', padding: 6, margin: -6, borderRadius: 8, background: selecionado ? '#eef1fb' : 'transparent' } : undefined}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4, gap: 8 }}>
-                        <span style={{ fontSize: 11.5, color: selecionado ? '#283e93' : '#3a4256', fontWeight: selecionado ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</span>
-                        <span style={{ fontSize: 11.5, fontWeight: 700, color: cor, flex: 'none', textAlign: 'right' }}>
-                          {fmtPct(item.conversao)}
-                          <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: '#9098a8' }}>{fmtAbrev(item.arrecadado)} de {fmtAbrev(item.lancado)} lançado</span>
-                        </span>
+                      <span style={{ fontSize: 11.5, color: selecionado ? '#283e93' : '#3a4256', fontWeight: selecionado ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginBottom: 4 }}>{item.nome}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                        <div style={{ flex: 1, height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${wLanc.toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
+                        </div>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 54, textAlign: 'right' }}>{fmtAbrev(item.lancado)}</span>
                       </div>
-                      <div style={{ height: 13, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${w.toFixed(1)}%`, background: cor, borderRadius: 5 }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ flex: 1, height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${wArr.toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
+                        </div>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 54, textAlign: 'right' }}>{fmtAbrev(item.arrecadado)}</span>
                       </div>
                     </div>
                   )
