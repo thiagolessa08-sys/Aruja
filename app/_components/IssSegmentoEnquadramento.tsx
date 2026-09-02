@@ -150,7 +150,7 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
           {drillSel ? (
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Quem são · {drillSel.valor}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Quem são · {drillSel.valor}{drillItens ? ` (${n(drillItens.length)})` : ''}</span>
                 <button onClick={() => setDrillSel(null)} style={{ border: 'none', background: 'transparent', color: '#9098a8', cursor: 'pointer', fontSize: 15, lineHeight: 1, fontFamily: 'inherit', padding: 2 }} aria-label="Fechar detalhe">×</button>
               </div>
               {drillErro ? (
@@ -182,7 +182,7 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
                       ))}
                     </tbody>
                   </table>
-                  {drillItens.length >= 200 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', padding: '6px 0', background: '#fff' }}>Mostrando as primeiras 200.</div> : null}
+                  {drillItens.length >= 20000 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', padding: '6px 0', background: '#fff' }}>Mostrando as primeiras 20.000.</div> : null}
                 </div>
               )}
             </div>
