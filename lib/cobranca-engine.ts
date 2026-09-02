@@ -121,13 +121,19 @@ const TOP_N_DAM_OPER = 10
 
 /**
  * Documentos de Arrecadação Municipal (DAM) gerados — tb_dsod_guias, cada linha é uma guia
- * (= um DAM) emitida. `dt_geracao` = quando foi gerada (não confundir com
- * no_exercicio_lancamento, o exercício fiscal a que a guia pertence — uma guia de 2025 pode
- * ser reemitida/gerada em 2026). `cd_usuario_gerador` = operador que gerou (nome de
- * atendente, ou identificadores especiais como "Internet"/autoatendimento pelo portal e
- * "Schedule"/geração automática agendada — nem todo valor é uma pessoa). Por tributo usa o
- * mesmo cd_tributo=20 "Documento de Arrecadacao" (DAM genérico, sem tributo específico
- * vinculado) já mapeado em lib/tributos.ts CODIGOS_EXCLUIDOS.
+ * (= um DAM) emitida. Contagem por `no_exercicio_lancamento` (o exercício fiscal a que a
+ * guia pertence — mesmo critério de ano usado em Análise de Conversão), não por `dt_geracao`
+ * (quando foi fisicamente gerada/impressa): uma guia lançada em 2025 pode ser gerada em 2026
+ * (reemissão), e dt_geracao sozinho concentrava um pico artificial em dezembro sem relação
+ * com o exercício. O recorte por MÊS continua usando `dt_geracao` (não dt_vencimento da
+ * parcela) para os 12 meses somarem exatamente o total anual — dt_vencimento é por parcela
+ * (uma guia parcelada vence em vários meses), o que faria a soma mensal passar do total anual
+ * (mesma ressalva já aceita em "Pagas", mas indesejada aqui pro headline do painel — decisão
+ * confirmada com o usuário). `cd_usuario_gerador` = operador que gerou (nome de atendente, ou
+ * identificadores especiais como "Internet"/autoatendimento pelo portal e "Schedule"/geração
+ * automática agendada — nem todo valor é uma pessoa). Por tributo usa o mesmo cd_tributo=20
+ * "Documento de Arrecadacao" (DAM genérico, sem tributo específico vinculado) já mapeado em
+ * lib/tributos.ts CODIGOS_EXCLUIDOS.
  */
 export async function damsGeradas(ano = 2025, mes?: number): Promise<DamsGeradas> {
   return cached(`dams:${ano}:${mes ?? ''}`, TTL_15MIN, () => damsGeradasRaw(ano, mes))
@@ -146,17 +152,17 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       WHERE YEAR(pb.dt_baixa) = ${ano}${filtroMesBaixa} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0`
   const [totalR, mesR, tribR, operR, totalPagasR, mesPagasR, tribPagasR] = await Promise.all([
-    agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_guias WHERE YEAR(dt_geracao) = ${ano}${filtroMes}`, 1),
+    agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_guias WHERE no_exercicio_lancamento = ${ano}${filtroMes}`, 1),
     agentQuery(`
       SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
-      WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
+      WHERE no_exercicio_lancamento = ${ano}${filtroMes}
       GROUP BY MONTH(dt_geracao)`, 20),
     agentQuery(`
       SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
       LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
-      WHERE YEAR(g.dt_geracao) = ${ano}${filtroMes}
+      WHERE g.no_exercicio_lancamento = ${ano}${filtroMes}
       GROUP BY g.cd_tributo, t.ds_tributo`, 200),
     // cd_usuario_gerador mistura login de atendente ("CalebeAM") com CPF/CNPJ/código numérico
     // de contribuintes que geraram a própria guia pelo portal (milhares de valores distintos) —
@@ -166,7 +172,7 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
     agentQuery(`
       SELECT cd_usuario_gerador, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
-      WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
+      WHERE no_exercicio_lancamento = ${ano}${filtroMes}
         AND PATINDEX('%[A-Za-z]%', cd_usuario_gerador) > 0
       GROUP BY cd_usuario_gerador`, 300),
     agentQuery(`SELECT COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagas}`, 1),
@@ -265,7 +271,7 @@ async function damsDrillMesRaw(ano: number, mes: number | undefined, filtro: Dam
     agentQuery(`
       SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
-      WHERE YEAR(dt_geracao) = ${ano}${filtroMes} AND ${filtroGuia}
+      WHERE g.no_exercicio_lancamento = ${ano}${filtroMes} AND ${filtroGuia}
       GROUP BY MONTH(dt_geracao)`, 20),
     agentQuery(`
       SELECT MONTH(pb.dt_baixa) AS mes, COUNT(DISTINCT p.cd_guia) AS qt
@@ -309,7 +315,7 @@ async function damsPorTributoMesRaw(ano: number, mesAlvo: number): Promise<DamTr
       SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
       LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      WHERE g.no_exercicio_lancamento = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
       GROUP BY g.cd_tributo, t.ds_tributo`, 200),
     agentQuery(`SELECT g.cd_tributo AS cd, COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagasMes} GROUP BY g.cd_tributo`, 200),
   ])
