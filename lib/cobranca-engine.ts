@@ -105,6 +105,7 @@ async function resumoCobrancaRaw(ano: number, mes?: number): Promise<ResumoCobra
 
 export interface DamMes { mes: number; qt: number; pagas: number }
 export interface DamTributo { nome: string; codigos: number[]; qt: number; pagas: number }
+export interface DamTributoMes { nome: string; qt: number; pagas: number }
 export interface DamOperador { nome: string; qt: number; pagas: number }
 export interface DamsGeradas {
   ano: number
@@ -284,6 +285,52 @@ async function damsDrillMesRaw(ano: number, mes: number | undefined, filtro: Dam
   const porMes: DamMes[] = []
   for (let m = 1; m <= 12; m++) porMes.push({ mes: m, qt: geradasMap.get(m) ?? 0, pagas: pagasMap.get(m) ?? 0 })
   return porMes
+}
+
+/**
+ * Drill de 3º nível do painel DAM na lente "Por Período" — ao clicar num mês no gráfico "Por
+ * período (mês)", quebra aquele mês específico (ano + mês EXATOS, não acumulado como o
+ * filtroMes "<=" do resto do painel) POR TRIBUTO. Mesmo agrupamento top 10 + "Demais
+ * tributos" de damsGeradasRaw (tribR/tribPagasR), só que restrito a um único mês.
+ */
+export async function damsPorTributoMes(ano: number, mesAlvo: number): Promise<DamTributoMes[]> {
+  return cached(`damsPorTributoMes:${ano}:${mesAlvo}`, TTL_15MIN, () => damsPorTributoMesRaw(ano, mesAlvo))
+}
+
+async function damsPorTributoMesRaw(ano: number, mesAlvo: number): Promise<DamTributoMes[]> {
+  const juncaoPagasMes = `
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0`
+  const [tribR, tribPagasR] = await Promise.all([
+    agentQuery(`
+      SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(*) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias g
+      LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      GROUP BY g.cd_tributo, t.ds_tributo`, 200),
+    agentQuery(`SELECT g.cd_tributo AS cd, COUNT(DISTINCT p.cd_guia) AS qt ${juncaoPagasMes} GROUP BY g.cd_tributo`, 200),
+  ])
+
+  const tribPagasMap = new Map<number, number>()
+  for (const row of tribPagasR.rows) tribPagasMap.set(num(row[0]), num(row[1]))
+  const tribList = tribR.rows
+    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim() || `Tributo ${num(row[0])}`, qt: num(row[2]) }))
+    .filter(x => x.qt > 0)
+    .sort((a, b) => b.qt - a.qt)
+  const topTrib = tribList.slice(0, TOP_N_DAM_TRIB)
+  const restoTrib = tribList.slice(TOP_N_DAM_TRIB)
+  const porTributoMes: DamTributoMes[] = topTrib.map(t => ({ nome: t.nome, qt: t.qt, pagas: tribPagasMap.get(t.cd) ?? 0 }))
+  if (restoTrib.length) {
+    porTributoMes.push({
+      nome: `Demais tributos (${restoTrib.length})`,
+      qt: restoTrib.reduce((s, t) => s + t.qt, 0),
+      pagas: restoTrib.reduce((s, t) => s + (tribPagasMap.get(t.cd) ?? 0), 0),
+    })
+  }
+  return porTributoMes
 }
 
 export interface ResultadoMes { mes: number; geradas: number; recebidas: number; pagas: number }
