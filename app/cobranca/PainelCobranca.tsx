@@ -672,13 +672,14 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
 
             const itens = dimAtual === 'tributo' ? an.porTributo : dimAtual === 'periodo' ? an.porPeriodo : an.porOperador
             if (!itens.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados para esta visão.</div>
-            // As 3 lentes ordenam só pelo lançado — inclusive Por Período, que antes ordenava
-            // pelo ano (a pedido do usuário, pra ficar consistente com Por Tributo/Por
-            // Operador em vez de ter uma exceção só pra período).
+            // Por Período ordena pelo ano (não pelo lançado) — "maior p/ menor" = mais recente
+            // primeiro (ex.: 2026, 2025, 2024…), a pedido do usuário; Por Tributo/Por Operador
+            // continuam ordenando pelo lançado.
+            const valorOrdenacao = (item: ConversaoItem) => dimAtual === 'periodo' ? Number(item.nome) : item.lancado
             const itensFiltrados = (buscaConversao.trim()
               ? itens.filter(i => i.nome.toLowerCase().includes(buscaConversao.trim().toLowerCase()))
               : [...itens]
-            ).sort((a, b) => ordemConversao === 'desc' ? b.lancado - a.lancado : a.lancado - b.lancado)
+            ).sort((a, b) => ordemConversao === 'desc' ? valorOrdenacao(b) - valorOrdenacao(a) : valorOrdenacao(a) - valorOrdenacao(b))
             const maxLanc = Math.max(1, ...itensFiltrados.map(i => i.lancado))
             const placeholderLabel = dimAtual === 'tributo' ? 'tributo' : dimAtual === 'periodo' ? 'período' : 'operador'
             // "Por Operador" traz todos os atendentes nomeados (sem cortar num "Demais") — pode
@@ -695,7 +696,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                       <button onClick={() => setBuscaConversao('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', fontSize: 13, padding: 0, flex: 'none', lineHeight: 1 }}>✕</button>
                     ) : null}
                   </div>
-                  <button onClick={() => setOrdemConversao(o => o === 'desc' ? 'asc' : 'desc')} title="Ordenar por lançado"
+                  <button onClick={() => setOrdemConversao(o => o === 'desc' ? 'asc' : 'desc')} title={dimAtual === 'periodo' ? 'Ordenar por ano' : 'Ordenar por lançado'}
                     style={{ display: 'flex', alignItems: 'center', gap: 5, border: '1px solid #e3e8f1', background: '#fff', borderRadius: 12, padding: '7px 12px', fontSize: 11.5, fontWeight: 600, color: '#3a4256', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>
                     {ordemConversao === 'desc' ? '↓ Maior p/ menor' : '↑ Menor p/ maior'}
                   </button>
