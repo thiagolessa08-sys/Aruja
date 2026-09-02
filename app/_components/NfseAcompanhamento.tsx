@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 
-interface SituacaoNfse { total: number; normal: number; cancelada: number }
+interface CanceladaPrestador { cpfCnpj: string; nome: string; codigo: string; qtNotas: number; vlServicos: number }
+interface SituacaoNfse { total: number; normal: number; cancelada: number; porPrestador: CanceladaPrestador[] }
 interface NfseItem {
   cd: number; numero: string; serie: string; dtEmissao: string
   prestador: string; cpfCnpj: string
@@ -19,10 +20,14 @@ const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits:
 const fmtData = (d: string) => d ? d.split('-').reverse().join('/') : '—'
 
 // "Acompanhamento de NFS-e" — traceabilidade das notas das quais o ISS se originou
-// (tb_dsod_nfse). Duas partes: (1) situação cadastral agregada (Normal × Cancelada) —
-// hoje invisível na tela, já que o volume de ISS filtra silenciosamente as canceladas
-// (ver iss-emitidas-tomadas); (2) consulta individual por CNPJ/CPF do prestador ou número
-// da nota, pra auditar o documento que originou um lançamento de ISS específico.
+// (tb_dsod_nfse). Três partes: (1) situação cadastral agregada (Normal × Cancelada) — hoje
+// invisível no resto da tela, já que o volume de ISS filtra silenciosamente as canceladas
+// (ver iss-emitidas-tomadas); (2) notas canceladas por prestador (CCM, nome, quantidade e
+// valor de serviço), a pedido do usuário — inclui inclusive valores extremos que só
+// aparecem porque foram cancelados (ex.: uma nota de R$28 bi de uma pessoa física, validada
+// ao vivo — provável erro de lançamento já corrigido pelo próprio cancelamento); (3) consulta
+// individual por CNPJ/CPF do prestador ou número da nota, pra auditar o documento que
+// originou um lançamento de ISS específico.
 export default function NfseAcompanhamento({ mes }: { mes?: number }) {
   const [situacao, setSituacao] = useState<SituacaoNfse | null>(null)
   const [tipoBusca, setTipoBusca] = useState<'cnpj' | 'numero'>('cnpj')
@@ -85,6 +90,39 @@ export default function NfseAcompanhamento({ mes }: { mes?: number }) {
           </div>
         </div>
       )}
+
+      {situacao && situacao.porPrestador.length ? (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Notas Canceladas por Prestador</div>
+          <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 2 }}>Maiores valores de serviço cancelados, por prestador · CCM quando vinculado ao contribuinte</div>
+          <div style={{ marginTop: 10, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    {['CCM', 'Nome', 'Qtd.', 'Valor de Serviço'].map((h, i) => (
+                      <th key={h} style={{ position: 'sticky', top: 0, background: '#283e93', color: '#fff', fontSize: 10.5, fontWeight: 600, padding: '8px 10px', textAlign: i === 1 ? 'left' : i === 0 ? 'center' : 'right' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {situacao.porPrestador.map((p, ri) => (
+                    <tr key={p.cpfCnpj} style={{ background: ri % 2 === 0 ? '#fff' : '#f7f9fd' }}>
+                      <td style={{ fontSize: 11, color: '#3a4256', padding: '7px 10px', borderBottom: '1px solid #eef1f7', textAlign: 'center' }}>{p.codigo || '—'}</td>
+                      <td style={{ fontSize: 11, color: '#1f2a44', fontWeight: 600, padding: '7px 10px', borderBottom: '1px solid #eef1f7' }}>
+                        {p.nome}
+                        <div style={{ fontSize: 9.5, color: '#9098a8', fontWeight: 400 }}>{p.cpfCnpj}</div>
+                      </td>
+                      <td style={{ fontSize: 11, color: '#3a4256', padding: '7px 10px', borderBottom: '1px solid #eef1f7', textAlign: 'right' }}>{fmtInt(p.qtNotas)}</td>
+                      <td style={{ fontSize: 11, fontWeight: 700, color: '#d64545', padding: '7px 10px', borderBottom: '1px solid #eef1f7', textAlign: 'right' }}>{fmtReais(p.vlServicos)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div style={{ marginTop: 20 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Consultar NFS-e</div>
