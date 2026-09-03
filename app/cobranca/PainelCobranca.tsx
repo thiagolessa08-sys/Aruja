@@ -1394,10 +1394,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           Exercício selecionado no topo (mesmo espírito de "Baixas Processadas por Ano"), só
           reagindo ao filtro de Mês (acumulado) quando ativo. Cor = calor (vermelho = maior
           valor do top 10, azul = menor), tamanho = valor. Insights de Cobrança ao lado direito
-          — a pedido do usuário, saiu de junto de "Baixas Processadas por Ano" — e Conversão
-          por Tributo entrou como 3ª coluna, saindo de junto de Canais de Arrecadação (decisão
-          do usuário: 3 colunas numa linha só, mesmo ficando mais apertado). */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.8fr 1.3fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+          — a pedido do usuário, saiu de junto de "Baixas Processadas por Ano". Conversão por
+          Tributo passou por aqui como 3ª coluna e agora foi pra junto de "Baixas Processadas
+          por Ano" (reordenação a pedido do usuário). */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div>
@@ -1457,36 +1457,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* Conversão por Tributo */}
-        <div style={{ ...card, overflowX: 'auto' }}>
-          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Conversão por Tributo · {g.ano}</span>
-          <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {['Tributo', 'Lançado', 'Arrecadado', 'A Recuperar', 'Conversão'].map((h, i) => (
-                    <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {g.tributos.map((row, ri) => {
-                  const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
-                  return (
-                    <tr key={row.nome}>
-                      <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.nome}</td>
-                      <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.lancado)}</td>
-                      <td style={{ background: cellBg, color: '#1fa463', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.arrecadado)}</td>
-                      <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.saldo)}</td>
-                      <td style={{ background: cellBg, color: convCor(row.conversao), fontSize: 12, fontWeight: 700, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(row.conversao)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
           </div>
         </div>
       </div>
@@ -1691,42 +1661,76 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
       </div>
 
-      {/* Baixas Processadas por Ano — largura total desde que Insights de Cobrança se mudou
-          pra junto do Mapa de Calor, a pedido do usuário. preserveAspectRatio="none" faz o
-          SVG esticar só na largura — a altura fica travada em gb.H (280). */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Baixas Processadas por Ano</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>volume de DAMs recebidas pelo setor de Cobrança{mes ? ` — acumulado até ${MESES_ABREV[mes - 1]}, em cada ano` : ''}. Exercício selecionado ({g.ano}) em destaque.</div>
-          </div>
-          <span style={reportBadge}>Volume</span>
-        </div>
-        <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, height: gb.H, cursor: 'pointer' }}>
-          <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" height="100%" preserveAspectRatio="none" style={{ display: 'block' }}>
-            <defs>
-              <linearGradient id="cobBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#7d8fce" /></linearGradient>
-              <linearGradient id="cobBarSel" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f0bb7c" /></linearGradient>
-            </defs>
-            {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v}k</text></g>))}
-            <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-            {gb.bars.map((b, i) => {
-              const sel = b.ano === g.ano
-              return (
-                <g key={i}>
-                  <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="5" fill={sel ? 'url(#cobBarSel)' : 'url(#cobBar)'} />
-                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="9" fontWeight={sel ? 700 : 400} fill={sel ? '#c07a2e' : '#3a4256'} textAnchor="middle" style={axisFont}>{b.ano}</text>
-                </g>
-              )
-            })}
-            {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip({ left: `${(b.cx / gb.W * 100).toFixed(1)}%`, top: `${(b.y / gb.H * 100).toFixed(1)}%`, ano: b.ano, n: b.n })} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />))}
-          </svg>
-          {tip ? (
-            <div style={{ position: 'absolute', left: tip.left, top: tip.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tip.ano}</div>
-              <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>{fmtInt(tip.n)} baixas</div>
+      {/* Baixas Processadas por Ano lado a lado com Conversão por Tributo — reordenação a
+          pedido do usuário (Conversão por Tributo saiu da linha do Mapa de Calor/Insights).
+          preserveAspectRatio="none" faz o SVG esticar só na largura — a altura fica travada em
+          gb.H (280); a tabela tem overflow-x pra rolar se a coluna ficar estreita demais pras
+          5 colunas dela. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Baixas Processadas por Ano</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>volume de DAMs recebidas pelo setor de Cobrança{mes ? ` — acumulado até ${MESES_ABREV[mes - 1]}, em cada ano` : ''}. Exercício selecionado ({g.ano}) em destaque.</div>
             </div>
-          ) : null}
+            <span style={reportBadge}>Volume</span>
+          </div>
+          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, height: gb.H, cursor: 'pointer' }}>
+            <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" height="100%" preserveAspectRatio="none" style={{ display: 'block' }}>
+              <defs>
+                <linearGradient id="cobBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#7d8fce" /></linearGradient>
+                <linearGradient id="cobBarSel" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f0bb7c" /></linearGradient>
+              </defs>
+              {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v}k</text></g>))}
+              <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+              {gb.bars.map((b, i) => {
+                const sel = b.ano === g.ano
+                return (
+                  <g key={i}>
+                    <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="5" fill={sel ? 'url(#cobBarSel)' : 'url(#cobBar)'} />
+                    <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="9" fontWeight={sel ? 700 : 400} fill={sel ? '#c07a2e' : '#3a4256'} textAnchor="middle" style={axisFont}>{b.ano}</text>
+                  </g>
+                )
+              })}
+              {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip({ left: `${(b.cx / gb.W * 100).toFixed(1)}%`, top: `${(b.y / gb.H * 100).toFixed(1)}%`, ano: b.ano, n: b.n })} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />))}
+            </svg>
+            {tip ? (
+              <div style={{ position: 'absolute', left: tip.left, top: tip.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tip.ano}</div>
+                <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>{fmtInt(tip.n)} baixas</div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Conversão por Tributo */}
+        <div style={{ ...card, overflowX: 'auto' }}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Conversão por Tributo · {g.ano}</span>
+          <div style={{ marginTop: 16, border: '1px solid #e3e8f1', borderRadius: 12, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Tributo', 'Lançado', 'Arrecadado', 'A Recuperar', 'Conversão'].map((h, i) => (
+                    <th key={h} style={{ background: '#283e93', color: '#fff', fontSize: 13, fontWeight: 600, padding: '12px 16px', textAlign: i === 0 ? 'left' : 'center', borderRight: '1px solid rgba(255,255,255,0.18)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {g.tributos.map((row, ri) => {
+                  const cellBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fd'
+                  return (
+                    <tr key={row.nome}>
+                      <td style={{ background: '#e9eef8', color: '#1f2a44', fontSize: 12, fontWeight: 600, padding: '9px 16px', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #d6deef' }}>{row.nome}</td>
+                      <td style={{ background: cellBg, color: '#1f2a44', fontSize: 12, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.lancado)}</td>
+                      <td style={{ background: cellBg, color: '#1fa463', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.arrecadado)}</td>
+                      <td style={{ background: cellBg, color: '#d64545', fontSize: 12, fontWeight: 500, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7', borderRight: '1px solid #eef1f7' }}>{fmtReais(row.saldo)}</td>
+                      <td style={{ background: cellBg, color: convCor(row.conversao), fontSize: 12, fontWeight: 700, padding: '9px 16px', textAlign: 'center', borderBottom: '1px solid #eef1f7' }}>{fmtPct(row.conversao)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
