@@ -396,6 +396,39 @@ async function resultadoPorTributoMesRaw(ano: number, mesAlvo: number): Promise<
   return porTributo
 }
 
+export interface ResultadoMesAnoRanking { ano: number; mes: number; geradas: number }
+
+const TOP_N_RESULTADO_RANKING = 10
+const ANO_MIN_RESULTADO_RANKING = 2015
+
+/**
+ * Ranking para o mapa de calor (treemap) "Top 10 Mês/Ano" — acumulado do histórico INTEIRO de
+ * "Resultado Mensal da Arrecadação" (não só o Exercício selecionado no filtro do topo, já que
+ * "por ano e mês" só faz sentido comparando anos diferentes entre si — mesmo espírito de
+ * "Baixas Processadas por Ano", que também ignora o Exercício selecionado). Métrica: DAM
+ * Geradas (tb_dsod_guias.dt_geracao), a mesma base do gráfico "Resultado Mensal da
+ * Arrecadação". Respeita o filtro de Mês (acumulado) quando ativo, aplicado a cada ano.
+ */
+export async function resultadoMensalRanking(mes?: number): Promise<ResultadoMesAnoRanking[]> {
+  return cached(`resultadoMensalRanking:${mes ?? ''}`, TTL_15MIN, () => resultadoMensalRankingRaw(mes))
+}
+
+async function resultadoMensalRankingRaw(mes?: number): Promise<ResultadoMesAnoRanking[]> {
+  const filtroMes = mes ? ` AND MONTH(dt_geracao) <= ${mes}` : ''
+  const r = await agentQuery(`
+    SELECT YEAR(dt_geracao) AS ano, MONTH(dt_geracao) AS mes, COUNT(*) AS qt
+    FROM ${SCHEMA}.tb_dsod_guias
+    WHERE YEAR(dt_geracao) >= ${ANO_MIN_RESULTADO_RANKING}${filtroMes}
+    GROUP BY YEAR(dt_geracao), MONTH(dt_geracao)`, 500)
+
+  const anoAtual = new Date().getFullYear()
+  return r.rows
+    .map(row => ({ ano: num(row[0]), mes: num(row[1]), geradas: num(row[2]) }))
+    .filter(x => x.mes >= 1 && x.mes <= 12 && x.ano <= anoAtual + 1 && x.geradas > 0)
+    .sort((a, b) => b.geradas - a.geradas)
+    .slice(0, TOP_N_RESULTADO_RANKING)
+}
+
 export interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
 export interface ComparativoDamId { ano: number; totalGeradas: number; totalPagas: number; porMes: ComparativoDamIdMes[] }
 

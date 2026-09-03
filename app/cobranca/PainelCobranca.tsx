@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, type BarRectangleItem } from 'recharts'
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Treemap, type BarRectangleItem, type TreemapNode } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
@@ -20,6 +20,7 @@ interface DamsGeradas { ano: number; total: number; porMes: DamMes[]; porTributo
 interface ResultadoMes { mes: number; geradas: number; pagas: number }
 interface ResultadoMensal { ano: number; totalGeradas: number; totalPagas: number; porMes: ResultadoMes[] }
 interface ResultadoTributoMes { nome: string; geradas: number; pagas: number }
+interface ResultadoMesAnoRanking { ano: number; mes: number; geradas: number }
 interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
 interface ComparativoDamId { ano: number; totalGeradas: number; totalPagas: number; porMes: ComparativoDamIdMes[] }
 interface ComparativoDamIdTributoMes { nome: string; geradas: number; pagas: number }
@@ -111,6 +112,14 @@ const FALLBACK_RESULTADO: ResultadoMensal = {
   ],
 }
 
+const FALLBACK_RESULTADO_RANKING: ResultadoMesAnoRanking[] = [
+  { ano: 2024, mes: 12, geradas: 1718907 }, { ano: 2025, mes: 12, geradas: 847290 },
+  { ano: 2024, mes: 10, geradas: 214109 }, { ano: 2026, mes: 1, geradas: 97142 },
+  { ano: 2025, mes: 1, geradas: 73192 }, { ano: 2019, mes: 8, geradas: 71344 },
+  { ano: 2022, mes: 6, geradas: 64563 }, { ano: 2020, mes: 12, geradas: 64500 },
+  { ano: 2023, mes: 6, geradas: 63417 }, { ano: 2026, mes: 8, geradas: 58709 },
+]
+
 const FALLBACK_COMP_DAM_ID: ComparativoDamId = {
   ano: 2025, totalGeradas: 1240924, totalPagas: 247272,
   porMes: [
@@ -153,6 +162,14 @@ const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julh
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
 const DAM_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e', '#eaa957', '#f0bb7c']
+// Escala de calor pro treemap "Top 10 Mês/Ano" — rank 0 (maior valor) = vermelho quente,
+// último rank do top 10 = azul frio, passando por laranja/amarelo/verde no meio (mesma lógica
+// de paletas "heat" clássicas, sem precisar de lib extra).
+const heatColor = (rank: number, total: number) => {
+  const t = total > 1 ? rank / (total - 1) : 0
+  const hue = 4 + t * 200
+  return `hsl(${hue.toFixed(0)}, 72%, 48%)`
+}
 
 // Tooltip padrão da tela — mesmo visual do gráfico "Baixas Processadas por Ano" (caixa
 // escura, título em branco, linhas em cinza-claro), reaproveitado nos gráficos Recharts via
@@ -218,6 +235,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [potBairroSel, setPotBairroSel] = useState<string | null>(null)
   const [dams, setDams] = useState<DamsGeradas | null>(null)
   const [resultado, setResultado] = useState<ResultadoMensal | null>(null)
+  const [resultadoRanking, setResultadoRanking] = useState<ResultadoMesAnoRanking[] | null>(null)
   const [compDamId, setCompDamId] = useState<ComparativoDamId | null>(null)
   const [analise, setAnalise] = useState<AnaliseConversao | null>(null)
   // Default 'tributo' (não null): Análise de Conversão e o painel de DAM ao lado devem
@@ -263,6 +281,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setPotencial(null)
     setDams(null)
     setResultado(null)
+    setResultadoRanking(null)
     setResultadoDrillMes(null)
     setResultadoDrillData(null)
     setResultadoDrillErro(false)
@@ -303,6 +322,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       .then(x => { if (x && !x.error && typeof x.total === 'number') setDams(x) }).catch(() => {})
     fetch(`/api/cobranca/resultado-mensal?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.totalGeradas === 'number') setResultado(x) }).catch(() => {})
+    // Ranking Top 10 Mês/Ano (mapa de calor) — histórico inteiro, agnóstico ao Exercício
+    // selecionado; só reage ao filtro de Mês (acumulado), por isso não inclui `ano` na URL.
+    fetch(`/api/cobranca/resultado-mensal-ranking?${mes ? `mes=${mes}` : ''}`).then(r => r.ok ? r.json() : null)
+      .then(x => { if (x && !x.error && Array.isArray(x.itens)) setResultadoRanking(x.itens) }).catch(() => {})
     fetch(`/api/cobranca/comparativo-dam-id?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => { if (x && !x.error && typeof x.totalGeradas === 'number') setCompDamId(x) }).catch(() => {})
     fetch(`/api/cobranca/analise-conversao?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
@@ -1362,6 +1385,56 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           )
         })()}
       </div>
+      </div>
+
+      {/* Mapa de calor (treemap) — Top 10 Mês/Ano por DAM Geradas, a pedido do usuário
+          (imagem de referência anexada: blocos coloridos, tamanho proporcional ao valor).
+          Baseado em "Resultado Mensal da Arrecadação", mas olhando o HISTÓRICO INTEIRO — "por
+          ano e mês" só faz sentido comparando anos diferentes entre si, então ignora o
+          Exercício selecionado no topo (mesmo espírito de "Baixas Processadas por Ano"), só
+          reagindo ao filtro de Mês (acumulado) quando ativo. Cor = calor (vermelho = maior
+          valor do top 10, azul = menor), tamanho = valor. */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Mapa de Calor — Top 10 Mês/Ano</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas acumulado, por mês e ano — todo o histórico{mes ? `, até ${MESES[mes - 1]} em cada ano` : ''}.</div>
+          </div>
+          <span style={reportBadge}>Ranking Top 10</span>
+        </div>
+
+        {(() => {
+          const ranking = resultadoRanking ?? FALLBACK_RESULTADO_RANKING
+          if (!ranking.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados suficientes.</div>
+          const data = ranking.map(r => ({ name: `${MESES_ABREV[r.mes - 1]}/${r.ano}`, geradas: r.geradas }))
+          return (
+            <div style={{ height: 280, marginTop: 14 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <Treemap data={data} dataKey="geradas" nameKey="name" stroke="#fff" isAnimationActive={false}
+                  content={(props: TreemapNode) => {
+                    const { x, y, width, height, index, name } = props
+                    const valor = Number((props as unknown as { geradas?: number }).geradas ?? props.value ?? 0)
+                    const cor = heatColor(index, data.length)
+                    const grande = width > 70 && height > 40
+                    const media = width > 34 && height > 20
+                    return (
+                      <g>
+                        <rect x={x} y={y} width={width} height={height} style={{ fill: cor, stroke: '#fff', strokeWidth: 2 }} />
+                        {grande ? (
+                          <>
+                            <text x={x + 8} y={y + 18} fill="#fff" fontSize={12} fontWeight={700}>{name}</text>
+                            <text x={x + 8} y={y + 34} fill="rgba(255,255,255,0.9)" fontSize={11}>{fmtAbrev(valor)}</text>
+                          </>
+                        ) : media ? (
+                          <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" fontSize={10} fontWeight={700} textAnchor="middle">{name}</text>
+                        ) : null}
+                      </g>
+                    )
+                  }} />
+              </ResponsiveContainer>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Potencial de Arrecadação — painel: do saldo devedor, quanto já VENCEU (inadimplência
