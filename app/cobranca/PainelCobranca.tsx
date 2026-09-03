@@ -1563,11 +1563,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                           <rect x={x} y={y} width={width} height={height} style={{ fill: cor, stroke: '#fff', strokeWidth: 2 }} />
                           {grande ? (
                             <>
-                              <text x={x + 8} y={y + 18} fill="#fff" fontSize={12} fontWeight={700} style={axisFont}>{name}</text>
-                              <text x={x + 8} y={y + 34} fill="rgba(255,255,255,0.9)" fontSize={11} style={axisFont}>{fmtAbrev(valor)}</text>
+                              <text x={x + 8} y={y + 18} fill="#000" stroke="none" fontSize={12} fontWeight={700} style={axisFont}>{name}</text>
+                              <text x={x + 8} y={y + 34} fill="rgba(0,0,0,0.75)" stroke="none" fontSize={11} style={axisFont}>{fmtAbrev(valor)}</text>
                             </>
                           ) : media ? (
-                            <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" fontSize={10} fontWeight={700} textAnchor="middle" style={axisFont}>{name}</text>
+                            <text x={x + width / 2} y={y + height / 2 + 4} fill="#000" stroke="none" fontSize={10} fontWeight={700} textAnchor="middle" style={axisFont}>{name}</text>
                           ) : null}
                         </g>
                       )
