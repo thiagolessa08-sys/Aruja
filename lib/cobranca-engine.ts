@@ -708,3 +708,66 @@ async function conversaoDrillTributoRaw(ano: number, mes: number | undefined, fi
     .sort((a, b) => b.lancado - a.lancado)
     .map(x => ({ ...x, conversao: x.lancado ? (x.arrecadado / x.lancado) * 100 : 0 }))
 }
+
+export type ConversaoDrillOperadorFiltro =
+  | { tipo: 'periodo'; ano: number }
+  | { tipo: 'tributo'; nome: string }
+
+/**
+ * Espelho de conversaoDrillTributo, mas quebrando POR OPERADOR em vez de por tributo — ao
+ * clicar num tributo (lente "Por Tributo") ou num período (lente "Por Período"), mostra quem
+ * gerou aquelas guias, pro "Melhor desempenho" saber qual foi o melhor usuário naquele
+ * recorte. Mesma composição do balde "Internet" usada em analiseConversaoRaw (por diferença
+ * do total do recorte, não por filtro direto — precisa do total pra isso, daí a query extra).
+ */
+export async function conversaoDrillOperador(ano: number, mes: number | undefined, filtro: ConversaoDrillOperadorFiltro): Promise<ConversaoItem[]> {
+  const chave = filtro.tipo === 'periodo' ? `periodo:${filtro.ano}` : `tributo:${filtro.nome}`
+  return cached(`conversaoDrillOperador:${ano}:${mes ?? ''}:${chave}`, TTL_15MIN, () => conversaoDrillOperadorRaw(ano, mes, filtro))
+}
+
+async function conversaoDrillOperadorRaw(ano: number, mes: number | undefined, filtro: ConversaoDrillOperadorFiltro): Promise<ConversaoItem[]> {
+  const excl = CODIGOS_EXCLUIDOS.join(',')
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
+  const anoFiltro = filtro.tipo === 'periodo' ? filtro.ano : ano
+  const filtroTributo = filtro.tipo === 'tributo' ? ` AND t.ds_tributo = '${filtro.nome.replace(/'/g, "''")}'` : ''
+
+  const [totalR, operR] = await Promise.all([
+    agentQuery(`
+      SELECT SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${anoFiltro}${filtroMes}${filtroTributo}`, 1),
+    agentQuery(`
+      SELECT g.cd_usuario_gerador, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${anoFiltro}${filtroMes}${filtroTributo}
+        AND PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) > 0
+      GROUP BY g.cd_usuario_gerador`, 300),
+  ])
+
+  const totalLancado = num(totalR.rows[0]?.[0])
+  const totalPago = num(totalR.rows[0]?.[1])
+
+  const operNomeados = operR.rows
+    .map(row => ({ nome: String(row[0] ?? '').trim(), lancado: num(row[1]), pago: num(row[2]) }))
+    .filter(x => x.nome && x.lancado > 0)
+  const somaNomeadoLancado = operNomeados.reduce((s, x) => s + x.lancado, 0)
+  const somaNomeadoPago = operNomeados.reduce((s, x) => s + x.pago, 0)
+  const internetLancado = Math.max(0, totalLancado - somaNomeadoLancado)
+  const internetPago = Math.max(0, totalPago - somaNomeadoPago)
+  const operList = [...operNomeados]
+  if (internetLancado > 0) {
+    const internetExistente = operList.find(x => x.nome === 'Internet')
+    if (internetExistente) { internetExistente.lancado += internetLancado; internetExistente.pago += internetPago }
+    else operList.push({ nome: 'Internet', lancado: internetLancado, pago: internetPago })
+  }
+
+  return operList
+    .sort((a, b) => b.lancado - a.lancado)
+    .map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
+}

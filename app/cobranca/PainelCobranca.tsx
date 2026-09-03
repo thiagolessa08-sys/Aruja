@@ -258,14 +258,19 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [conversaoPeriodoAno, setConversaoPeriodoAno] = useState<number | null>(null)
   const [damsPeriodo, setDamsPeriodo] = useState<DamsGeradas | null>(null)
   // Drill de 2º nível DENTRO da própria "Análise de Conversão" — ao clicar num item nas
-  // lentes "Por Período" ou "Por Operador", a mesma card troca pra mostrar a conversão
-  // daquele período/operador quebrada por tributo (in-place, com botão "‹ Voltar"; "Por
-  // Tributo" já É essa visão, então não tem pra onde descer mais). Em "Por Período" o clique
-  // também continua disparando selecionarPeriodoAno (efeito existente no painel DAM ao lado)
-  // — os dois convivem, cada um com seu próprio toggle.
+  // lentes "Por Tributo", "Por Período" ou "Por Operador", a mesma card troca pra mostrar
+  // aquele tributo/período/operador quebrado pelo eixo complementar (in-place, com botão "‹
+  // Voltar"): Por Tributo desce por OPERADOR (quem trabalhou aquele tributo); Por
+  // Período/Por Operador descem por TRIBUTO, como antes. Em "Por Período" o clique também
+  // continua disparando selecionarPeriodoAno (efeito existente no painel DAM ao lado) — os
+  // dois convivem, cada um com seu próprio toggle.
   const [conversaoDrillItem, setConversaoDrillItem] = useState<ConversaoItem | null>(null)
   const [conversaoDrillData, setConversaoDrillData] = useState<ConversaoItem[] | null>(null)
   const [conversaoDrillErro, setConversaoDrillErro] = useState(false)
+  // Quebra por OPERADOR do período selecionado (lente Por Período) — busca extra só pro
+  // "Melhor desempenho" conseguir mostrar "Melhor usuário" daquele ano também (o drill
+  // principal acima, pra essa lente, já é por tributo — este é o eixo que falta).
+  const [conversaoDrillOperPeriodo, setConversaoDrillOperPeriodo] = useState<ConversaoItem[] | null>(null)
   // Drill de 3º nível do painel DAM, só na lente "Por Período" — ao clicar num mês no gráfico
   // "Por período (mês)", quebra aquele mês específico (do ano ativo, seja o padrão ou um
   // selecionado via Análise de Conversão) por tributo, substituindo o gráfico pela lista
@@ -482,9 +487,20 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     buscarCompDamIdPorTributoMes(anoAlvo, mesAlvo)
   }
 
-  function buscarConversaoDrill(dim: 'periodo' | 'operador', item: ConversaoItem) {
+  // "Por Tributo" desce por OPERADOR (endpoint espelho); "Por Período"/"Por Operador" descem
+  // por TRIBUTO, como antes.
+  function buscarConversaoDrill(dim: 'periodo' | 'operador' | 'tributo', item: ConversaoItem) {
     setConversaoDrillData(null)
     setConversaoDrillErro(false)
+    if (dim === 'tributo') {
+      const qs = new URLSearchParams({ tipo: 'tributo', nome: item.nome, ano: String(ano), ...(mes ? { mes: String(mes) } : {}) })
+      fetch(`/api/cobranca/analise-conversao-drill-operador?${qs}`).then(r => r.ok ? r.json() : null)
+        .then(res => {
+          if (res && !res.error && Array.isArray(res.itens)) setConversaoDrillData(res.itens)
+          else setConversaoDrillErro(true)
+        }).catch(() => setConversaoDrillErro(true))
+      return
+    }
     const qs = new URLSearchParams({
       tipo: dim, ano: String(ano), ...(mes ? { mes: String(mes) } : {}),
       ...(dim === 'periodo' ? { anoDrill: item.nome } : { nome: item.nome }),
@@ -496,14 +512,28 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       }).catch(() => setConversaoDrillErro(true))
   }
 
-  // Clique num item de "Por Período"/"Por Operador" na Análise de Conversão — desce um
-  // nível mostrando aquele período/operador quebrado por tributo, na própria card.
-  function selecionarConversaoItem(dim: 'periodo' | 'operador', item: ConversaoItem) {
+  // Busca extra, só pro "Melhor desempenho": quebra por operador do mesmo período que o
+  // drill principal (acima) já quebrou por tributo — o eixo que falta pra "Melhor usuário"
+  // daquele ano. Sem estado de erro próprio: se falhar, a linha "Melhor usuário" simplesmente
+  // não aparece (degrada graciosamente, o drill principal já funciona sem ela).
+  function buscarConversaoDrillOperPeriodo(item: ConversaoItem) {
+    setConversaoDrillOperPeriodo(null)
+    const qs = new URLSearchParams({ tipo: 'periodo', anoDrill: item.nome, ano: String(ano), ...(mes ? { mes: String(mes) } : {}) })
+    fetch(`/api/cobranca/analise-conversao-drill-operador?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => { if (res && !res.error && Array.isArray(res.itens)) setConversaoDrillOperPeriodo(res.itens) })
+      .catch(() => {})
+  }
+
+  // Clique num item de "Por Tributo"/"Por Período"/"Por Operador" na Análise de Conversão —
+  // desce um nível mostrando aquele item quebrado pelo eixo complementar, na própria card.
+  function selecionarConversaoItem(dim: 'periodo' | 'operador' | 'tributo', item: ConversaoItem) {
     if (conversaoDrillItem?.nome === item.nome) {
-      setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false)
+      setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null)
     } else {
       setConversaoDrillItem(item)
       buscarConversaoDrill(dim, item)
+      if (dim === 'periodo') buscarConversaoDrillOperPeriodo(item)
+      else setConversaoDrillOperPeriodo(null)
     }
     if (dim === 'periodo') selecionarPeriodoAno(Number(item.nome))
   }
@@ -680,7 +710,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false) }}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null); setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false) }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',
@@ -696,24 +726,26 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           {(() => {
             const an = analise ?? FALLBACK_ANALISE
             const dimAtual = conversaoDim ?? 'tributo'
-            const podeDrill = dimAtual === 'periodo' || dimAtual === 'operador'
+            const podeDrill = dimAtual === 'periodo' || dimAtual === 'operador' || dimAtual === 'tributo'
+            const eixoDrill = dimAtual === 'tributo' ? 'operador' : 'tributo'
 
-            // Drill in-place: item selecionado em Por Período/Por Operador, quebrado por
-            // tributo — troca o conteúdo da própria card (não abre uma card nova).
+            // Drill in-place: item selecionado em Por Tributo/Por Período/Por Operador,
+            // quebrado pelo eixo complementar — troca o conteúdo da própria card (não abre
+            // uma card nova).
             if (podeDrill && conversaoDrillItem) {
               const rotulo = dimAtual === 'periodo' ? `Exercício ${conversaoDrillItem.nome}` : conversaoDrillItem.nome
               const maxLancDrill = Math.max(1, ...(conversaoDrillData ?? []).flatMap(i => [i.lancado, i.arrecadado]))
               return (
                 <>
                   <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span title={rotulo} style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rotulo} — por tributo</span>
-                    <button onClick={() => { setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false) }}
+                    <span title={rotulo} style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rotulo} — por {eixoDrill}</span>
+                    <button onClick={() => { setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null) }}
                       style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
                   </div>
                   {conversaoDrillErro ? (
                     <div style={{ textAlign: 'center', padding: '30px 0' }}>
-                      <div style={{ fontSize: 12, color: '#9098a8' }}>Não foi possível carregar o detalhe por tributo.</div>
-                      <button onClick={() => buscarConversaoDrill(dimAtual as 'periodo' | 'operador', conversaoDrillItem)}
+                      <div style={{ fontSize: 12, color: '#9098a8' }}>Não foi possível carregar o detalhe por {eixoDrill}.</div>
+                      <button onClick={() => buscarConversaoDrill(dimAtual as 'periodo' | 'operador' | 'tributo', conversaoDrillItem)}
                         style={{ marginTop: 8, border: '1px solid #e3e8f1', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 11.5, fontWeight: 600, color: '#283e93', cursor: 'pointer' }}>Tentar novamente</button>
                     </div>
                   ) : !conversaoDrillData ? (
@@ -721,7 +753,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                       {[0, 1, 2, 3].map(i => (<div key={i} style={{ height: 32, borderRadius: 8, background: '#eef1f7' }} />))}
                     </div>
                   ) : !conversaoDrillData.length ? (
-                    <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem lançamento por tributo para esta seleção.</div>
+                    <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem lançamento por {eixoDrill} para esta seleção.</div>
                   ) : (
                     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13, maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
                       {conversaoDrillData.map(item => {
@@ -796,8 +828,8 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   const selecionado = podeDrill && conversaoDrillItem?.nome === item.nome
                   return (
                     <div key={item.nome}
-                      onClick={podeDrill ? () => selecionarConversaoItem(dimAtual as 'periodo' | 'operador', item) : undefined}
-                      title={podeDrill ? 'Clique para detalhar por tributo' : undefined}
+                      onClick={podeDrill ? () => selecionarConversaoItem(dimAtual as 'periodo' | 'operador' | 'tributo', item) : undefined}
+                      title={podeDrill ? `Clique para detalhar por ${eixoDrill}` : undefined}
                       style={podeDrill ? { cursor: 'pointer', padding: 6, margin: -6, borderRadius: 8, background: selecionado ? '#eef1fb' : 'transparent' } : undefined}>
                       <span style={{ fontSize: 11.5, color: selecionado ? '#283e93' : '#3a4256', fontWeight: selecionado ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginBottom: 4 }}>{item.nome}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
@@ -828,25 +860,83 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
               a busca); na lente Por Operador, só "Melhor usuário" (idem); Por Período — que
               não tem essa quebra no nível principal — mantém os dois lado a lado com "Melhor
               desempenho geral", como antes (a busca ali é por ano, não filtra
-              tributo/usuário). Quando o usuário desce mais um nível — clica num período ou
-              operador específico pra ver o drill por tributo —, o box acompanha: passa a
-              calcular "Melhor tributo" só dentro daquele recorte (conversaoDrillData), já que
-              nesse ponto não há mais informação de usuário. Só considera itens com lançado
-              > R$ 1 milhão (mesmo piso de "menor conversão" já usado nos Insights de Cobrança,
-              evita destacar um tributo/usuário com volume irrisório por coincidência) e exclui
-              "Demais tributos" (balde agregado), "Internet" (autoemissão pelo portal) e
-              "Schedule" (geração automática agendada) do ranking de usuário — nenhum dos dois
-              é uma pessoa de verdade pra ganhar um "melhor usuário". */}
+              tributo/usuário). Quando o usuário desce mais um nível — clica num tributo,
+              período ou operador específico —, o box acompanha pelo eixo que sobrou: Por
+              Tributo drilado mostra o melhor USUÁRIO daquele tributo (conversaoDrillData, que
+              nesse caso já vem quebrado por operador); Por Operador drilado mostra o melhor
+              TRIBUTO daquele operador, como antes; Por Período drilado mostra os dois — melhor
+              tributo (conversaoDrillData) e melhor usuário (conversaoDrillOperPeriodo, busca
+              complementar só pra isso) — pro recorte daquele ano. Só considera itens com
+              lançado > R$ 1 milhão (mesmo piso de "menor conversão" já usado nos Insights de
+              Cobrança, evita destacar um tributo/usuário com volume irrisório por
+              coincidência) e exclui "Demais tributos" (balde agregado), "Internet"
+              (autoemissão pelo portal) e "Schedule" (geração automática agendada) do ranking
+              de usuário — nenhum dos dois é uma pessoa de verdade pra ganhar um "melhor
+              usuário". */}
           {(() => {
             const an = analise ?? FALLBACK_ANALISE
             const dimAtual = conversaoDim ?? 'tributo'
             const PISO_LANCADO = 1e6
             const busca = buscaConversao.trim().toLowerCase()
-            const podeDrillAqui = dimAtual === 'periodo' || dimAtual === 'operador'
+            const podeDrillAqui = dimAtual === 'periodo' || dimAtual === 'operador' || dimAtual === 'tributo'
             const drilled = podeDrillAqui && !!conversaoDrillItem && !!conversaoDrillData && !conversaoDrillErro
 
+            if (drilled && dimAtual === 'tributo') {
+              const rotulo = conversaoDrillItem!.nome
+              const candidatos = conversaoDrillData!.filter(o => o.lancado > PISO_LANCADO && o.nome !== 'Internet' && o.nome !== 'Schedule')
+              const melhor = [...candidatos].sort((a, b) => b.conversao - a.conversao)[0]
+              return (
+                <div style={{ marginTop: 16, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 14, padding: '14px 16px' }}>
+                  <div title={rotulo} style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Melhor desempenho — Por Tributo <span style={{ color: '#9098a8', fontWeight: 400 }}>(em {rotulo})</span></div>
+                  {!melhor ? (
+                    <div style={{ fontSize: 11.5, color: '#9098a8' }}>Nenhum usuário acima do piso de R$ 1 mi lançado neste recorte.</div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor usuário</span>
+                      <span title={melhor.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#e8962e', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhor.nome} · {fmtPct(melhor.conversao)}</span>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            if (drilled && dimAtual === 'periodo') {
+              const rotulo = `Exercício ${conversaoDrillItem!.nome}`
+              const candidatosTribP = conversaoDrillData!.filter(t => t.lancado > PISO_LANCADO && !/^Demais tributos/.test(t.nome))
+              const candidatosOperP = (conversaoDrillOperPeriodo ?? []).filter(o => o.lancado > PISO_LANCADO && o.nome !== 'Internet' && o.nome !== 'Schedule')
+              const melhorTribP = [...candidatosTribP].sort((a, b) => b.conversao - a.conversao)[0]
+              const melhorOperP = [...candidatosOperP].sort((a, b) => b.conversao - a.conversao)[0]
+              if (!melhorTribP && !melhorOperP) return null
+              const melhorGeralP = !melhorTribP ? melhorOperP! : !melhorOperP ? melhorTribP : melhorTribP.conversao >= melhorOperP.conversao ? melhorTribP : melhorOperP
+              const origemGeralP = melhorGeralP === melhorTribP ? 'tributo' : 'usuário'
+              return (
+                <div style={{ marginTop: 16, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 14, padding: '14px 16px' }}>
+                  <div title={rotulo} style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Melhor desempenho — Por Tributo × Usuário <span style={{ color: '#9098a8', fontWeight: 400 }}>(em {rotulo})</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor desempenho geral <span style={{ color: '#aeb6c6' }}>({origemGeralP})</span></span>
+                      <span title={melhorGeralP.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#1fa463', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorGeralP.nome} · {fmtPct(melhorGeralP.conversao)}</span>
+                    </div>
+                    {melhorTribP ? (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor tributo</span>
+                        <span title={melhorTribP.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#283e93', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorTribP.nome} · {fmtPct(melhorTribP.conversao)}</span>
+                      </div>
+                    ) : null}
+                    {melhorOperP ? (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor usuário</span>
+                        <span title={melhorOperP.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#e8962e', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorOperP.nome} · {fmtPct(melhorOperP.conversao)}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            }
+
             if (drilled) {
-              const rotulo = dimAtual === 'periodo' ? `Exercício ${conversaoDrillItem!.nome}` : conversaoDrillItem!.nome
+              // dimAtual === 'operador'
+              const rotulo = conversaoDrillItem!.nome
               const candidatos = conversaoDrillData!.filter(t => t.lancado > PISO_LANCADO && !/^Demais tributos/.test(t.nome))
               const melhor = [...candidatos].sort((a, b) => b.conversao - a.conversao)[0]
               return (
