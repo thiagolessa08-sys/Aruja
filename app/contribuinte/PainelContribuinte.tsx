@@ -741,11 +741,221 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
         ) : null}
       </div>
 
+      {/* ===== ROW 2 ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
+
+        {/* LOLLIPOP HORIZONTAL: Contribuintes com Pendência por Setor */}
+        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Contribuintes com Pendência por Setor</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
+                contribuintes distintos em cobrança (sem valor R$ na base)
+                {filtros.ano ? ` — exercício ${filtros.ano}` : ''}{filtros.mes ? ` até o mês ${filtros.mes}` : ''}{filtros.pessoa ? ` — ${filtros.pessoa === 'F' ? 'Pessoa Física' : 'Pessoa Jurídica'}` : ''}
+              </div>
+            </div>
+            <span style={reportBadge}>Devedores</span>
+          </div>
+          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {g.devedores.map((d, i) => {
+              const w = (d.n / maxDev) * 100
+              const cor = SETOR_CORES[i % SETOR_CORES.length]
+              return (
+                <div key={d.setor} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ width: 130, flex: 'none', fontSize: 12, color: '#3a4256', textAlign: 'right' }}>{d.label}</span>
+                  <div style={{ flex: 1, position: 'relative', height: 16, display: 'flex', alignItems: 'center' }}>
+                    <div style={{ position: 'absolute', left: 0, right: 0, height: 2, background: '#eef1f7', borderRadius: 2 }} />
+                    <div style={{ position: 'absolute', left: 0, width: `calc(${w.toFixed(1)}% - 7px)`, height: 3, background: cor, borderRadius: 2 }} />
+                    <span style={{ position: 'absolute', left: `calc(${w.toFixed(1)}% - 14px)`, width: 14, height: 14, borderRadius: '50%', background: cor, boxShadow: '0 0 0 3px #fff' }} />
+                  </div>
+                  <span style={{ width: 58, flex: 'none', fontSize: 12, fontWeight: 700, color: '#1f2a44', textAlign: 'right' }}>{fmtInt(d.n)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Situação Cadastral — barra de proporção */}
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Situação Cadastral</span>
+            <span style={dots}>···</span>
+          </div>
+          <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>{fmtInt(g.situacao.reduce((s, x) => s + x.n, 0))} contribuintes</div>
+          <div style={{ display: 'flex', height: 56, borderRadius: 12, overflow: 'hidden', marginTop: 26, background: '#eef1f7' }}>
+            {g.situacao.map(s => (
+              <div key={s.label} title={`${s.label}: ${fmtPct(s.pct)}`} style={{ width: `${s.pct.toFixed(2)}%`, background: SIT_CORES[s.label] ?? '#c5ccdb' }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 28 }}>
+            {g.situacao.map(s => (
+              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ width: 11, height: 11, borderRadius: 3, background: SIT_CORES[s.label] ?? '#c5ccdb', flex: 'none' }}></span>
+                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.label}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(s.n)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ===== ROW 3: Vínculos + Score de Contribuinte (CRC) ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
+        {/* Vínculos — clique num vínculo faz drill para a lista de contribuintes */}
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            {vinculoSel ? (
+              <button onClick={() => { setVinculoSel(null); setBuscaVinculo('') }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 16, fontWeight: 600 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+                {vinculoSel.label}
+              </button>
+            ) : (
+              <div>
+                <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Vínculos do Contribuinte</span>
+                <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>papéis do contribuinte na base (um contribuinte pode ter vários)</div>
+              </div>
+            )}
+            <span style={dots}>···</span>
+          </div>
+
+          {vinculoSel ? (
+            <div style={{ marginTop: 12, position: 'relative' }}>
+              {carregandoVinculo ? <LoadingOverlay label="Carregando contribuintes…" /> : null}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                <input value={buscaVinculo} onChange={e => setBuscaVinculo(e.target.value)} placeholder="Buscar por nome ou CPF/CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+              </div>
+              <div style={{ marginTop: 10, maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {contribuintesVinculo.length ? contribuintesVinculo.map(c => (
+                  <ContribuinteRow key={c.cd} c={c} />
+                )) : !carregandoVinculo ? (
+                  <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum contribuinte encontrado.</div>
+                ) : null}
+                {contribuintesVinculo.length >= 200 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 200 primeiros — refine a busca para ver mais.</div> : null}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+              {(() => { const mx = Math.max(1, ...g.vinculos.map(v => v.n)); return g.vinculos.map((v, i) => (
+                <div key={v.label} onClick={() => setVinculoSel(v)} style={{ cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: '#3a4256' }}>{v.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(v.n)}</span>
+                  </div>
+                  <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${(v.n / mx * 100).toFixed(1)}%`, background: SETOR_CORES[i % SETOR_CORES.length], borderRadius: 5 }} />
+                  </div>
+                </div>
+              )) })()}
+              <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 2 }}>Clique num vínculo para ver os contribuintes</div>
+            </div>
+          )}
+        </div>
+
+        {/* Score de Contribuinte (CRC) */}
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Score de Contribuinte (CRC)</span>
+            <span style={dots}>···</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#9098a8', marginTop: 4 }}>
+            cadastro completo (10) + vínculo CCM (45) + vínculo imóvel (45) − parcelas vencidas (1 cada) · média geral {g.score.mediaGeral.toFixed(1)} pts
+          </div>
+          {(() => {
+            const sc = g.score
+            const tot = sc.total || 1
+            const gg = geomGaugeScore(sc.mediaGeral)
+            const bandaAtual = GAUGE_ZONAS.find(z => gg.v >= z.lo && gg.v <= z.hi)?.banda ?? 'E'
+            return (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
+                <div style={{ position: 'relative', marginTop: 4, maxWidth: 230, marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
+                  <svg viewBox="0 0 200 155" width="100%" style={{ display: 'block' }}>
+                    {gg.zonas.map(z => (
+                      <path key={z.banda} d={z.path} fill="none" stroke={z.cor} strokeWidth="18" />
+                    ))}
+                    {gg.zonas.map(z => (
+                      <text key={z.banda} x={z.labelX} y={z.labelY} fontSize="10" fontWeight="700" fill={z.cor} textAnchor="middle" style={axisFont}>{z.banda}</text>
+                    ))}
+                    <line x1={String(gg.cx)} y1={String(gg.cy)} x2={gg.nx} y2={gg.ny} stroke="#1f2a44" strokeWidth="2.5" strokeLinecap="round" />
+                    <circle cx={String(gg.cx)} cy={String(gg.cy)} r="5" fill="#1f2a44" />
+                    <text x={String(gg.cx)} y={String(gg.cy + 24)} fontSize="20" fontWeight="700" fill="#1f2a44" textAnchor="middle" style={axisFont}>{gg.v.toFixed(1)}</text>
+                    <text x={String(gg.cx)} y={String(gg.cy + 38)} fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>faixa {bandaAtual} · média geral</text>
+                  </svg>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                  {sc.bandas.map(b => (
+                    <div key={b.banda} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: BANDA_COR[b.banda], flex: 'none' }}></span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>Faixa {b.banda} <span style={{ color: '#9098a8' }}>({BANDA_RANGE[b.banda]})</span></span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(b.n)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(b.n / tot * 100)})</span></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      </div>
+
+      {/* ===== ROW 4: Qualificação do Contribuinte ===== */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+          {qualifSel ? (
+            <button onClick={() => { setQualifSel(null); setBuscaQualif('') }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 16, fontWeight: 600 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
+              {qualifSel.label}
+            </button>
+          ) : (
+            <div>
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Qualificação do Contribuinte</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>proprietários, compromissários, posseiros, responsáveis tributários e empresários (um contribuinte pode ter mais de uma qualificação)</div>
+            </div>
+          )}
+          <span style={dots}>···</span>
+        </div>
+
+        {qualifSel ? (
+          <div style={{ marginTop: 12, position: 'relative' }}>
+            {carregandoQualif ? <LoadingOverlay label="Carregando contribuintes…" /> : null}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px', maxWidth: 420 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+              <input value={buscaQualif} onChange={e => setBuscaQualif(e.target.value)} placeholder="Buscar por nome ou CPF/CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+            </div>
+            <div style={{ marginTop: 10, maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {contribuintesQualif.length ? contribuintesQualif.map(c => (
+                <ContribuinteRow key={c.cd} c={c} />
+              )) : !carregandoQualif ? (
+                <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum contribuinte encontrado.</div>
+              ) : null}
+              {contribuintesQualif.length >= 200 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 200 primeiros — refine a busca para ver mais.</div> : null}
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+            {(() => { const mx = Math.max(1, ...g.qualificacoes.map(q => q.n)); return g.qualificacoes.map((q, i) => (
+              <div key={q.label} onClick={() => setQualifSel(q)} style={{ cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: '#3a4256' }}>{q.label}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(q.n)}</span>
+                </div>
+                <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(q.n / mx * 100).toFixed(1)}%`, background: SETOR_CORES[i % SETOR_CORES.length], borderRadius: 5 }} />
+                </div>
+              </div>
+            )) })()}
+          </div>
+        )}
+        {!qualifSel ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 14 }}>Clique numa qualificação para ver os contribuintes</div> : null}
+      </div>
+
       {/* ===== Consultar Contribuinte (busca por nome ou CPF/CNPJ) — perfil completo: o que
           o contribuinte tem (imóveis, estabelecimentos) e sua situação tributária (lançado/
           pago/em aberto por tributo, mais a composição legal do saldo em aberto: valor
           original/correção/juros/multa), a pedido do usuário. Mesmo padrão de "Consultar
-          Empresa" em Mobiliário (busca com dropdown → clique → perfil inline). ===== */}
+          Empresa" em Mobiliário (busca com dropdown → clique → perfil inline). Reordenado
+          pra ficar embaixo de "Qualificação do Contribuinte" — a pedido do usuário. ===== */}
       <div style={{ ...card, marginTop: 18, position: 'relative' }}>
         {carregandoContrib ? <LoadingOverlay label="Carregando contribuinte…" /> : null}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -961,215 +1171,6 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
             </div>
           )
         })() : null}
-      </div>
-
-      {/* ===== ROW 2 ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
-
-        {/* LOLLIPOP HORIZONTAL: Contribuintes com Pendência por Setor */}
-        <div style={{ background: '#fff', borderRadius: 22, padding: 22, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <div>
-              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Contribuintes com Pendência por Setor</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-                contribuintes distintos em cobrança (sem valor R$ na base)
-                {filtros.ano ? ` — exercício ${filtros.ano}` : ''}{filtros.mes ? ` até o mês ${filtros.mes}` : ''}{filtros.pessoa ? ` — ${filtros.pessoa === 'F' ? 'Pessoa Física' : 'Pessoa Jurídica'}` : ''}
-              </div>
-            </div>
-            <span style={reportBadge}>Devedores</span>
-          </div>
-          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {g.devedores.map((d, i) => {
-              const w = (d.n / maxDev) * 100
-              const cor = SETOR_CORES[i % SETOR_CORES.length]
-              return (
-                <div key={d.setor} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ width: 130, flex: 'none', fontSize: 12, color: '#3a4256', textAlign: 'right' }}>{d.label}</span>
-                  <div style={{ flex: 1, position: 'relative', height: 16, display: 'flex', alignItems: 'center' }}>
-                    <div style={{ position: 'absolute', left: 0, right: 0, height: 2, background: '#eef1f7', borderRadius: 2 }} />
-                    <div style={{ position: 'absolute', left: 0, width: `calc(${w.toFixed(1)}% - 7px)`, height: 3, background: cor, borderRadius: 2 }} />
-                    <span style={{ position: 'absolute', left: `calc(${w.toFixed(1)}% - 14px)`, width: 14, height: 14, borderRadius: '50%', background: cor, boxShadow: '0 0 0 3px #fff' }} />
-                  </div>
-                  <span style={{ width: 58, flex: 'none', fontSize: 12, fontWeight: 700, color: '#1f2a44', textAlign: 'right' }}>{fmtInt(d.n)}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Situação Cadastral — barra de proporção */}
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Situação Cadastral</span>
-            <span style={dots}>···</span>
-          </div>
-          <div style={{ fontSize: 13, color: '#9098a8', marginTop: 4 }}>{fmtInt(g.situacao.reduce((s, x) => s + x.n, 0))} contribuintes</div>
-          <div style={{ display: 'flex', height: 56, borderRadius: 12, overflow: 'hidden', marginTop: 26, background: '#eef1f7' }}>
-            {g.situacao.map(s => (
-              <div key={s.label} title={`${s.label}: ${fmtPct(s.pct)}`} style={{ width: `${s.pct.toFixed(2)}%`, background: SIT_CORES[s.label] ?? '#c5ccdb' }} />
-            ))}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 28 }}>
-            {g.situacao.map(s => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: SIT_CORES[s.label] ?? '#c5ccdb', flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>{s.label}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(s.n)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(s.pct)})</span></span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ===== ROW 3: Vínculos + Score de Contribuinte (CRC) ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18 }}>
-        {/* Vínculos — clique num vínculo faz drill para a lista de contribuintes */}
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            {vinculoSel ? (
-              <button onClick={() => { setVinculoSel(null); setBuscaVinculo('') }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 16, fontWeight: 600 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
-                {vinculoSel.label}
-              </button>
-            ) : (
-              <div>
-                <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Vínculos do Contribuinte</span>
-                <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>papéis do contribuinte na base (um contribuinte pode ter vários)</div>
-              </div>
-            )}
-            <span style={dots}>···</span>
-          </div>
-
-          {vinculoSel ? (
-            <div style={{ marginTop: 12, position: 'relative' }}>
-              {carregandoVinculo ? <LoadingOverlay label="Carregando contribuintes…" /> : null}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-                <input value={buscaVinculo} onChange={e => setBuscaVinculo(e.target.value)} placeholder="Buscar por nome ou CPF/CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
-              </div>
-              <div style={{ marginTop: 10, maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {contribuintesVinculo.length ? contribuintesVinculo.map(c => (
-                  <ContribuinteRow key={c.cd} c={c} />
-                )) : !carregandoVinculo ? (
-                  <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum contribuinte encontrado.</div>
-                ) : null}
-                {contribuintesVinculo.length >= 200 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 200 primeiros — refine a busca para ver mais.</div> : null}
-              </div>
-            </div>
-          ) : (
-            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
-              {(() => { const mx = Math.max(1, ...g.vinculos.map(v => v.n)); return g.vinculos.map((v, i) => (
-                <div key={v.label} onClick={() => setVinculoSel(v)} style={{ cursor: 'pointer' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, color: '#3a4256' }}>{v.label}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(v.n)}</span>
-                  </div>
-                  <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${(v.n / mx * 100).toFixed(1)}%`, background: SETOR_CORES[i % SETOR_CORES.length], borderRadius: 5 }} />
-                  </div>
-                </div>
-              )) })()}
-              <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 2 }}>Clique num vínculo para ver os contribuintes</div>
-            </div>
-          )}
-        </div>
-
-        {/* Score de Contribuinte (CRC) */}
-        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Score de Contribuinte (CRC)</span>
-            <span style={dots}>···</span>
-          </div>
-          <div style={{ fontSize: 12, color: '#9098a8', marginTop: 4 }}>
-            cadastro completo (10) + vínculo CCM (45) + vínculo imóvel (45) − parcelas vencidas (1 cada) · média geral {g.score.mediaGeral.toFixed(1)} pts
-          </div>
-          {(() => {
-            const sc = g.score
-            const tot = sc.total || 1
-            const gg = geomGaugeScore(sc.mediaGeral)
-            const bandaAtual = GAUGE_ZONAS.find(z => gg.v >= z.lo && gg.v <= z.hi)?.banda ?? 'E'
-            return (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
-                <div style={{ position: 'relative', marginTop: 4, maxWidth: 230, marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
-                  <svg viewBox="0 0 200 155" width="100%" style={{ display: 'block' }}>
-                    {gg.zonas.map(z => (
-                      <path key={z.banda} d={z.path} fill="none" stroke={z.cor} strokeWidth="18" />
-                    ))}
-                    {gg.zonas.map(z => (
-                      <text key={z.banda} x={z.labelX} y={z.labelY} fontSize="10" fontWeight="700" fill={z.cor} textAnchor="middle" style={axisFont}>{z.banda}</text>
-                    ))}
-                    <line x1={String(gg.cx)} y1={String(gg.cy)} x2={gg.nx} y2={gg.ny} stroke="#1f2a44" strokeWidth="2.5" strokeLinecap="round" />
-                    <circle cx={String(gg.cx)} cy={String(gg.cy)} r="5" fill="#1f2a44" />
-                    <text x={String(gg.cx)} y={String(gg.cy + 24)} fontSize="20" fontWeight="700" fill="#1f2a44" textAnchor="middle" style={axisFont}>{gg.v.toFixed(1)}</text>
-                    <text x={String(gg.cx)} y={String(gg.cy + 38)} fontSize="9" fill="#9098a8" textAnchor="middle" style={axisFont}>faixa {bandaAtual} · média geral</text>
-                  </svg>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-                  {sc.bandas.map(b => (
-                    <div key={b.banda} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                      <span style={{ width: 11, height: 11, borderRadius: 3, background: BANDA_COR[b.banda], flex: 'none' }}></span>
-                      <span style={{ flex: 1, fontSize: 12, color: '#3a4256' }}>Faixa {b.banda} <span style={{ color: '#9098a8' }}>({BANDA_RANGE[b.banda]})</span></span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtInt(b.n)} <span style={{ color: '#9098a8', fontWeight: 500 }}>({fmtPct(b.n / tot * 100)})</span></span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })()}
-        </div>
-      </div>
-
-      {/* ===== ROW 4: Qualificação do Contribuinte ===== */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-          {qualifSel ? (
-            <button onClick={() => { setQualifSel(null); setBuscaQualif('') }}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#283e93', fontSize: 16, fontWeight: 600 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 18l-6-6 6-6" /></svg>
-              {qualifSel.label}
-            </button>
-          ) : (
-            <div>
-              <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Qualificação do Contribuinte</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>proprietários, compromissários, posseiros, responsáveis tributários e empresários (um contribuinte pode ter mais de uma qualificação)</div>
-            </div>
-          )}
-          <span style={dots}>···</span>
-        </div>
-
-        {qualifSel ? (
-          <div style={{ marginTop: 12, position: 'relative' }}>
-            {carregandoQualif ? <LoadingOverlay label="Carregando contribuintes…" /> : null}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px', maxWidth: 420 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-              <input value={buscaQualif} onChange={e => setBuscaQualif(e.target.value)} placeholder="Buscar por nome ou CPF/CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
-            </div>
-            <div style={{ marginTop: 10, maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {contribuintesQualif.length ? contribuintesQualif.map(c => (
-                <ContribuinteRow key={c.cd} c={c} />
-              )) : !carregandoQualif ? (
-                <div style={{ fontSize: 12, color: '#9098a8', padding: '16px 0', textAlign: 'center' }}>Nenhum contribuinte encontrado.</div>
-              ) : null}
-              {contribuintesQualif.length >= 200 ? <div style={{ fontSize: 10, color: '#aeb6c6', textAlign: 'center', marginTop: 4 }}>Mostrando os 200 primeiros — refine a busca para ver mais.</div> : null}
-            </div>
-          </div>
-        ) : (
-          <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-            {(() => { const mx = Math.max(1, ...g.qualificacoes.map(q => q.n)); return g.qualificacoes.map((q, i) => (
-              <div key={q.label} onClick={() => setQualifSel(q)} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: '#3a4256' }}>{q.label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2a44' }}>{fmtInt(q.n)}</span>
-                </div>
-                <div style={{ height: 13, borderRadius: 5, background: '#e9edf8', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${(q.n / mx * 100).toFixed(1)}%`, background: SETOR_CORES[i % SETOR_CORES.length], borderRadius: 5 }} />
-                </div>
-              </div>
-            )) })()}
-          </div>
-        )}
-        {!qualifSel ? <div style={{ fontSize: 10.5, color: '#aeb6c6', marginTop: 14 }}>Clique numa qualificação para ver os contribuintes</div> : null}
       </div>
 
       {/* ===== Tabela: Evolução da Base por Ano ===== */}
