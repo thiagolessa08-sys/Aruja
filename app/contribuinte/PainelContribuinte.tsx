@@ -36,6 +36,8 @@ interface KpiCard { label: string; value: string; subLabel: string; subValue: st
 interface ContribBuscaMatch { cd: number; nome: string; doc: string; pessoa: 'F' | 'J' }
 interface TributoContribDet { grupo: string; lancado: number; pago: number; saldo: number }
 interface ComposicaoContribDet { original: number; correcao: number; juros: number; multa: number; honorarios: number; atualizado: number }
+interface EvolucaoAnoContribDet { ano: number; lancado: number; pago: number; saldo: number }
+interface AdimplenciaContribDet { totalParcelas: number; pagas: number; vencidas: number; aVencer: number; valorVencido: number; taxaAdimplencia: number }
 interface ContribDet {
   cd: number; nome: string; doc: string; pessoa: 'F' | 'J'; situacao: string
   email: string; telefone: string; endereco: string; bairro: string; cep: string
@@ -43,6 +45,9 @@ interface ContribDet {
   lancado: number; pago: number; saldo: number
   porTributo: TributoContribDet[]
   composicao: ComposicaoContribDet
+  score: number; banda: 'A' | 'B' | 'C' | 'D' | 'E'
+  adimplencia: AdimplenciaContribDet
+  evolucaoPorAno: EvolucaoAnoContribDet[]
 }
 
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
@@ -130,6 +135,7 @@ const SETOR_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9
 const SIT_CORES: Record<string, string> = { 'Ativo': '#1fa463', 'Em cadastramento': '#e8962e', 'Sem informação': '#c5ccdb' }
 const BANDA_COR: Record<string, string> = { A: '#1fa463', B: '#6ee0a0', C: '#e8962e', D: '#e0703e', E: '#d64545' }
 const BANDA_RANGE: Record<string, string> = { A: '80–100', B: '60–80', C: '40–60', D: '20–40', E: 'abaixo de 20' }
+const BANDA_BG: Record<string, string> = { A: 'rgba(31,164,99,0.12)', B: 'rgba(110,224,160,0.18)', C: 'rgba(232,150,46,0.12)', D: 'rgba(224,112,62,0.12)', E: 'rgba(214,69,69,0.12)' }
 
 // ===== Barras empilhadas: PF × PJ por ano =====
 function geomStacked(d: NovoAno[]) {
@@ -774,6 +780,7 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
         {contribDet ? (() => {
           const d = contribDet
           const maxLanc = Math.max(1, ...d.porTributo.flatMap(t => [t.lancado, t.pago]))
+          const maxAno = Math.max(1, ...d.evolucaoPorAno.flatMap(a => [a.lancado, a.pago]))
           const totC = d.composicao.atualizado || 1
           const partesComp = [
             { l: 'Valor Original', v: d.composicao.original, cor: '#283e93' },
@@ -814,6 +821,43 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                     <div style={{ fontSize: 15, fontWeight: 700, color: f.cor ?? '#1f2a44', marginTop: 4 }}>{f.value}</div>
                   </div>
                 ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 190px', gap: 16, marginTop: 18, alignItems: 'stretch' }}>
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>Indicadores de Adimplência</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 10 }}>
+                    {[
+                      { label: 'Taxa de Adimplência', value: fmtPct(d.adimplencia.taxaAdimplencia), cor: d.adimplencia.taxaAdimplencia >= 70 ? '#1fa463' : d.adimplencia.taxaAdimplencia >= 40 ? '#e8962e' : '#d64545' },
+                      { label: 'Parcelas Pagas', value: fmtInt(d.adimplencia.pagas), cor: '#1fa463' },
+                      { label: 'Parcelas Vencidas', value: fmtInt(d.adimplencia.vencidas), cor: '#d64545' },
+                      { label: 'Parcelas a Vencer', value: fmtInt(d.adimplencia.aVencer), cor: '#e8962e' },
+                    ].map(f => (
+                      <div key={f.label} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '10px 12px' }}>
+                        <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>{f.label}</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: f.cor, marginTop: 4 }}>{f.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {d.adimplencia.vencidas > 0 ? (
+                    <div style={{ fontSize: 11, color: '#9098a8', marginTop: 8 }}>{fmtAbrev(d.adimplencia.valorVencido)} em parcelas vencidas (inadimplência).</div>
+                  ) : null}
+                </div>
+                <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '10px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3, alignSelf: 'flex-start' }}>Score Tributário (CRC)</div>
+                  {(() => {
+                    const gg = geomGaugeScore(d.score)
+                    return (
+                      <svg viewBox="0 0 200 155" width="100%" style={{ display: 'block', marginTop: 0 }}>
+                        {gg.zonas.map(z => (<path key={z.banda} d={z.path} fill="none" stroke={z.cor} strokeWidth="16" />))}
+                        <line x1={String(gg.cx)} y1={String(gg.cy)} x2={gg.nx} y2={gg.ny} stroke="#1f2a44" strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx={String(gg.cx)} cy={String(gg.cy)} r="4.5" fill="#1f2a44" />
+                        <text x={String(gg.cx)} y={String(gg.cy + 24)} fontSize="20" fontWeight="700" fill="#1f2a44" textAnchor="middle" style={axisFont}>{gg.v.toFixed(0)}</text>
+                      </svg>
+                    )
+                  })()}
+                  <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 12, padding: '3px 10px', color: BANDA_COR[d.banda], background: BANDA_BG[d.banda] }}>Faixa {d.banda} <span style={{ fontWeight: 500, color: '#9098a8' }}>({BANDA_RANGE[d.banda]})</span></span>
+                </div>
               </div>
 
               {d.porTributo.length ? (
@@ -873,6 +917,44 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                         <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44' }}>{fmtAbrev(p.v)}</span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {d.evolucaoPorAno.length ? (
+                <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>Histórico — Evolução dos Débitos por Ano</span>
+                    <div style={{ display: 'flex', gap: 14, fontSize: 10.5, color: '#5b6477' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#283e93' }} />Lançado</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#1fa463' }} />Pago</span>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13, maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}>
+                    {[...d.evolucaoPorAno].reverse().map(a => {
+                      const wLanc = Math.max(3, 100 * a.lancado / maxAno)
+                      const wPago = Math.max(3, 100 * a.pago / maxAno)
+                      return (
+                        <div key={a.ano}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
+                            <span style={{ fontSize: 11.5, color: '#3a4256', fontWeight: 600 }}>{a.ano}</span>
+                            <span style={{ fontSize: 11, color: '#d64545', fontWeight: 700 }}>{a.saldo > 0 ? `${fmtAbrev(a.saldo)} em aberto` : 'Sem saldo em aberto'}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                            <div style={{ flex: 1, height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${wLanc.toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
+                            </div>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 54, textAlign: 'right' }}>{fmtAbrev(a.lancado)}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ flex: 1, height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${wPago.toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
+                            </div>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 54, textAlign: 'right' }}>{fmtAbrev(a.pago)}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ) : null}

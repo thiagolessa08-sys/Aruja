@@ -57,6 +57,9 @@ export async function buscarContribuintes(q: string, top = 15): Promise<Contribu
 
 export interface TributoContribuinte { grupo: string; lancado: number; pago: number; saldo: number }
 export interface ComposicaoContribuinte { original: number; correcao: number; juros: number; multa: number; honorarios: number; atualizado: number }
+export interface EvolucaoAnoContribuinte { ano: number; lancado: number; pago: number; saldo: number }
+export interface AdimplenciaContribuinte { totalParcelas: number; pagas: number; vencidas: number; aVencer: number; valorVencido: number; taxaAdimplencia: number }
+export type BandaScore = 'A' | 'B' | 'C' | 'D' | 'E'
 export interface DetalheContribuinte {
   cd: number; nome: string; doc: string; pessoa: 'F' | 'J'; situacao: string
   email: string; telefone: string; endereco: string; bairro: string; cep: string
@@ -64,6 +67,17 @@ export interface DetalheContribuinte {
   lancado: number; pago: number; saldo: number
   porTributo: TributoContribuinte[]
   composicao: ComposicaoContribuinte
+  score: number; banda: BandaScore
+  adimplencia: AdimplenciaContribuinte
+  evolucaoPorAno: EvolucaoAnoContribuinte[]
+}
+
+function bandaDoScore(score: number): BandaScore {
+  if (score >= 80) return 'A'
+  if (score >= 60) return 'B'
+  if (score >= 40) return 'C'
+  if (score >= 20) return 'D'
+  return 'E'
 }
 
 /**
@@ -80,7 +94,7 @@ export async function detalheContribuinte(cd: number): Promise<DetalheContribuin
 
 async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte | null> {
   const excl = CODIGOS_EXCLUIDOS.join(',')
-  const [cadR, imovR, estabR, tribR, compR] = await Promise.all([
+  const [cadR, imovR, estabR, tribR, compR, scoreR, adimplR, evolR] = await Promise.all([
     agentQuery(`
       SELECT TOP 1 c.cd_contr, c.nm_rsocial, c.no_cpf_cnpj, c.ic_pessoa, c.ds_sit_cadast, c.ds_endereco_email,
         ce.ds_endereco, e.no_logr, ce.nm_bairro, ce.no_cep, tc.telefone
@@ -107,6 +121,54 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       LEFT JOIN (${ATUALIZADA_LOOKUP}) pa ON pa.cd_parcelas = p.cd_parcelas
       WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND pp.vl_saldo > 0`, 1),
+    // Score de Contribuinte (CRC) — mesma fórmula de lib/contribuinte-filtros.ts::scoreContribuinte
+    // (cadastro completo 10 + vínculo CCM 45 + vínculo imóvel 45 − 1 por parcela vencida),
+    // aqui pra UM cd_contr em vez de agregada — sem filtro de cd_tributo, igual ao original.
+    agentQuery(`
+      SELECT
+        (CASE WHEN c.no_cpf_cnpj IS NOT NULL AND c.no_cpf_cnpj <> '-1'
+              AND c.ds_endereco_email IS NOT NULL AND c.ds_endereco_email <> ''
+              AND tc.telefone IS NOT NULL AND ed.cd_contr IS NOT NULL
+          THEN 10 ELSE 0 END)
+        + (CASE WHEN cp.ic_pessoa_contribuinte_mobiliario = 1 THEN 45 ELSE 0 END)
+        + (CASE WHEN cp.ic_pessoa_proprietario = 1 OR cp.ic_pessoa_compromissario = 1 OR cp.ic_pessoa_posseiro = 1 THEN 45 ELSE 0 END)
+        - COALESCE(pv.n, 0) AS raw
+      FROM ${SCHEMA}.tb_dsod_contribuinte c
+      LEFT JOIN ${SCHEMA}.tb_dsod_contribuinte_pessoa cp ON cp.cd_contr = c.cd_contr
+      LEFT JOIN (SELECT cd_contr, MIN(no_tel) telefone FROM ${SCHEMA}.tb_dsod_contribuinte_contato GROUP BY cd_contr) tc ON tc.cd_contr = c.cd_contr
+      LEFT JOIN (SELECT DISTINCT cd_contr FROM ${SCHEMA}.tb_dsod_contribuinte_endereco) ed ON ed.cd_contr = c.cd_contr
+      LEFT JOIN (
+        SELECT g.cd_contr cd_contr, COUNT(*) n
+        FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+        JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+        JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+        WHERE pp.vl_saldo > 0 AND p.dt_vencimento < getdate() AND g.cd_contr > 0
+        GROUP BY g.cd_contr
+      ) pv ON pv.cd_contr = c.cd_contr
+      WHERE c.cd_contr = ${cd}`, 1),
+    // Indicadores de adimplência — situação de TODAS as parcelas (não só as com saldo>0),
+    // pra dar a taxa de adimplência (pagas/total) além da contagem de vencidas/a vencer.
+    agentQuery(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN pp.vl_saldo <= 0 THEN 1 ELSE 0 END) AS pagas,
+        SUM(CASE WHEN pp.vl_saldo > 0 AND p.dt_vencimento < getdate() THEN 1 ELSE 0 END) AS vencidas,
+        SUM(CASE WHEN pp.vl_saldo > 0 AND p.dt_vencimento >= getdate() THEN 1 ELSE 0 END) AS aVencer,
+        SUM(CASE WHEN pp.vl_saldo > 0 AND p.dt_vencimento < getdate() THEN pp.vl_saldo ELSE 0 END) AS valorVencido
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl})`, 1),
+    // Histórico/evolução dos débitos por exercício de lançamento — mesmo motor da quebra
+    // por tributo acima, agrupado por ano em vez de por grupo.
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento AS ano, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago, SUM(pp.vl_saldo) AS saldo
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl})
+      GROUP BY g.no_exercicio_lancamento
+      ORDER BY ano`, 100),
   ])
 
   const c = cadR.rows[0]
@@ -134,6 +196,16 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
   const comp = compR.rows[0] ?? []
   const original = num(comp[0]), correcao = num(comp[1]), juros = num(comp[2]), multa = num(comp[3]), honorarios = num(comp[4])
 
+  const scoreRaw = num(scoreR.rows[0]?.[0])
+  const score = Math.max(0, Math.min(100, scoreRaw))
+
+  const adm = adimplR.rows[0] ?? []
+  const totalParcelas = num(adm[0]), pagasParcelas = num(adm[1]), vencidasParcelas = num(adm[2]), aVencerParcelas = num(adm[3]), valorVencido = num(adm[4])
+
+  const evolucaoPorAno: EvolucaoAnoContribuinte[] = evolR.rows
+    .map(row => ({ ano: num(row[0]), lancado: num(row[1]), pago: num(row[2]), saldo: num(row[3]) }))
+    .filter(x => x.ano >= 1990 && x.ano <= 2035)
+
   return {
     cd, nome: String(c[1] ?? '').trim() || `Contribuinte ${cd}`, doc: String(c[2] ?? '').trim(),
     pessoa: String(c[3] ?? '').trim().toUpperCase() === 'F' ? 'F' : 'J',
@@ -143,5 +215,11 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
     lancado: lancadoTotal, pago: pagoTotal, saldo: saldoTotal,
     porTributo,
     composicao: { original, correcao, juros, multa, honorarios, atualizado: original + correcao + juros + multa + honorarios },
+    score, banda: bandaDoScore(score),
+    adimplencia: {
+      totalParcelas, pagas: pagasParcelas, vencidas: vencidasParcelas, aVencer: aVencerParcelas, valorVencido,
+      taxaAdimplencia: totalParcelas ? (pagasParcelas / totalParcelas) * 100 : 0,
+    },
+    evolucaoPorAno,
   }
 }
