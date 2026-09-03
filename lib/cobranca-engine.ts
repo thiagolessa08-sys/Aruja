@@ -91,7 +91,7 @@ async function resumoCobrancaRaw(ano: number, mes?: number): Promise<ResumoCobra
 
   const baixasPorAno = anoR.rows
     .map(r => ({ ano: num(r[0]), n: num(r[1]) }))
-    .filter(x => x.ano >= 2015 && x.ano <= 2026)
+    .filter(x => x.ano >= 2018 && x.ano <= 2026)
     .sort((a, b) => a.ano - b.ano)
 
   const totalBaixas = canaisR.rows.reduce((a, r) => a + num(r[1]), 0)
