@@ -162,13 +162,27 @@ const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julh
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
 const DAM_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e', '#eaa957', '#f0bb7c']
-// Escala de calor pro treemap "Top 10 Mês/Ano" — rank 0 (maior valor) = vermelho quente,
-// último rank do top 10 = azul frio, passando por laranja/amarelo/verde no meio (mesma lógica
-// de paletas "heat" clássicas, sem precisar de lib extra).
+// Escala de calor pro treemap "Top 10 Mês/Ano" — usa as 4 cores padrão já usadas no resto da
+// tela (azul #283e93 "Lançado", verde #1fa463 "Arrecadado", laranja #e8962e "A Vencer",
+// vermelho #d64545 "Vencido"), em vez de uma escala HSL genérica: rank 0 (maior valor) = azul,
+// último rank do top 10 = vermelho, interpolando azul → verde → laranja → vermelho no meio.
+const HEAT_STOPS: [number, number, number][] = [
+  [40, 62, 147],   // #283e93 azul
+  [31, 164, 99],   // #1fa463 verde
+  [232, 150, 46],  // #e8962e laranja
+  [214, 69, 69],   // #d64545 vermelho
+]
 const heatColor = (rank: number, total: number) => {
   const t = total > 1 ? rank / (total - 1) : 0
-  const hue = 4 + t * 200
-  return `hsl(${hue.toFixed(0)}, 72%, 48%)`
+  const pos = t * (HEAT_STOPS.length - 1)
+  const i = Math.min(HEAT_STOPS.length - 2, Math.floor(pos))
+  const f = pos - i
+  const [r1, g1, b1] = HEAT_STOPS[i]
+  const [r2, g2, b2] = HEAT_STOPS[i + 1]
+  const r = Math.round(r1 + (r2 - r1) * f)
+  const g = Math.round(g1 + (g2 - g1) * f)
+  const b = Math.round(b1 + (b2 - b1) * f)
+  return `rgb(${r}, ${g}, ${b})`
 }
 
 // Tooltip padrão da tela — mesmo visual do gráfico "Baixas Processadas por Ano" (caixa
