@@ -1393,48 +1393,70 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           ano e mês" só faz sentido comparando anos diferentes entre si, então ignora o
           Exercício selecionado no topo (mesmo espírito de "Baixas Processadas por Ano"), só
           reagindo ao filtro de Mês (acumulado) quando ativo. Cor = calor (vermelho = maior
-          valor do top 10, azul = menor), tamanho = valor. */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Mapa de Calor — Top 10 Mês/Ano</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas acumulado, por mês e ano — todo o histórico{mes ? `, até ${MESES[mes - 1]} em cada ano` : ''}.</div>
+          valor do top 10, azul = menor), tamanho = valor. Insights de Cobrança ao lado direito
+          — a pedido do usuário, saiu de junto de "Baixas Processadas por Ano". */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div>
+              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Mapa de Calor — Top 10 Mês/Ano</span>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas acumulado, por mês e ano — todo o histórico{mes ? `, até ${MESES[mes - 1]} em cada ano` : ''}.</div>
+            </div>
+            <span style={reportBadge}>Ranking Top 10</span>
           </div>
-          <span style={reportBadge}>Ranking Top 10</span>
+
+          {(() => {
+            const ranking = resultadoRanking ?? FALLBACK_RESULTADO_RANKING
+            if (!ranking.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados suficientes.</div>
+            const data = ranking.map(r => ({ name: `${MESES_ABREV[r.mes - 1]}/${r.ano}`, geradas: r.geradas }))
+            return (
+              <div style={{ height: 280, marginTop: 14 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <Treemap data={data} dataKey="geradas" nameKey="name" stroke="#fff" isAnimationActive={false}
+                    content={(props: TreemapNode) => {
+                      const { x, y, width, height, index, name } = props
+                      const valor = Number((props as unknown as { geradas?: number }).geradas ?? props.value ?? 0)
+                      const cor = heatColor(index, data.length)
+                      const grande = width > 70 && height > 40
+                      const media = width > 34 && height > 20
+                      return (
+                        <g>
+                          <rect x={x} y={y} width={width} height={height} style={{ fill: cor, stroke: '#fff', strokeWidth: 2 }} />
+                          {grande ? (
+                            <>
+                              <text x={x + 8} y={y + 18} fill="#fff" fontSize={12} fontWeight={700}>{name}</text>
+                              <text x={x + 8} y={y + 34} fill="rgba(255,255,255,0.9)" fontSize={11}>{fmtAbrev(valor)}</text>
+                            </>
+                          ) : media ? (
+                            <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" fontSize={10} fontWeight={700} textAnchor="middle">{name}</text>
+                          ) : null}
+                        </g>
+                      )
+                    }} />
+                </ResponsiveContainer>
+              </div>
+            )
+          })()}
         </div>
 
-        {(() => {
-          const ranking = resultadoRanking ?? FALLBACK_RESULTADO_RANKING
-          if (!ranking.length) return <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '30px 0' }}>Sem dados suficientes.</div>
-          const data = ranking.map(r => ({ name: `${MESES_ABREV[r.mes - 1]}/${r.ano}`, geradas: r.geradas }))
-          return (
-            <div style={{ height: 280, marginTop: 14 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <Treemap data={data} dataKey="geradas" nameKey="name" stroke="#fff" isAnimationActive={false}
-                  content={(props: TreemapNode) => {
-                    const { x, y, width, height, index, name } = props
-                    const valor = Number((props as unknown as { geradas?: number }).geradas ?? props.value ?? 0)
-                    const cor = heatColor(index, data.length)
-                    const grande = width > 70 && height > 40
-                    const media = width > 34 && height > 20
-                    return (
-                      <g>
-                        <rect x={x} y={y} width={width} height={height} style={{ fill: cor, stroke: '#fff', strokeWidth: 2 }} />
-                        {grande ? (
-                          <>
-                            <text x={x + 8} y={y + 18} fill="#fff" fontSize={12} fontWeight={700}>{name}</text>
-                            <text x={x + 8} y={y + 34} fill="rgba(255,255,255,0.9)" fontSize={11}>{fmtAbrev(valor)}</text>
-                          </>
-                        ) : media ? (
-                          <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" fontSize={10} fontWeight={700} textAnchor="middle">{name}</text>
-                        ) : null}
-                      </g>
-                    )
-                  }} />
-              </ResponsiveContainer>
+        {/* Insights */}
+        <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
             </div>
-          )
-        })()}
+            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Cobrança</span>
+          </div>
+          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de Cobrança</div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {insights.map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Potencial de Arrecadação — painel: do saldo devedor, quanto já VENCEU (inadimplência
@@ -1637,63 +1659,42 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
       </div>
 
-      {/* ROW 2 — baixas por ano, com Insights de Cobrança ao lado (largura menor, mesma altura
-          do gráfico) a pedido do usuário. preserveAspectRatio="none" faz o SVG esticar só na
-          largura — a altura fica travada em gb.H (280), não encolhe com a coluna. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Baixas Processadas por Ano</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>volume de DAMs recebidas pelo setor de Cobrança{mes ? ` — acumulado até ${MESES_ABREV[mes - 1]}, em cada ano` : ''}. Exercício selecionado ({g.ano}) em destaque.</div>
-            </div>
-            <span style={reportBadge}>Volume</span>
+      {/* Baixas Processadas por Ano — largura total desde que Insights de Cobrança se mudou
+          pra junto do Mapa de Calor, a pedido do usuário. preserveAspectRatio="none" faz o
+          SVG esticar só na largura — a altura fica travada em gb.H (280). */}
+      <div style={{ ...card, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Baixas Processadas por Ano</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>volume de DAMs recebidas pelo setor de Cobrança{mes ? ` — acumulado até ${MESES_ABREV[mes - 1]}, em cada ano` : ''}. Exercício selecionado ({g.ano}) em destaque.</div>
           </div>
-          <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, height: gb.H, cursor: 'pointer' }}>
-            <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" height="100%" preserveAspectRatio="none" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="cobBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#7d8fce" /></linearGradient>
-                <linearGradient id="cobBarSel" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f0bb7c" /></linearGradient>
-              </defs>
-              {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v}k</text></g>))}
-              <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
-              {gb.bars.map((b, i) => {
-                const sel = b.ano === g.ano
-                return (
-                  <g key={i}>
-                    <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="5" fill={sel ? 'url(#cobBarSel)' : 'url(#cobBar)'} />
-                    <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="9" fontWeight={sel ? 700 : 400} fill={sel ? '#c07a2e' : '#3a4256'} textAnchor="middle" style={axisFont}>{b.ano}</text>
-                  </g>
-                )
-              })}
-              {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip({ left: `${(b.cx / gb.W * 100).toFixed(1)}%`, top: `${(b.y / gb.H * 100).toFixed(1)}%`, ano: b.ano, n: b.n })} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />))}
-            </svg>
-            {tip ? (
-              <div style={{ position: 'absolute', left: tip.left, top: tip.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tip.ano}</div>
-                <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>{fmtInt(tip.n)} baixas</div>
-              </div>
-            ) : null}
-          </div>
+          <span style={reportBadge}>Volume</span>
         </div>
-
-        {/* Insights */}
-        <div style={{ position: 'relative', borderRadius: 22, padding: '16px 20px', background: 'linear-gradient(150deg,#3a55ad 0%,#283e93 100%)', boxShadow: '0 12px 26px rgba(40,62,147,0.32)', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ width: 17, height: 17, borderRadius: '50%', border: '5px solid #283e93', display: 'block' }}></span>
+        <div onMouseLeave={() => setTip(null)} style={{ position: 'relative', marginTop: 14, height: gb.H, cursor: 'pointer' }}>
+          <svg viewBox={`0 0 ${gb.W} ${gb.H}`} width="100%" height="100%" preserveAspectRatio="none" style={{ display: 'block' }}>
+            <defs>
+              <linearGradient id="cobBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#283e93" /><stop offset="100%" stopColor="#7d8fce" /></linearGradient>
+              <linearGradient id="cobBarSel" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e8962e" /><stop offset="100%" stopColor="#f0bb7c" /></linearGradient>
+            </defs>
+            {gb.ticks.map((t, i) => (<g key={i}><line x1="0" y1={t.y.toFixed(1)} x2={String(gb.W)} y2={t.y.toFixed(1)} stroke="#f0f2f8" strokeWidth="1" /><text x="2" y={(t.y - 2).toFixed(1)} fontSize="8" fill="#aeb6c6" style={axisFont}>{t.v}k</text></g>))}
+            <line x1="0" y1={gb.bottom} x2={String(gb.W)} y2={gb.bottom} stroke="#e3e8f1" strokeWidth="1.5" />
+            {gb.bars.map((b, i) => {
+              const sel = b.ano === g.ano
+              return (
+                <g key={i}>
+                  <rect x={b.x.toFixed(1)} y={b.y.toFixed(1)} width={gb.bw.toFixed(1)} height={b.h.toFixed(1)} rx="5" fill={sel ? 'url(#cobBarSel)' : 'url(#cobBar)'} />
+                  <text x={b.cx.toFixed(1)} y={String(gb.H - 6)} fontSize="9" fontWeight={sel ? 700 : 400} fill={sel ? '#c07a2e' : '#3a4256'} textAnchor="middle" style={axisFont}>{b.ano}</text>
+                </g>
+              )
+            })}
+            {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip({ left: `${(b.cx / gb.W * 100).toFixed(1)}%`, top: `${(b.y / gb.H * 100).toFixed(1)}%`, ano: b.ano, n: b.n })} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />))}
+          </svg>
+          {tip ? (
+            <div style={{ position: 'absolute', left: tip.left, top: tip.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{tip.ano}</div>
+              <div style={{ fontSize: 11, color: '#cfd7e6', marginTop: 3 }}>{fmtInt(tip.n)} baixas</div>
             </div>
-            <span style={{ background: '#fff', color: '#283e93', fontSize: 11, fontWeight: 600, borderRadius: 16, padding: '6px 14px' }}>Cobrança</span>
-          </div>
-          <div style={{ marginTop: 14, fontSize: 16, fontWeight: 600, color: '#fff' }}>Insights de Cobrança</div>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {insights.map((t, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ marginTop: 5, width: 6, height: 6, borderRadius: '50%', background: '#fff', flex: 'none' }} />
-                <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
-              </div>
-            ))}
-          </div>
+          ) : null}
         </div>
       </div>
 
