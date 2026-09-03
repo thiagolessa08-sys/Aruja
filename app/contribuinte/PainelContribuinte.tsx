@@ -31,6 +31,20 @@ interface Graficos {
 }
 interface KpiCard { label: string; value: string; subLabel: string; subValue: string; pct: string; dir: 'up' | 'down' | 'flat' }
 
+// "Consultar Contribuinte" — busca + perfil completo de um contribuinte (mesmo padrão de
+// "Consultar Empresa" em Mobiliário).
+interface ContribBuscaMatch { cd: number; nome: string; doc: string; pessoa: 'F' | 'J' }
+interface TributoContribDet { grupo: string; lancado: number; pago: number; saldo: number }
+interface ComposicaoContribDet { original: number; correcao: number; juros: number; multa: number; honorarios: number; atualizado: number }
+interface ContribDet {
+  cd: number; nome: string; doc: string; pessoa: 'F' | 'J'; situacao: string
+  email: string; telefone: string; endereco: string; bairro: string; cep: string
+  imoveis: number; estabelecimentos: number
+  lancado: number; pago: number; saldo: number
+  porTributo: TributoContribDet[]
+  composicao: ComposicaoContribDet
+}
+
 const fmtInt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const fmtPct = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
 const fmtData = (d: string | null) => d ? d.split('-').reverse().join('/') : '—'
@@ -266,6 +280,12 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
   const [serieMesNovos, setSerieMesNovos] = useState<{ mes: number; pf: number; pj: number }[] | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
+  // "Consultar Contribuinte" — busca por nome ou CPF/CNPJ, exibe o perfil completo
+  const [buscaContrib, setBuscaContrib] = useState('')
+  const [matchesContrib, setMatchesContrib] = useState<ContribBuscaMatch[]>([])
+  const [contribDet, setContribDet] = useState<ContribDet | null>(null)
+  const [carregandoContrib, setCarregandoContrib] = useState(false)
+
   // Drill do gráfico "Vínculos do Contribuinte": clique num vínculo → lista de contribuintes
   const [vinculoSel, setVinculoSel] = useState<Vinculo | null>(null)
   const [buscaVinculo, setBuscaVinculo] = useState('')
@@ -317,6 +337,22 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
 
   function selecionarGrupo(grupo: string, label: string) {
     setGrupoSel(prev => prev?.grupo === grupo ? null : { grupo, label })
+  }
+  useEffect(() => {
+    const q = buscaContrib.trim()
+    if (q.length < 2) { setMatchesContrib([]); return }
+    let vivo = true
+    const t = setTimeout(() => {
+      fetch(`/api/contribuinte/buscar?q=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : null)
+        .then(d => { if (vivo && d?.matches) setMatchesContrib(d.matches) })
+    }, 350)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [buscaContrib])
+  function abrirContribuinte(cd: number) {
+    setCarregandoContrib(true); setMatchesContrib([])
+    fetch(`/api/contribuinte/detalhe?id=${cd}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.detalhe) setContribDet(d.detalhe) })
+      .finally(() => setCarregandoContrib(false))
   }
   useEffect(() => {
     if (!vinculoSel) { setContribuintesVinculo([]); return }
@@ -697,6 +733,152 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
               })()}
           </div>
         ) : null}
+      </div>
+
+      {/* ===== Consultar Contribuinte (busca por nome ou CPF/CNPJ) — perfil completo: o que
+          o contribuinte tem (imóveis, estabelecimentos) e sua situação tributária (lançado/
+          pago/em aberto por tributo, mais a composição legal do saldo em aberto: valor
+          original/correção/juros/multa), a pedido do usuário. Mesmo padrão de "Consultar
+          Empresa" em Mobiliário (busca com dropdown → clique → perfil inline). ===== */}
+      <div style={{ ...card, marginTop: 18, position: 'relative' }}>
+        {carregandoContrib ? <LoadingOverlay label="Carregando contribuinte…" /> : null}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Consultar Contribuinte</span>
+            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Perfil completo: imóveis, estabelecimentos, tributos lançados/pagos/em aberto e composição do saldo.</div>
+          </div>
+          <div style={{ position: 'relative', width: 340, maxWidth: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '7px 12px' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+              <input value={buscaContrib} onChange={e => setBuscaContrib(e.target.value)} placeholder="Nome, CPF ou CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, color: '#3a4256', width: '100%', fontFamily: 'inherit' }} />
+              {buscaContrib || contribDet ? (
+                <button onClick={() => { setBuscaContrib(''); setMatchesContrib([]); setContribDet(null) }} title="Limpar pesquisa"
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9098a8', display: 'flex', alignItems: 'center', padding: 0, flex: 'none' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              ) : null}
+            </div>
+            {matchesContrib.length ? (
+              <div style={{ position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', left: 0, right: 0, maxHeight: 280, overflowY: 'auto', background: '#fff', borderRadius: 12, border: '1px solid #e3e9f5', boxShadow: '0 12px 30px rgba(20,40,90,0.18)', padding: 5 }}>
+                {matchesContrib.map(m => (
+                  <div key={m.cd} onClick={() => abrirContribuinte(m.cd)} style={{ padding: '7px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
+                    <div style={{ color: '#1f2a44', fontWeight: 600 }}>{m.nome}</div>
+                    <div style={{ color: '#9098a8', fontSize: 11 }}>{m.doc || '—'} · {m.pessoa === 'F' ? 'Pessoa Física' : 'Pessoa Jurídica'}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {contribDet ? (() => {
+          const d = contribDet
+          const maxLanc = Math.max(1, ...d.porTributo.flatMap(t => [t.lancado, t.pago]))
+          const totC = d.composicao.atualizado || 1
+          const partesComp = [
+            { l: 'Valor Original', v: d.composicao.original, cor: '#283e93' },
+            { l: 'Correção', v: d.composicao.correcao, cor: '#7d8fce' },
+            { l: 'Juros', v: d.composicao.juros, cor: '#e8962e' },
+            { l: 'Multa', v: d.composicao.multa, cor: '#d64545' },
+            { l: 'Encargos legais', v: d.composicao.honorarios, cor: '#5b6477' },
+          ].filter(p => p.v > 0)
+          return (
+            <div style={{ marginTop: 16 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#283e93' }}>{d.nome}</div>
+                <div style={{ marginTop: 7, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, borderRadius: 12, padding: '3px 10px',
+                    color: d.pessoa === 'J' ? '#7d8fce' : '#283e93',
+                    background: d.pessoa === 'J' ? 'rgba(125,143,206,0.12)' : 'rgba(40,62,147,0.1)',
+                  }}>
+                    {d.pessoa === 'J' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+                  </span>
+                  {d.situacao ? <span style={{ fontSize: 11, fontWeight: 600, color: '#5b6477', background: '#f4f7fc', border: '1px solid #e3e9f5', borderRadius: 12, padding: '3px 10px' }}>Situação: {d.situacao}</span> : null}
+                </div>
+                <div style={{ fontSize: 12, color: '#5b6477', marginTop: 7 }}>{d.pessoa === 'F' ? 'CPF' : 'CNPJ'} {d.doc || '—'}</div>
+                <div style={{ fontSize: 12, color: '#5b6477' }}>{d.endereco || 'Endereço não cadastrado'}{d.bairro ? ` — ${d.bairro}` : ''}{d.cep ? ` · CEP ${d.cep}` : ''}</div>
+                <div style={{ fontSize: 12, color: '#5b6477' }}>{d.email || '—'}{d.telefone ? ` · ${d.telefone}` : ''}</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginTop: 16 }}>
+                {[
+                  { label: 'Imóveis', value: fmtInt(d.imoveis) },
+                  { label: 'Estabelecimentos', value: fmtInt(d.estabelecimentos) },
+                  { label: 'Tributos Lançados', value: fmtAbrev(d.lancado), cor: '#283e93' },
+                  { label: 'Tributos Pagos', value: fmtAbrev(d.pago), cor: '#1fa463' },
+                  { label: 'Em Aberto', value: fmtAbrev(d.saldo), cor: '#d64545' },
+                ].map(f => (
+                  <div key={f.label} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3 }}>{f.label}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: f.cor ?? '#1f2a44', marginTop: 4 }}>{f.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {d.porTributo.length ? (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>Tributos por Tipo</span>
+                    <div style={{ display: 'flex', gap: 14, fontSize: 10.5, color: '#5b6477' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#283e93' }} />Lançado</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#1fa463' }} />Pago</span>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13 }}>
+                    {d.porTributo.map(t => {
+                      const wLanc = Math.max(3, 100 * t.lancado / maxLanc)
+                      const wPago = Math.max(3, 100 * t.pago / maxLanc)
+                      return (
+                        <div key={t.grupo}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
+                            <span style={{ fontSize: 11.5, color: '#3a4256', fontWeight: 600 }}>{t.grupo}</span>
+                            <span style={{ fontSize: 11, color: '#d64545', fontWeight: 700 }}>{t.saldo > 0 ? `${fmtAbrev(t.saldo)} em aberto` : 'Sem saldo em aberto'}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                            <div style={{ flex: 1, height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${wLanc.toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
+                            </div>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 54, textAlign: 'right' }}>{fmtAbrev(t.lancado)}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ flex: 1, height: 10, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${wPago.toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
+                            </div>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 54, textAlign: 'right' }}>{fmtAbrev(t.pago)}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginTop: 18, fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '16px 0' }}>Nenhum lançamento tributário para este contribuinte.</div>
+              )}
+
+              {partesComp.length ? (
+                <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>Composição do que está em aberto</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#283e93' }}>{fmtAbrev(totC)}</span>
+                  </div>
+                  <div style={{ height: 14, borderRadius: 7, background: '#eef1f7', overflow: 'hidden', display: 'flex', marginTop: 10 }}>
+                    {partesComp.map(p => (<div key={p.l} title={p.l} style={{ width: `${(100 * p.v / totC).toFixed(2)}%`, background: p.cor }} />))}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 12 }}>
+                    {partesComp.map(p => (
+                      <div key={p.l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: 3, background: p.cor, flex: 'none' }} />
+                        <span style={{ fontSize: 11.5, color: '#3a4256' }}>{p.l}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1f2a44' }}>{fmtAbrev(p.v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )
+        })() : null}
       </div>
 
       {/* ===== ROW 2 ===== */}
