@@ -26,13 +26,24 @@ for (const grp of GRUPOS_TRIBUTO) for (const c of grp.codigos) COD_TO_GRUPO.set(
 const ORDEM_GRUPOS = [...GRUPOS_TRIBUTO.map(g => g.label), 'Outros']
 
 // Mesmo lookup de lib/divida-engine.ts (ATUALIZADA_LOOKUP) — cd_parcelas não é único em
-// tb_dsod_parcelas_atualizadas, então pré-agrega ANTES do JOIN. Aqui sem filtro de situação
-// de dívida (Normal/DividaAtiva/Ajuizada/Em Ajuizamento): "em aberto" deste card é o saldo
-// inteiro do contribuinte, não só a parte já em dívida ativa.
+// tb_dsod_parcelas_atualizadas, então pré-agrega ANTES do JOIN.
 const ATUALIZADA_LOOKUP = `SELECT cd_parcelas,
   SUM(vl_parcela) vl_parcela, SUM(vl_correcao) vl_correcao, SUM(vl_juros) vl_juros,
   SUM(vl_multa) vl_multa, SUM(vl_honorarios) vl_honorarios
   FROM ${SCHEMA}.tb_dsod_parcelas_atualizadas GROUP BY cd_parcelas`
+
+// Filtros do "livro-razão de movimento" (tb_dsod_parcela_movimento) — modelo OFICIAL de
+// lançado/arrecadado/em aberto por tributo (ver docs/REGRAS-DE-NEGOCIO.md REGRA 4/5 e
+// lib/regras-negocio.ts). tb_dsod_parcela_posicao (usado antes aqui) é o "modelo antigo":
+// seu vl_lancto NÃO desconta cancelamentos/estornos (fica com o valor bruto original), o que
+// fazia "Lançado" aparecer muito maior que "Pago + Em Aberto" pra contribuintes com guias
+// canceladas/isentas/suspensas — caso real que motivou a troca: 2HOUSE TRANSACOES IMOBILIARIAS,
+// TFE lançado 25,3 mil (posição) vs 12,7 mil (movimento, líquido de estorno), com pago 855 e
+// saldo 0 nos dois — só o "lançado" bruto estava errado, mascarando que boa parte já tinha
+// sido cancelada/isenta/suspensa, não que o dinheiro estava "sumindo" do em aberto.
+const MOV_BASE = `p.no_parcela <> 0 AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
+const MOV_LANCADO = `pm.cd_tipo_movimento <= 3`
+const MOV_ABERTO = `pm.cd_tipo_movimento IN (0,1,2,3,11,12,14,20) AND pm.cd_tipo_lancamento IN (0,4,7,10,1)`
 
 export interface ContribuinteMatch { cd: number; nome: string; doc: string; pessoa: 'F' | 'J' }
 
@@ -82,11 +93,12 @@ function bandaDoScore(score: number): BandaScore {
 
 /**
  * Perfil completo de um contribuinte — "o que ele tem" (imóveis, estabelecimentos/inscrição
- * mobiliária) e sua situação tributária (lançado/pago/em aberto por grupo de tributo, mais
- * a composição legal do saldo em aberto: valor original/correção/juros/multa/encargos —
- * mesmo modelo de lib/divida-engine.ts, aqui por contribuinte em vez de agregado). Motor:
- * tb_dsod_parcela_posicao (vl_lancto/vl_pagto/vl_saldo) → parcelas → guias, igual ao resto
- * do dashboard de Cobrança/Dívida Ativa.
+ * mobiliária) e sua situação tributária (lançado/pago/em aberto por grupo de tributo, mais a
+ * composição legal do saldo em aberto: valor original/correção/juros/multa/encargos, e o
+ * histórico/evolução por ano). Lançado/pago/em aberto/adimplência vêm do modelo OFICIAL
+ * (tb_dsod_parcela_movimento — REGRA 4/5 em lib/regras-negocio.ts); só o Score de Contribuinte
+ * (CRC) continua no modelo de tb_dsod_parcela_posicao, pra ficar igual ao gauge agregado já
+ * existente na tela.
  */
 export async function detalheContribuinte(cd: number): Promise<DetalheContribuinte | null> {
   return cached(`contribuinteDetalhe:${cd}`, TTL_15MIN, () => detalheContribuinteRaw(cd))
@@ -94,7 +106,7 @@ export async function detalheContribuinte(cd: number): Promise<DetalheContribuin
 
 async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte | null> {
   const excl = CODIGOS_EXCLUIDOS.join(',')
-  const [cadR, imovR, estabR, tribR, compR, scoreR, adimplR, evolR] = await Promise.all([
+  const [cadR, imovR, estabR, lancTribR, pagoTribR, abertoTribR, parcelaR, scoreR, lancAnoR, pagoAnoR, abertoAnoR] = await Promise.all([
     agentQuery(`
       SELECT TOP 1 c.cd_contr, c.nm_rsocial, c.no_cpf_cnpj, c.ic_pessoa, c.ds_sit_cadast, c.ds_endereco_email,
         ce.ds_endereco, e.no_logr, ce.nm_bairro, ce.no_cep, tc.telefone
@@ -105,31 +117,52 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
       WHERE c.cd_contr = ${cd}`, 1),
     agentQuery(`SELECT COUNT(DISTINCT cd_imovel_urbano) FROM ${SCHEMA}.tb_dsod_imovel_urbano WHERE cd_contr_proprietario = ${cd}`, 1),
     agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_contribuinte_mobiliario WHERE cd_contr = ${cd}`, 1),
+    // LANÇADO por tributo (REGRA 4) — só tipos de movimento <=3 (o lançamento em si; exclui
+    // cancelamento/estorno, que tem outro cd_tipo_movimento).
     agentQuery(`
-      SELECT g.cd_tributo AS cd, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago, SUM(pp.vl_saldo) AS saldo
-      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
-      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
-      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl})
+      SELECT g.cd_tributo AS cd, SUM(pm.vl_movimento) AS v
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_LANCADO}
       GROUP BY g.cd_tributo`, 300),
+    // ARRECADADO por tributo (REGRA 4) — só baixas de recebimento de fato (exclui estorno de
+    // baixa, que devolveria o valor pro "em aberto").
     agentQuery(`
-      SELECT SUM(CASE WHEN pa.cd_parcelas IS NOT NULL THEN pa.vl_parcela ELSE pp.vl_saldo END) AS original,
-        SUM(COALESCE(pa.vl_correcao,0)) AS correcao, SUM(COALESCE(pa.vl_juros,0)) AS juros,
-        SUM(COALESCE(pa.vl_multa,0)) AS multa, SUM(COALESCE(pa.vl_honorarios,0)) AS honorarios
-      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
-      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
-      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      LEFT JOIN (${ATUALIZADA_LOOKUP}) pa ON pa.cd_parcelas = p.cd_parcelas
-      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND pp.vl_saldo > 0`, 1),
+      SELECT g.cd_tributo AS cd, SUM(pm.vl_movimento) AS v
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE}
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
+      GROUP BY g.cd_tributo`, 300),
+    // EM ABERTO por tributo (REGRA 4) — saldo líquido (lançamento − baixas − isenção −
+    // suspensão, via no_sinal); negativo (pago > devido) é clampado a 0 no JS.
+    agentQuery(`
+      SELECT g.cd_tributo AS cd, SUM(pm.vl_movimento * pm.no_sinal) AS bal
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_ABERTO}
+      GROUP BY g.cd_tributo`, 300),
+    // Saldo oficial POR PARCELA (mesmo filtro do "em aberto" acima, sem agrupar por tributo)
+    // — base pra adimplência (parcela paga = saldo oficial <= 0) e pra achar quais parcelas
+    // estão realmente em aberto, pra restringir a composição legal a elas (em vez de usar
+    // vl_saldo de tb_dsod_parcela_posicao, que diverge do modelo oficial).
+    agentQuery(`
+      SELECT p.cd_parcelas AS cd, MAX(p.dt_vencimento) AS venc, SUM(pm.vl_movimento * pm.no_sinal) AS bal
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_ABERTO}
+      GROUP BY p.cd_parcelas`, 2000),
     // Score de Contribuinte (CRC) — mesma fórmula de lib/contribuinte-filtros.ts::scoreContribuinte
     // (cadastro completo 10 + vínculo CCM 45 + vínculo imóvel 45 − 1 por parcela vencida), aqui
-    // pra UM cd_contr em vez de agregada. Diferença deliberada em relação ao score agregado:
-    // aqui a contagem de vencidas EXCLUI CODIGOS_EXCLUIDOS (códigos operacionais/não-tributo,
-    // ex.: 20 "Documento de Arrecadacao" — balde genérico de DAM, não um tributo de verdade) —
-    // sem isso, um contribuinte com DAMs genéricas vencidas antigas (ex.: renegociação de
-    // décadas atrás) tinha o score arrastado pra 0/Faixa E mesmo com ótima adimplência nos
-    // tributos reais (IPTU/ISS/etc.), uma contradição visível dentro do mesmo card (a pedido
-    // do usuário, após comparar Score×Adimplência de um caso real e notar a discrepância).
+    // pra UM cd_contr em vez de agregada. Continua no modelo de tb_dsod_parcela_posicao (não no
+    // movimento) pra ficar igual ao gauge agregado "Score de Contribuinte (CRC)" já existente
+    // na tela — só exclui CODIGOS_EXCLUIDOS (ver commit anterior) na contagem de vencidas.
     agentQuery(`
       SELECT
         (CASE WHEN c.no_cpf_cnpj IS NOT NULL AND c.no_cpf_cnpj <> '-1'
@@ -152,29 +185,32 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
         GROUP BY g.cd_contr
       ) pv ON pv.cd_contr = c.cd_contr
       WHERE c.cd_contr = ${cd}`, 1),
-    // Indicadores de adimplência — situação de TODAS as parcelas (não só as com saldo>0),
-    // pra dar a taxa de adimplência (pagas/total) além da contagem de vencidas/a vencer.
+    // Histórico/evolução por exercício de lançamento — mesmos 3 filtros oficiais acima
+    // (lançado/pago/em aberto), agrupados por ano em vez de por tributo.
     agentQuery(`
-      SELECT
-        COUNT(*) AS total,
-        SUM(CASE WHEN pp.vl_saldo <= 0 THEN 1 ELSE 0 END) AS pagas,
-        SUM(CASE WHEN pp.vl_saldo > 0 AND p.dt_vencimento < getdate() THEN 1 ELSE 0 END) AS vencidas,
-        SUM(CASE WHEN pp.vl_saldo > 0 AND p.dt_vencimento >= getdate() THEN 1 ELSE 0 END) AS aVencer,
-        SUM(CASE WHEN pp.vl_saldo > 0 AND p.dt_vencimento < getdate() THEN pp.vl_saldo ELSE 0 END) AS valorVencido
-      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
-      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
-      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl})`, 1),
-    // Histórico/evolução dos débitos por exercício de lançamento — mesmo motor da quebra
-    // por tributo acima, agrupado por ano em vez de por grupo.
+      SELECT g.no_exercicio_lancamento AS ano, SUM(pm.vl_movimento) AS v
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_LANCADO}
+      GROUP BY g.no_exercicio_lancamento`, 100),
     agentQuery(`
-      SELECT g.no_exercicio_lancamento AS ano, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago, SUM(pp.vl_saldo) AS saldo
-      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
-      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
-      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl})
-      GROUP BY g.no_exercicio_lancamento
-      ORDER BY ano`, 100),
+      SELECT g.no_exercicio_lancamento AS ano, SUM(pm.vl_movimento) AS v
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE}
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
+      GROUP BY g.no_exercicio_lancamento`, 100),
+    agentQuery(`
+      SELECT g.no_exercicio_lancamento AS ano, SUM(pm.vl_movimento * pm.no_sinal) AS bal
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_ABERTO}
+      GROUP BY g.no_exercicio_lancamento`, 100),
   ])
 
   const c = cadR.rows[0]
@@ -185,11 +221,19 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
   const bairro = String(c[8] ?? '').trim()
   const cep = String(c[9] ?? '').trim()
 
+  const lancMap = new Map<number, number>()
+  for (const row of lancTribR.rows) lancMap.set(num(row[0]), num(row[1]))
+  const pagoMap = new Map<number, number>()
+  for (const row of pagoTribR.rows) pagoMap.set(num(row[0]), num(row[1]))
+  const abertoMap = new Map<number, number>()
+  for (const row of abertoTribR.rows) abertoMap.set(num(row[0]), Math.max(0, num(row[1])))
+
+  const codigos = new Set([...lancMap.keys(), ...pagoMap.keys(), ...abertoMap.keys()])
   const grupoMap = new Map<string, { lancado: number; pago: number; saldo: number }>()
   let lancadoTotal = 0, pagoTotal = 0, saldoTotal = 0
-  for (const row of tribR.rows) {
-    const grupo = COD_TO_GRUPO.get(num(row[0])) ?? 'Outros'
-    const lancado = num(row[1]), pago = num(row[2]), saldo = num(row[3])
+  for (const codigo of codigos) {
+    const grupo = COD_TO_GRUPO.get(codigo) ?? 'Outros'
+    const lancado = lancMap.get(codigo) ?? 0, pago = pagoMap.get(codigo) ?? 0, saldo = abertoMap.get(codigo) ?? 0
     lancadoTotal += lancado; pagoTotal += pago; saldoTotal += saldo
     const acc = grupoMap.get(grupo) ?? { lancado: 0, pago: 0, saldo: 0 }
     acc.lancado += lancado; acc.pago += pago; acc.saldo += saldo
@@ -199,18 +243,51 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
     .map(grupo => ({ grupo, ...(grupoMap.get(grupo) ?? { lancado: 0, pago: 0, saldo: 0 }) }))
     .filter(t => t.lancado > 0 || t.saldo > 0)
 
-  const comp = compR.rows[0] ?? []
-  const original = num(comp[0]), correcao = num(comp[1]), juros = num(comp[2]), multa = num(comp[3]), honorarios = num(comp[4])
+  // Adimplência + lista de parcelas realmente em aberto (saldo oficial > 0), usada a seguir
+  // pra restringir a composição legal só a elas.
+  const hoje = new Date()
+  const parcelas = parcelaR.rows.map(row => ({ cd: num(row[0]), venc: String(row[1] ?? ''), bal: num(row[2]) }))
+  const totalParcelas = parcelas.length
+  let pagasParcelas = 0, vencidasParcelas = 0, aVencerParcelas = 0, valorVencido = 0
+  const abertas: number[] = []
+  for (const p of parcelas) {
+    if (p.bal <= 0.01) { pagasParcelas++; continue }
+    abertas.push(p.cd)
+    const venceu = p.venc && new Date(p.venc) < hoje
+    if (venceu) { vencidasParcelas++; valorVencido += p.bal } else { aVencerParcelas++ }
+  }
+
+  let original = 0, correcao = 0, juros = 0, multa = 0, honorarios = 0
+  if (abertas.length) {
+    const balPorParcela = new Map(parcelas.map(p => [p.cd, p.bal]))
+    const compR = await agentQuery(`
+      SELECT cd_parcelas, vl_parcela, vl_correcao, vl_juros, vl_multa, vl_honorarios
+      FROM (${ATUALIZADA_LOOKUP}) pa
+      WHERE cd_parcelas IN (${abertas.join(',')})`, abertas.length)
+    const cobertas = new Set<number>()
+    for (const row of compR.rows) {
+      const cdP = num(row[0])
+      cobertas.add(cdP)
+      correcao += num(row[2]); juros += num(row[3]); multa += num(row[4]); honorarios += num(row[5])
+      original += num(row[1])
+    }
+    for (const cdP of abertas) if (!cobertas.has(cdP)) original += balPorParcela.get(cdP) ?? 0
+  }
 
   const scoreRaw = num(scoreR.rows[0]?.[0])
   const score = Math.max(0, Math.min(100, scoreRaw))
 
-  const adm = adimplR.rows[0] ?? []
-  const totalParcelas = num(adm[0]), pagasParcelas = num(adm[1]), vencidasParcelas = num(adm[2]), aVencerParcelas = num(adm[3]), valorVencido = num(adm[4])
-
-  const evolucaoPorAno: EvolucaoAnoContribuinte[] = evolR.rows
-    .map(row => ({ ano: num(row[0]), lancado: num(row[1]), pago: num(row[2]), saldo: num(row[3]) }))
-    .filter(x => x.ano >= 1990 && x.ano <= 2035)
+  const anoLancMap = new Map<number, number>()
+  for (const row of lancAnoR.rows) anoLancMap.set(num(row[0]), num(row[1]))
+  const anoPagoMap = new Map<number, number>()
+  for (const row of pagoAnoR.rows) anoPagoMap.set(num(row[0]), num(row[1]))
+  const anoAbertoMap = new Map<number, number>()
+  for (const row of abertoAnoR.rows) anoAbertoMap.set(num(row[0]), Math.max(0, num(row[1])))
+  const anos = new Set([...anoLancMap.keys(), ...anoPagoMap.keys(), ...anoAbertoMap.keys()])
+  const evolucaoPorAno: EvolucaoAnoContribuinte[] = Array.from(anos)
+    .filter(ano => ano >= 1990 && ano <= 2035)
+    .sort((a, b) => a - b)
+    .map(ano => ({ ano, lancado: anoLancMap.get(ano) ?? 0, pago: anoPagoMap.get(ano) ?? 0, saldo: anoAbertoMap.get(ano) ?? 0 }))
 
   return {
     cd, nome: String(c[1] ?? '').trim() || `Contribuinte ${cd}`, doc: String(c[2] ?? '').trim(),
