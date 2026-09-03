@@ -742,6 +742,49 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
               </>
             )
           })()}
+
+          {/* Informativo fixo abaixo do gráfico — melhor desempenho por Tributo × Usuário,
+              independente da lente/drill selecionados acima (por isso é um IIFE separado, não
+              dentro do bloco de cima). Só considera itens com lançado > R$ 1 milhão (mesmo
+              piso de "menor conversão" já usado nos Insights de Cobrança, evita destacar um
+              tributo/usuário com volume irrisório por coincidência) e exclui "Demais
+              tributos" (balde agregado), "Internet" (autoemissão pelo portal) e "Schedule"
+              (geração automática agendada) do ranking de usuário — nenhum dos dois é uma
+              pessoa de verdade pra ganhar um "melhor usuário".*/}
+          {(() => {
+            const an = analise ?? FALLBACK_ANALISE
+            const PISO_LANCADO = 1e6
+            const candidatosTrib = an.porTributo.filter(t => t.lancado > PISO_LANCADO && !/^Demais tributos/.test(t.nome))
+            const candidatosOper = an.porOperador.filter(o => o.lancado > PISO_LANCADO && o.nome !== 'Internet' && o.nome !== 'Schedule')
+            const melhorTrib = [...candidatosTrib].sort((a, b) => b.conversao - a.conversao)[0]
+            const melhorOper = [...candidatosOper].sort((a, b) => b.conversao - a.conversao)[0]
+            if (!melhorTrib && !melhorOper) return null
+            const melhorGeral = !melhorTrib ? melhorOper! : !melhorOper ? melhorTrib : melhorTrib.conversao >= melhorOper.conversao ? melhorTrib : melhorOper
+            const origemGeral = melhorGeral === melhorTrib ? 'tributo' : 'usuário'
+            return (
+              <div style={{ marginTop: 16, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 14, padding: '14px 16px' }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 10 }}>Melhor desempenho — Por Tributo × Usuário</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor desempenho geral <span style={{ color: '#aeb6c6' }}>({origemGeral})</span></span>
+                    <span title={melhorGeral.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#1fa463', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorGeral.nome} · {fmtPct(melhorGeral.conversao)}</span>
+                  </div>
+                  {melhorTrib ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor tributo</span>
+                      <span title={melhorTrib.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#283e93', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorTrib.nome} · {fmtPct(melhorTrib.conversao)}</span>
+                    </div>
+                  ) : null}
+                  {melhorOper ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor usuário</span>
+                      <span title={melhorOper.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#e8962e', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorOper.nome} · {fmtPct(melhorOper.conversao)}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Companion panel — Documentos de Arrecadação Municipal (DAM) gerados. Só a
