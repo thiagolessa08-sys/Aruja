@@ -822,11 +822,16 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           })()}
 
           {/* Informativo fixo abaixo do gráfico — melhor desempenho por Tributo × Usuário. Reage
-              à lente e à busca escolhidas em "Análise de Conversão", a pedido do usuário: na
-              lente Por Tributo, só "Melhor tributo" aparece (dentre os que batem a busca); na
-              lente Por Operador, só "Melhor usuário" (idem); Por Período — que não tem essa
-              quebra — mantém os dois lado a lado com "Melhor desempenho geral", como antes (a
-              busca ali é por ano, não filtra tributo/usuário). Só considera itens com lançado
+              à lente, à busca E ao drill escolhidos em "Análise de Conversão" — todos os
+              níveis de interação da própria card, não só a lente principal (a pedido do
+              usuário): na lente Por Tributo, só "Melhor tributo" aparece (dentre os que batem
+              a busca); na lente Por Operador, só "Melhor usuário" (idem); Por Período — que
+              não tem essa quebra no nível principal — mantém os dois lado a lado com "Melhor
+              desempenho geral", como antes (a busca ali é por ano, não filtra
+              tributo/usuário). Quando o usuário desce mais um nível — clica num período ou
+              operador específico pra ver o drill por tributo —, o box acompanha: passa a
+              calcular "Melhor tributo" só dentro daquele recorte (conversaoDrillData), já que
+              nesse ponto não há mais informação de usuário. Só considera itens com lançado
               > R$ 1 milhão (mesmo piso de "menor conversão" já usado nos Insights de Cobrança,
               evita destacar um tributo/usuário com volume irrisório por coincidência) e exclui
               "Demais tributos" (balde agregado), "Internet" (autoemissão pelo portal) e
@@ -837,6 +842,28 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             const dimAtual = conversaoDim ?? 'tributo'
             const PISO_LANCADO = 1e6
             const busca = buscaConversao.trim().toLowerCase()
+            const podeDrillAqui = dimAtual === 'periodo' || dimAtual === 'operador'
+            const drilled = podeDrillAqui && !!conversaoDrillItem && !!conversaoDrillData && !conversaoDrillErro
+
+            if (drilled) {
+              const rotulo = dimAtual === 'periodo' ? `Exercício ${conversaoDrillItem!.nome}` : conversaoDrillItem!.nome
+              const candidatos = conversaoDrillData!.filter(t => t.lancado > PISO_LANCADO && !/^Demais tributos/.test(t.nome))
+              const melhor = [...candidatos].sort((a, b) => b.conversao - a.conversao)[0]
+              return (
+                <div style={{ marginTop: 16, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 14, padding: '14px 16px' }}>
+                  <div title={rotulo} style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44', marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Melhor desempenho — Por Tributo <span style={{ color: '#9098a8', fontWeight: 400 }}>(em {rotulo})</span></div>
+                  {!melhor ? (
+                    <div style={{ fontSize: 11.5, color: '#9098a8' }}>Nenhum tributo acima do piso de R$ 1 mi lançado neste recorte.</div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor tributo</span>
+                      <span title={melhor.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#283e93', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhor.nome} · {fmtPct(melhor.conversao)}</span>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
             let candidatosTrib = an.porTributo.filter(t => t.lancado > PISO_LANCADO && !/^Demais tributos/.test(t.nome))
             let candidatosOper = an.porOperador.filter(o => o.lancado > PISO_LANCADO && o.nome !== 'Internet' && o.nome !== 'Schedule')
             if (dimAtual === 'tributo' && busca) candidatosTrib = candidatosTrib.filter(t => t.nome.toLowerCase().includes(busca))
