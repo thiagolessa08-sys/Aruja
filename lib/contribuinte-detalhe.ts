@@ -122,8 +122,14 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
       LEFT JOIN (${ATUALIZADA_LOOKUP}) pa ON pa.cd_parcelas = p.cd_parcelas
       WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND pp.vl_saldo > 0`, 1),
     // Score de Contribuinte (CRC) — mesma fórmula de lib/contribuinte-filtros.ts::scoreContribuinte
-    // (cadastro completo 10 + vínculo CCM 45 + vínculo imóvel 45 − 1 por parcela vencida),
-    // aqui pra UM cd_contr em vez de agregada — sem filtro de cd_tributo, igual ao original.
+    // (cadastro completo 10 + vínculo CCM 45 + vínculo imóvel 45 − 1 por parcela vencida), aqui
+    // pra UM cd_contr em vez de agregada. Diferença deliberada em relação ao score agregado:
+    // aqui a contagem de vencidas EXCLUI CODIGOS_EXCLUIDOS (códigos operacionais/não-tributo,
+    // ex.: 20 "Documento de Arrecadacao" — balde genérico de DAM, não um tributo de verdade) —
+    // sem isso, um contribuinte com DAMs genéricas vencidas antigas (ex.: renegociação de
+    // décadas atrás) tinha o score arrastado pra 0/Faixa E mesmo com ótima adimplência nos
+    // tributos reais (IPTU/ISS/etc.), uma contradição visível dentro do mesmo card (a pedido
+    // do usuário, após comparar Score×Adimplência de um caso real e notar a discrepância).
     agentQuery(`
       SELECT
         (CASE WHEN c.no_cpf_cnpj IS NOT NULL AND c.no_cpf_cnpj <> '-1'
@@ -142,7 +148,7 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
         FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
         JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
         JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-        WHERE pp.vl_saldo > 0 AND p.dt_vencimento < getdate() AND g.cd_contr > 0
+        WHERE pp.vl_saldo > 0 AND p.dt_vencimento < getdate() AND g.cd_contr > 0 AND g.cd_tributo NOT IN (${excl})
         GROUP BY g.cd_contr
       ) pv ON pv.cd_contr = c.cd_contr
       WHERE c.cd_contr = ${cd}`, 1),
