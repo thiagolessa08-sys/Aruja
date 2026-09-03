@@ -1395,9 +1395,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           reagindo ao filtro de Mês (acumulado) quando ativo. Cor = calor (vermelho = maior
           valor do top 10, azul = menor), tamanho = valor. Insights de Cobrança ao lado direito
           — a pedido do usuário, saiu de junto de "Baixas Processadas por Ano". Conversão por
-          Tributo passou por aqui como 3ª coluna e agora foi pra junto de "Baixas Processadas
-          por Ano" (reordenação a pedido do usuário). */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
+          Tributo passou por aqui como 3ª coluna e depois foi pra junto de "Baixas Processadas
+          por Ano"; agora quem entra como 3ª coluna é Canais de Arrecadação, que saiu de
+          largura total (reordenação a pedido do usuário). */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 0.8fr', gap: 18, marginTop: 18, alignItems: 'stretch' }}>
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div>
@@ -1457,6 +1458,34 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <span style={{ fontSize: 12, lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>{t}</span>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Canais de Arrecadação */}
+        <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Canais de Arrecadação</span>
+            <span style={dots}>···</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+              <svg viewBox="0 0 200 200" width="220" height="220" style={{ maxWidth: '100%' }}>
+                <g transform="rotate(-90 100 100)">
+                  {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
+                </g>
+                <text x="100" y="98" fontSize="13" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtInt(g.totalBaixas).replace(/\.\d+$/, '')}</text>
+                <text x="100" y="113" fontSize="8" fill="#9098a8" textAnchor="middle" style={axisFont}>baixas</text>
+              </svg>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
+              {donut.slice(0, 5).map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
+                  <span style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nome}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtPct(s.pct)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -1730,33 +1759,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
-      </div>
-
-      {/* Canais de Arrecadação — largura total desde que Conversão por Tributo se mudou pra
-          junto de Insights de Cobrança/Mapa de Calor, a pedido do usuário. */}
-      <div style={{ ...card, marginTop: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1f2a44', lineHeight: 1.3 }}>Canais de Arrecadação</span>
-          <span style={dots}>···</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32, marginTop: 12, flexWrap: 'wrap' }}>
-          <svg viewBox="0 0 200 200" width="220" height="220" style={{ maxWidth: '100%', flex: 'none' }}>
-            <g transform="rotate(-90 100 100)">
-              {donut.map((s, i) => (<circle key={i} cx="100" cy="100" r="56" fill="none" stroke={s.cor} strokeWidth="30" strokeDasharray={`${s.len.toFixed(1)} ${(donutC - s.len).toFixed(1)}`} strokeDashoffset={s.off.toFixed(1)} />))}
-            </g>
-            <text x="100" y="98" fontSize="13" fontWeight="700" fill="#283e93" textAnchor="middle" style={axisFont}>{fmtInt(g.totalBaixas).replace(/\.\d+$/, '')}</text>
-            <text x="100" y="113" fontSize="8" fill="#9098a8" textAnchor="middle" style={axisFont}>baixas</text>
-          </svg>
-          <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {donut.slice(0, 5).map((s, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: s.cor, flex: 'none' }}></span>
-                <span style={{ flex: 1, fontSize: 12, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nome}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2a44' }}>{fmtPct(s.pct)}</span>
-              </div>
-            ))}
           </div>
         </div>
       </div>
