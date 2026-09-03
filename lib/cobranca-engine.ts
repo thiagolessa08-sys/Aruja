@@ -110,6 +110,7 @@ export interface DamOperador { nome: string; qt: number }
 export interface DamsGeradas {
   ano: number
   total: number
+  periodoFim: string | null
   porMes: DamMes[]
   porTributo: DamTributo[]
   porOperador: DamOperador[]
@@ -120,19 +121,19 @@ const TOP_N_DAM_OPER = 10
 
 /**
  * Documentos de Arrecadação Municipal (DAM) gerados — tb_dsod_guias, cada linha é uma guia
- * (= um DAM) emitida. Contagem por `no_exercicio_lancamento` (o exercício fiscal a que a
- * guia pertence — mesmo critério de ano usado em Análise de Conversão), não por `dt_geracao`
- * (quando foi fisicamente gerada/impressa): uma guia lançada em 2025 pode ser gerada em 2026
- * (reemissão), e dt_geracao sozinho concentrava um pico artificial em dezembro sem relação
- * com o exercício. O recorte por MÊS continua usando `dt_geracao` (não dt_vencimento da
- * parcela, que é por parcela — uma guia parcelada vence em vários meses, o que faria a soma
- * mensal passar do total anual) pra os 12 meses somarem exatamente o total anual — decisão
- * confirmada com o usuário. `cd_usuario_gerador` = operador que gerou (nome de atendente, ou
- * identificadores especiais como "Internet"/autoatendimento pelo portal e "Schedule"/geração
- * automática agendada — nem todo valor é uma pessoa). Por tributo usa o mesmo cd_tributo=20
- * "Documento de Arrecadacao" (DAM genérico, sem tributo específico vinculado) já mapeado em
- * lib/tributos.ts CODIGOS_EXCLUIDOS. Só conta GERADAS — "Pagas" foi removida do painel a
- * pedido do usuário (ficou só a informação de DAM baseada no lançamento).
+ * (= um DAM) emitida. Contagem por `dt_geracao` (quando foi fisicamente gerada/impressa) — de
+ * Jan/{ano} até a última data de geração disponível na base (não até 31/dez, já que o ano
+ * corrente sempre está incompleto); `periodoFim` devolve essa data pro card informar o
+ * período exato analisado. Critério trocado de volta de `no_exercicio_lancamento` pra
+ * `dt_geracao` a pedido do usuário — a versão por lançamento tinha um pico artificial em
+ * dezembro (reemissão em lote de guias de exercícios anteriores) que inflava demais o total
+ * do ano corrente; ver [[project_dam_geradas_lancamento_vs_geracao]] pelo histórico da
+ * decisão anterior, agora revertida. `cd_usuario_gerador` = operador que gerou (nome de
+ * atendente, ou identificadores especiais como "Internet"/autoatendimento pelo portal e
+ * "Schedule"/geração automática agendada — nem todo valor é uma pessoa). Por tributo usa o
+ * mesmo cd_tributo=20 "Documento de Arrecadacao" (DAM genérico, sem tributo específico
+ * vinculado) já mapeado em lib/tributos.ts CODIGOS_EXCLUIDOS. Só conta GERADAS — "Pagas" foi
+ * removida do painel a pedido do usuário.
  */
 export async function damsGeradas(ano = 2025, mes?: number): Promise<DamsGeradas> {
   return cached(`dams:${ano}:${mes ?? ''}`, TTL_15MIN, () => damsGeradasRaw(ano, mes))
@@ -140,18 +141,19 @@ export async function damsGeradas(ano = 2025, mes?: number): Promise<DamsGeradas
 
 async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
   const filtroMes = mes ? ` AND MONTH(dt_geracao) <= ${mes}` : ''
-  const [totalR, mesR, tribR, operR] = await Promise.all([
-    agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_guias WHERE no_exercicio_lancamento = ${ano}${filtroMes}`, 1),
+  const [totalR, periodoR, mesR, tribR, operR] = await Promise.all([
+    agentQuery(`SELECT COUNT(*) FROM ${SCHEMA}.tb_dsod_guias WHERE YEAR(dt_geracao) = ${ano}${filtroMes}`, 1),
+    agentQuery(`SELECT MAX(dt_geracao) FROM ${SCHEMA}.tb_dsod_guias WHERE YEAR(dt_geracao) = ${ano}${filtroMes}`, 1),
     agentQuery(`
       SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
-      WHERE no_exercicio_lancamento = ${ano}${filtroMes}
+      WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
       GROUP BY MONTH(dt_geracao)`, 20),
     agentQuery(`
       SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
       LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
-      WHERE g.no_exercicio_lancamento = ${ano}${filtroMes}
+      WHERE YEAR(g.dt_geracao) = ${ano}${filtroMes}
       GROUP BY g.cd_tributo, t.ds_tributo`, 200),
     // cd_usuario_gerador mistura login de atendente ("CalebeAM") com CPF/CNPJ/código numérico
     // de contribuintes que geraram a própria guia pelo portal (milhares de valores distintos) —
@@ -161,12 +163,14 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
     agentQuery(`
       SELECT cd_usuario_gerador, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias
-      WHERE no_exercicio_lancamento = ${ano}${filtroMes}
+      WHERE YEAR(dt_geracao) = ${ano}${filtroMes}
         AND PATINDEX('%[A-Za-z]%', cd_usuario_gerador) > 0
       GROUP BY cd_usuario_gerador`, 300),
   ])
 
   const total = num(totalR.rows[0]?.[0])
+  const periodoFimRaw = periodoR.rows[0]?.[0]
+  const periodoFim = periodoFimRaw ? String(periodoFimRaw).slice(0, 10) : null
 
   const porMesMap = new Map<number, number>()
   for (const row of mesR.rows) { const m = num(row[0]); if (m >= 1 && m <= 12) porMesMap.set(m, num(row[1])) }
@@ -204,7 +208,7 @@ async function damsGeradasRaw(ano: number, mes?: number): Promise<DamsGeradas> {
   }
   const porOperador: DamOperador[] = operList.sort((a, b) => b.qt - a.qt)
 
-  return { ano, total, porMes, porTributo, porOperador }
+  return { ano, total, periodoFim, porMes, porTributo, porOperador }
 }
 
 export type DamDrillFiltro =
@@ -233,7 +237,7 @@ async function damsDrillMesRaw(ano: number, mes: number | undefined, filtro: Dam
   const geradasR = await agentQuery(`
       SELECT MONTH(dt_geracao) AS mes, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
-      WHERE g.no_exercicio_lancamento = ${ano}${filtroMes} AND ${filtroGuia}
+      WHERE YEAR(g.dt_geracao) = ${ano}${filtroMes} AND ${filtroGuia}
       GROUP BY MONTH(dt_geracao)`, 20)
 
   const geradasMap = new Map<number, number>()
@@ -259,7 +263,7 @@ async function damsPorTributoMesRaw(ano: number, mesAlvo: number): Promise<DamTr
       SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
       LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
-      WHERE g.no_exercicio_lancamento = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
       GROUP BY g.cd_tributo, t.ds_tributo`, 200)
 
   const tribList = tribR.rows

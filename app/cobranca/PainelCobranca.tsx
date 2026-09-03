@@ -16,7 +16,7 @@ interface DamMes { mes: number; qt: number }
 interface DamTributo { nome: string; codigos: number[]; qt: number }
 interface DamTributoMes { nome: string; qt: number }
 interface DamOperador { nome: string; qt: number }
-interface DamsGeradas { ano: number; total: number; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
+interface DamsGeradas { ano: number; total: number; periodoFim: string | null; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
 interface ResultadoMes { mes: number; geradas: number; pagas: number }
 interface ResultadoMensal { ano: number; totalGeradas: number; totalPagas: number; porMes: ResultadoMes[] }
 interface ResultadoTributoMes { nome: string; geradas: number; pagas: number }
@@ -79,7 +79,7 @@ const FALLBACK_POTENCIAL: Potencial = {
 }
 
 const FALLBACK_DAMS: DamsGeradas = {
-  ano: 2025, total: 513481,
+  ano: 2025, total: 513481, periodoFim: null,
   porMes: [
     { mes: 1, qt: 65350 }, { mes: 2, qt: 42336 }, { mes: 3, qt: 34010 }, { mes: 4, qt: 21050 },
     { mes: 5, qt: 22111 }, { mes: 6, qt: 29879 }, { mes: 7, qt: 22797 }, { mes: 8, qt: 22434 },
@@ -1012,7 +1012,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div>
               <span style={{ fontSize: 16, fontWeight: 600, color: '#1f2a44' }}>Documentos de Arrecadação Municipal (DAM)</span>
-              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Guias geradas (DAM distintas), por exercício de lançamento — {(dams ?? FALLBACK_DAMS).ano}. Detalhe por tributo, período ou operador conforme a lente escolhida em Análise de Conversão.</div>
+              <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Guias geradas (DAM distintas), por data de geração — {(dams ?? FALLBACK_DAMS).ano}. Detalhe por tributo, período ou operador conforme a lente escolhida em Análise de Conversão.</div>
             </div>
             <span style={reportBadge}>Geradas</span>
           </div>
@@ -1029,6 +1029,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Total de DAMs geradas em {dm.ano}</span>
                   <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.5px' }}>{fmtInt(dm.total)}</span>
                 </div>
+                <div style={{ fontSize: 10, color: '#9098a8', marginTop: 5 }}>Período analisado: 01/01/{dm.ano} a {fmtData(dm.periodoFim)}</div>
                 {!dams ? null : (
                   <div style={{ fontSize: 10.5, color: '#9098a8', marginTop: 8, lineHeight: 1.5 }}>
                     {MESES_ABREV[mesPico.mes - 1]}/{dm.ano} concentra {fmtInt(mesPico.qt)} guias ({fmtPct(pctMesPico)} do ano){operPico ? ` · ${operPico.nome} gerou ${fmtInt(operPico.qt)} (${fmtPct(pctOperPico)} do total)` : ''}.
