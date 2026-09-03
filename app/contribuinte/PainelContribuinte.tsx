@@ -42,7 +42,7 @@ interface ContribDet {
   cd: number; nome: string; doc: string; pessoa: 'F' | 'J'; situacao: string
   email: string; telefone: string; endereco: string; bairro: string; cep: string
   imoveis: number; estabelecimentos: number
-  lancado: number; pago: number; saldo: number
+  lancado: number; pago: number; isento: number; suspenso: number; saldo: number
   porTributo: TributoContribDet[]
   composicao: ComposicaoContribDet
   score: number; banda: 'A' | 'B' | 'C' | 'D' | 'E'
@@ -1018,12 +1018,14 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                 <div style={{ fontSize: 12, color: '#5b6477' }}>{d.email || '—'}{d.telefone ? ` · ${d.telefone}` : ''}</div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginTop: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 12, marginTop: 16 }}>
                 {[
                   { label: 'Imóveis', value: fmtInt(d.imoveis) },
                   { label: 'Estabelecimentos', value: fmtInt(d.estabelecimentos) },
                   { label: 'Tributos Lançados', value: fmtAbrev(d.lancado), cor: '#283e93' },
                   { label: 'Tributos Pagos', value: fmtAbrev(d.pago), cor: '#1fa463' },
+                  { label: 'Isento', value: fmtAbrev(d.isento), cor: '#7d8fce' },
+                  { label: 'Suspenso', value: fmtAbrev(d.suspenso), cor: '#5b6477' },
                   { label: 'Em Aberto', value: fmtAbrev(d.saldo), cor: '#d64545' },
                 ].map(f => (
                   <div key={f.label} style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '10px 12px' }}>
@@ -1036,9 +1038,10 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 190px', gap: 16, marginTop: 18, alignItems: 'stretch' }}>
                 <div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>Indicadores de Adimplência</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginTop: 10 }}>
                     {[
                       { label: 'Taxa de Adimplência', value: fmtPct(d.adimplencia.taxaAdimplencia), cor: d.adimplencia.taxaAdimplencia >= 70 ? '#1fa463' : d.adimplencia.taxaAdimplencia >= 40 ? '#e8962e' : '#d64545' },
+                      { label: 'Inadimplência', value: fmtAbrev(d.adimplencia.valorVencido), cor: '#d64545' },
                       { label: 'Parcelas Pagas', value: fmtInt(d.adimplencia.pagas), cor: '#1fa463' },
                       { label: 'Parcelas Vencidas', value: fmtInt(d.adimplencia.vencidas), cor: '#d64545' },
                       { label: 'Parcelas a Vencer', value: fmtInt(d.adimplencia.aVencer), cor: '#e8962e' },
@@ -1049,9 +1052,6 @@ export default function PainelContribuinte({ filtros }: { filtros: FiltrosContri
                       </div>
                     ))}
                   </div>
-                  {d.adimplencia.vencidas > 0 ? (
-                    <div style={{ fontSize: 11, color: '#9098a8', marginTop: 8 }}>{fmtAbrev(d.adimplencia.valorVencido)} em parcelas vencidas (inadimplência).</div>
-                  ) : null}
                 </div>
                 <div style={{ background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 12, padding: '10px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <div style={{ fontSize: 10, color: '#9098a8', textTransform: 'uppercase', letterSpacing: 0.3, alignSelf: 'flex-start' }}>Score Tributário (CRC)</div>

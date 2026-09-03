@@ -75,7 +75,7 @@ export interface DetalheContribuinte {
   cd: number; nome: string; doc: string; pessoa: 'F' | 'J'; situacao: string
   email: string; telefone: string; endereco: string; bairro: string; cep: string
   imoveis: number; estabelecimentos: number
-  lancado: number; pago: number; saldo: number
+  lancado: number; pago: number; isento: number; suspenso: number; saldo: number
   porTributo: TributoContribuinte[]
   composicao: ComposicaoContribuinte
   score: number; banda: BandaScore
@@ -106,7 +106,7 @@ export async function detalheContribuinte(cd: number): Promise<DetalheContribuin
 
 async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte | null> {
   const excl = CODIGOS_EXCLUIDOS.join(',')
-  const [cadR, imovR, estabR, lancTribR, pagoTribR, abertoTribR, parcelaR, scoreR, lancAnoR, pagoAnoR, abertoAnoR] = await Promise.all([
+  const [cadR, imovR, estabR, lancTribR, pagoTribR, abertoTribR, parcelaR, scoreR, lancAnoR, pagoAnoR, abertoAnoR, isentoR, suspensoR] = await Promise.all([
     agentQuery(`
       SELECT TOP 1 c.cd_contr, c.nm_rsocial, c.no_cpf_cnpj, c.ic_pessoa, c.ds_sit_cadast, c.ds_endereco_email,
         ce.ds_endereco, e.no_logr, ce.nm_bairro, ce.no_cep, tc.telefone
@@ -211,6 +211,27 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
       JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
       WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_ABERTO}
       GROUP BY g.no_exercicio_lancamento`, 100),
+    // ISENTO (REGRA 4) — baixa por isenção legal (não é "pago" nem "em aberto": o valor foi
+    // dispensado). Só entra aqui quando a baixa tem setor de origem 'Isencao' — validado
+    // contra a sanidade documentada em lib/regras-negocio.ts (IPTU 2026 ≈ R$0,5 mi).
+    agentQuery(`
+      SELECT SUM(pm.vl_movimento) AS v
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE}
+        AND pm.cd_tipo_movimento IN (12,5) AND pm.cd_tipo_lancamento IN (1) AND pb.ds_setor_origem_baixa IN ('Isencao')`, 1),
+    // SUSPENSO (REGRA 4) — débito com exigibilidade suspensa (ex.: contestação/liminar), não
+    // é "em aberto" cobrável nem "pago". Validado contra a sanidade documentada (IPTU 2026 ≈
+    // R$1,3 mi).
+    agentQuery(`
+      SELECT SUM(pm.vl_movimento) AS v
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE}
+        AND pm.cd_tipo_movimento IN (20)`, 1),
   ])
 
   const c = cadR.rows[0]
@@ -295,7 +316,7 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
     situacao: String(c[4] ?? '').trim(), email: String(c[5] ?? '').trim(), telefone: String(c[10] ?? '').trim(),
     endereco: `${rua}${numero ? ', ' + numero : ''}`, bairro, cep,
     imoveis: num(imovR.rows[0]?.[0]), estabelecimentos: num(estabR.rows[0]?.[0]),
-    lancado: lancadoTotal, pago: pagoTotal, saldo: saldoTotal,
+    lancado: lancadoTotal, pago: pagoTotal, isento: num(isentoR.rows[0]?.[0]), suspenso: num(suspensoR.rows[0]?.[0]), saldo: saldoTotal,
     porTributo,
     composicao: { original, correcao, juros, multa, honorarios, atualizado: original + correcao + juros + multa + honorarios },
     score, banda: bandaDoScore(score),
