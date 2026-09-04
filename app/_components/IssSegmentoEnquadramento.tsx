@@ -38,6 +38,13 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
   // por nome/CPF-CNPJ/CCM (sobre a lista já carregada, sem chamada extra) revela qualquer
   // empresa além dessas 10. Busca volta a vazio a cada novo drill.
   const [busca, setBusca] = useState('')
+  // "Por situação cadastral" e "ISS Estimado" reagem à barra de tipo selecionada (a pedido
+  // do usuário — ficavam estáticos mesmo com uma barra de "Por tipo de empresa" ativa).
+  // `dadosFiltrados` começa igual a `dados` (sem filtro) e é sobrescrito quando um tipo é
+  // selecionado; volta ao total do segmento quando a seleção de tipo é limpa.
+  const tipoFiltro = drillSel?.dimensao === 'tipo' ? drillSel.valor : null
+  const [dadosFiltrados, setDadosFiltrados] = useState<Pick<Resp, 'porSituacao' | 'valorServicoAtivos' | 'issEstimadoAtivos'> | null>(null)
+  const [carregandoFiltro, setCarregandoFiltro] = useState(false)
 
   useEffect(() => {
     setDados(null)
@@ -46,6 +53,18 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
     fetch(`/api/mobiliario/iss-segmento-enquadramento?segmento=${encodeURIComponent(segmento)}`).then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setDados(d) }).catch(() => {})
   }, [segmento])
+
+  useEffect(() => {
+    if (!dados) { setDadosFiltrados(null); return }
+    if (!tipoFiltro) { setDadosFiltrados({ porSituacao: dados.porSituacao, valorServicoAtivos: dados.valorServicoAtivos, issEstimadoAtivos: dados.issEstimadoAtivos }); return }
+    if (!segmento) return
+    setCarregandoFiltro(true)
+    const qs = new URLSearchParams({ segmento, tipo: tipoFiltro })
+    fetch(`/api/mobiliario/iss-segmento-enquadramento?${qs.toString()}`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error) setDadosFiltrados({ porSituacao: d.porSituacao, valorServicoAtivos: d.valorServicoAtivos, issEstimadoAtivos: d.issEstimadoAtivos }) })
+      .catch(() => {})
+      .finally(() => setCarregandoFiltro(false))
+  }, [segmento, dados, tipoFiltro])
 
   function buscarDrill(sel: DrillSel) {
     if (!segmento) return
@@ -83,7 +102,10 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
   }
 
   const maxTipo = dados ? Math.max(1, ...dados.porTipo.map(t => t.qt)) : 1
-  const totalSituacao = dados ? dados.porSituacao.reduce((s, t) => s + t.qt, 0) : 0
+  const porSituacao = dadosFiltrados?.porSituacao ?? []
+  const totalSituacao = porSituacao.reduce((s, t) => s + t.qt, 0)
+  const valorServicoAtivos = dadosFiltrados?.valorServicoAtivos ?? 0
+  const issEstimadoAtivos = dadosFiltrados?.issEstimadoAtivos ?? 0
 
   return (
     <div style={{ ...card, marginTop: 18 }}>
@@ -131,9 +153,14 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
             })}
           </div>
 
-          <div style={{ marginTop: 18, fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por situação cadastral <span style={{ fontWeight: 400, color: '#9098a8' }}>· clique para ver quem são</span></div>
-          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {dados.porSituacao.map(s => {
+          <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Por situação cadastral <span style={{ fontWeight: 400, color: '#9098a8' }}>· clique para ver quem são</span></span>
+            {tipoFiltro ? (
+              <span style={{ fontSize: 10, fontWeight: 600, color: '#283e93', background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 10, padding: '3px 9px' }}>Filtrado por: {tipoFiltro}</span>
+            ) : null}
+          </div>
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', opacity: carregandoFiltro ? 0.5 : 1, transition: 'opacity .15s' }}>
+            {porSituacao.map(s => {
               const pct = totalSituacao ? (100 * s.qt / totalSituacao) : 0
               const cor = SITUACAO_COR(s.nome)
               const ativo = drillSel?.dimensao === 'situacao' && drillSel.valor === s.nome
@@ -148,10 +175,10 @@ export default function IssSegmentoEnquadramento({ segmento }: { segmento: strin
             })}
           </div>
 
-          <div style={{ marginTop: 16, background: '#e6f6ee', border: '1px solid #bfe6cd', borderRadius: 12, padding: '10px 14px' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: '#1fa463' }}>ISS Estimado (empresas Ativas)</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtReais(dados.issEstimadoAtivos)}</div>
-            <div style={{ fontSize: 9.5, color: '#5b6477', marginTop: 3 }}>Valor de Serviço das NFS-e válidas ({fmtReais(dados.valorServicoAtivos)}) × alíquota média assumida de 3,5%</div>
+          <div style={{ marginTop: 16, background: '#e6f6ee', border: '1px solid #bfe6cd', borderRadius: 12, padding: '10px 14px', opacity: carregandoFiltro ? 0.5 : 1, transition: 'opacity .15s' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: '#1fa463' }}>ISS Estimado (empresas Ativas{tipoFiltro ? ` · ${tipoFiltro}` : ''})</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtReais(issEstimadoAtivos)}</div>
+            <div style={{ fontSize: 9.5, color: '#5b6477', marginTop: 3 }}>Valor de Serviço das NFS-e válidas ({fmtReais(valorServicoAtivos)}) × alíquota média assumida de 3,5%</div>
           </div>
 
           {drillSel ? (() => {
