@@ -106,7 +106,7 @@ export async function detalheContribuinte(cd: number): Promise<DetalheContribuin
 
 async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte | null> {
   const excl = CODIGOS_EXCLUIDOS.join(',')
-  const [cadR, imovR, estabR, lancTribR, pagoTribR, abertoTribR, parcelaR, scoreR, lancAnoR, pagoAnoR, abertoAnoR, isentoR, suspensoR] = await Promise.all([
+  const [cadR, imovR, estabR, lancTribR, pagoTribR, parcelaR, scoreR, lancAnoR, pagoAnoR, isentoR, suspensoR] = await Promise.all([
     agentQuery(`
       SELECT TOP 1 c.cd_contr, c.nm_rsocial, c.no_cpf_cnpj, c.ic_pessoa, c.ds_sit_cadast, c.ds_endereco_email,
         ce.ds_endereco, e.no_logr, ce.nm_bairro, ce.no_cep, tc.telefone
@@ -138,26 +138,25 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
       WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE}
         AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
       GROUP BY g.cd_tributo`, 300),
-    // EM ABERTO por tributo (REGRA 4) — saldo líquido (lançamento − baixas − isenção −
-    // suspensão, via no_sinal); negativo (pago > devido) é clampado a 0 no JS.
+    // Saldo oficial POR PARCELA (REGRA 4, líquido de lançamento/baixas/isenção/suspensão via
+    // no_sinal) — SEMPRE agregado neste grão fino (nunca direto por tributo/ano/total): somar
+    // vl_movimento*no_sinal de várias parcelas ANTES de isolar quem tem saldo>0 permite que
+    // parcelas antigas com saldo NEGATIVO (pagamento a maior, correção, renegociação) cancelem
+    // no papel parcelas realmente em aberto de outras datas — bug real encontrado (Robinson
+    // Simões, cd_contr 19022: IPTU tinha R$1.536,12 em parcelas individualmente vencidas/a
+    // vencer, mas a soma direta por tributo dava -R$3.113,89, que virava 0 ao clampar,
+    // escondendo a dívida real). Por isso lançado/pago por tributo/ano continuam agregados
+    // direto (tipos de movimento aditivos, sem esse risco de cancelamento) mas "em aberto"
+    // (por tributo, por ano e o total) é sempre derivado DAQUI, somando só os bal>0 por
+    // parcela — nunca com um SUM(vl_movimento*no_sinal) agrupado direto por outra coisa.
     agentQuery(`
-      SELECT g.cd_tributo AS cd, SUM(pm.vl_movimento * pm.no_sinal) AS bal
+      SELECT p.cd_parcelas AS cd, g.cd_tributo AS trib, g.no_exercicio_lancamento AS ano,
+        MAX(p.dt_vencimento) AS venc, SUM(pm.vl_movimento * pm.no_sinal) AS bal
       FROM ${SCHEMA}.tb_dsod_guias g
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
       WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_ABERTO}
-      GROUP BY g.cd_tributo`, 300),
-    // Saldo oficial POR PARCELA (mesmo filtro do "em aberto" acima, sem agrupar por tributo)
-    // — base pra adimplência (parcela paga = saldo oficial <= 0) e pra achar quais parcelas
-    // estão realmente em aberto, pra restringir a composição legal a elas (em vez de usar
-    // vl_saldo de tb_dsod_parcela_posicao, que diverge do modelo oficial).
-    agentQuery(`
-      SELECT p.cd_parcelas AS cd, MAX(p.dt_vencimento) AS venc, SUM(pm.vl_movimento * pm.no_sinal) AS bal
-      FROM ${SCHEMA}.tb_dsod_guias g
-      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_ABERTO}
-      GROUP BY p.cd_parcelas`, 2000),
+      GROUP BY p.cd_parcelas, g.cd_tributo, g.no_exercicio_lancamento`, 2000),
     // Score de Contribuinte (CRC) — mesma fórmula de lib/contribuinte-filtros.ts::scoreContribuinte
     // (cadastro completo 10 + vínculo CCM 45 + vínculo imóvel 45 − 1 por parcela vencida), aqui
     // pra UM cd_contr em vez de agregada. Continua no modelo de tb_dsod_parcela_posicao (não no
@@ -204,13 +203,6 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
       WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE}
         AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'
       GROUP BY g.no_exercicio_lancamento`, 100),
-    agentQuery(`
-      SELECT g.no_exercicio_lancamento AS ano, SUM(pm.vl_movimento * pm.no_sinal) AS bal
-      FROM ${SCHEMA}.tb_dsod_guias g
-      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
-      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      WHERE g.cd_contr = ${cd} AND g.cd_tributo NOT IN (${excl}) AND ${MOV_BASE} AND ${MOV_ABERTO}
-      GROUP BY g.no_exercicio_lancamento`, 100),
     // ISENTO (REGRA 4) — baixa por isenção legal (não é "pago" nem "em aberto": o valor foi
     // dispensado). Só entra aqui quando a baixa tem setor de origem 'Isencao' — validado
     // contra a sanidade documentada em lib/regras-negocio.ts (IPTU 2026 ≈ R$0,5 mi).
@@ -246,16 +238,37 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
   for (const row of lancTribR.rows) lancMap.set(num(row[0]), num(row[1]))
   const pagoMap = new Map<number, number>()
   for (const row of pagoTribR.rows) pagoMap.set(num(row[0]), num(row[1]))
+
+  // Saldo por parcela (grão fino) — todo "em aberto" (por tributo, por ano e o total) vem
+  // DAQUI, somando só bal>0.01 por parcela antes de agrupar por qualquer outra dimensão (ver
+  // comentário na query: evita que parcelas antigas com saldo negativo cancelem parcelas
+  // realmente em aberto de outro tributo/ano na mesma soma).
+  const hoje = new Date()
+  const parcelas = parcelaR.rows.map(row => ({
+    cd: num(row[0]), trib: num(row[1]), ano: num(row[2]), venc: String(row[3] ?? ''), bal: num(row[4]),
+  }))
+  const totalParcelas = parcelas.length
+  let pagasParcelas = 0, vencidasParcelas = 0, aVencerParcelas = 0, valorVencido = 0, saldoTotal = 0
+  const abertas: number[] = []
   const abertoMap = new Map<number, number>()
-  for (const row of abertoTribR.rows) abertoMap.set(num(row[0]), Math.max(0, num(row[1])))
+  const anoAbertoMap = new Map<number, number>()
+  for (const p of parcelas) {
+    if (p.bal <= 0.01) { pagasParcelas++; continue }
+    abertas.push(p.cd)
+    saldoTotal += p.bal
+    abertoMap.set(p.trib, (abertoMap.get(p.trib) ?? 0) + p.bal)
+    anoAbertoMap.set(p.ano, (anoAbertoMap.get(p.ano) ?? 0) + p.bal)
+    const venceu = p.venc && new Date(p.venc) < hoje
+    if (venceu) { vencidasParcelas++; valorVencido += p.bal } else { aVencerParcelas++ }
+  }
 
   const codigos = new Set([...lancMap.keys(), ...pagoMap.keys(), ...abertoMap.keys()])
   const grupoMap = new Map<string, { lancado: number; pago: number; saldo: number }>()
-  let lancadoTotal = 0, pagoTotal = 0, saldoTotal = 0
+  let lancadoTotal = 0, pagoTotal = 0
   for (const codigo of codigos) {
     const grupo = COD_TO_GRUPO.get(codigo) ?? 'Outros'
     const lancado = lancMap.get(codigo) ?? 0, pago = pagoMap.get(codigo) ?? 0, saldo = abertoMap.get(codigo) ?? 0
-    lancadoTotal += lancado; pagoTotal += pago; saldoTotal += saldo
+    lancadoTotal += lancado; pagoTotal += pago
     const acc = grupoMap.get(grupo) ?? { lancado: 0, pago: 0, saldo: 0 }
     acc.lancado += lancado; acc.pago += pago; acc.saldo += saldo
     grupoMap.set(grupo, acc)
@@ -263,20 +276,6 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
   const porTributo: TributoContribuinte[] = ORDEM_GRUPOS
     .map(grupo => ({ grupo, ...(grupoMap.get(grupo) ?? { lancado: 0, pago: 0, saldo: 0 }) }))
     .filter(t => t.lancado > 0 || t.saldo > 0)
-
-  // Adimplência + lista de parcelas realmente em aberto (saldo oficial > 0), usada a seguir
-  // pra restringir a composição legal só a elas.
-  const hoje = new Date()
-  const parcelas = parcelaR.rows.map(row => ({ cd: num(row[0]), venc: String(row[1] ?? ''), bal: num(row[2]) }))
-  const totalParcelas = parcelas.length
-  let pagasParcelas = 0, vencidasParcelas = 0, aVencerParcelas = 0, valorVencido = 0
-  const abertas: number[] = []
-  for (const p of parcelas) {
-    if (p.bal <= 0.01) { pagasParcelas++; continue }
-    abertas.push(p.cd)
-    const venceu = p.venc && new Date(p.venc) < hoje
-    if (venceu) { vencidasParcelas++; valorVencido += p.bal } else { aVencerParcelas++ }
-  }
 
   let original = 0, correcao = 0, juros = 0, multa = 0, honorarios = 0
   if (abertas.length) {
@@ -302,8 +301,6 @@ async function detalheContribuinteRaw(cd: number): Promise<DetalheContribuinte |
   for (const row of lancAnoR.rows) anoLancMap.set(num(row[0]), num(row[1]))
   const anoPagoMap = new Map<number, number>()
   for (const row of pagoAnoR.rows) anoPagoMap.set(num(row[0]), num(row[1]))
-  const anoAbertoMap = new Map<number, number>()
-  for (const row of abertoAnoR.rows) anoAbertoMap.set(num(row[0]), Math.max(0, num(row[1])))
   const anos = new Set([...anoLancMap.keys(), ...anoPagoMap.keys(), ...anoAbertoMap.keys()])
   const evolucaoPorAno: EvolucaoAnoContribuinte[] = Array.from(anos)
     .filter(ano => ano >= 1990 && ano <= 2035)
