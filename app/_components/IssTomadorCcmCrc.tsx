@@ -3,7 +3,24 @@
 import { useState, useEffect } from 'react'
 
 interface Resumo { total: number; ccm: { com: number; sem: number }; crc: { com: number; sem: number } }
-interface ItemDetalhe { cpfCnpj: string; nome: string; codigo: string; qtNotas: number; vlServicos: number }
+interface ItemDetalhe { cpfCnpj: string; nome: string; codigo: string; qtNotas: number; vlServicos: number; municipio: 'local' | 'fora' | null }
+
+const COR_LOCAL = '#1fa463'
+const COR_FORA = '#8b5cf6'
+// Pino de localização (a pedido do usuário): roxo quando o tomador é de fora do município,
+// verde quando é do município — decidido pelo nm_mun das próprias notas (ver rota
+// iss-tomador-ccm-crc-detalhe). null (sem notas classificáveis) não exibe pino.
+function PinoMunicipio({ municipio }: { municipio: 'local' | 'fora' | null }) {
+  if (!municipio) return null
+  const cor = municipio === 'local' ? COR_LOCAL : COR_FORA
+  const titulo = municipio === 'local' ? 'Do município (Arujá)' : 'De fora do município'
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill={cor} stroke="none" style={{ flex: 'none' }} aria-label={titulo}>
+      <title>{titulo}</title>
+      <path d="M12 2C7.58 2 4 5.58 4 10c0 5.25 7 12 8 12s8-6.75 8-12c0-4.42-3.58-8-8-8zm0 11a3 3 0 110-6 3 3 0 010 6z" />
+    </svg>
+  )
+}
 
 const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
 const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
@@ -97,7 +114,11 @@ export default function IssTomadorCcmCrc() {
       {tipoSel ? (
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Tomadores {tipoSel === 'ccm' ? 'com CCM' : 'com CRC'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>Tomadores {tipoSel === 'ccm' ? 'com CCM' : 'com CRC'}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: '#5b6477' }}><PinoMunicipio municipio="local" /> Do município</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: '#5b6477' }}><PinoMunicipio municipio="fora" /> Fora do município</span>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
               <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar nome ou CPF/CNPJ…" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 180, fontFamily: 'inherit' }} />
@@ -117,7 +138,10 @@ export default function IssTomadorCcmCrc() {
               {itensFiltrados.map((it, i) => (
                 <div key={it.cpfCnpj}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 2 }}>
-                    <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {it.nome || it.cpfCnpj}</span>
+                    <span style={{ color: '#1f2a44', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <PinoMunicipio municipio={it.municipio} />
+                      {i + 1}. {it.nome || it.cpfCnpj}
+                    </span>
                     <span style={{ color: '#283e93', fontWeight: 700, flex: 'none' }}>{fmtAbrev(it.vlServicos)}</span>
                   </div>
                   <div style={{ fontSize: 10, color: '#9098a8', marginBottom: 4 }}>{it.cpfCnpj} · {it.qtNotas} nota{it.qtNotas > 1 ? 's' : ''} · {tipoSel === 'ccm' ? `CCM ${it.codigo}` : `CRC ${it.codigo}`}</div>
