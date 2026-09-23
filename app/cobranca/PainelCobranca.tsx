@@ -267,6 +267,14 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [damDrillMesData, setDamDrillMesData] = useState<DamMes[] | null>(null)
   const [tipDamDrill, setTipDamDrill] = useState<{ left: number; top: number; label: string; qt: number } | null>(null)
   const [buscaDam, setBuscaDam] = useState('')
+  // Drill de 3º nível do painel DAM (a pedido do usuário) — depois de já estar no nível de
+  // mês (lentes "Por Tributo"/"Por Operador", ou dentro de "Por Período"), clicar num mês
+  // mostra a mesma métrica de Lançado/Arrecadado/Conversão do quadro "Análise de Conversão"
+  // pra aquele mês exato + dimensão já selecionada. `damDrillMesSel` só é usado nas lentes
+  // Por Tributo/Por Operador (Por Período já tem seu próprio `damPeriodoDrillMes`).
+  const [damDrillMesSel, setDamDrillMesSel] = useState<number | null>(null)
+  const [damMesConversao, setDamMesConversao] = useState<ConversaoItem | null>(null)
+  const [damMesConversaoErro, setDamMesConversaoErro] = useState(false)
   // Ao clicar num ano em "Por Período" (Análise de Conversão), o gráfico "Por período (mês)"
   // do painel DAM passa a mostrar os meses DAQUELE ano em vez do exercício global da tela.
   const [conversaoPeriodoAno, setConversaoPeriodoAno] = useState<number | null>(null)
@@ -329,6 +337,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setDamPeriodoDrillMes(null)
     setDamPeriodoDrillData(null)
     setDamPeriodoDrillErro(false)
+    setDamDrillMesSel(null)
+    setDamMesConversao(null)
+    setDamMesConversaoErro(false)
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => {
@@ -415,6 +426,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   function selecionarDamTributo(t: DamTributo) {
+    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoErro(false)
     if (damDrillTributo?.nome === t.nome) { setDamDrillTributo(null); setDamDrillMesData(null); return }
     setDamDrillOperador(null)
     setDamDrillTributo(t)
@@ -425,6 +437,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   function selecionarDamOperador(o: DamOperador) {
+    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoErro(false)
     if (damDrillOperador?.nome === o.nome) { setDamDrillOperador(null); setDamDrillMesData(null); return }
     setDamDrillTributo(null)
     setDamDrillOperador(o)
@@ -434,10 +447,70 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       .then(res => { if (res && !res.error && Array.isArray(res.porMes)) setDamDrillMesData(res.porMes) }).catch(() => {})
   }
 
+  // Drill de 3º nível (a pedido do usuário) — clicar num mês dentro de "Por Tributo"/"Por
+  // Operador" (depois de já ter selecionado o tributo/operador) mostra Lançado/Arrecadado/
+  // Conversão daquele mês exato, igual ao quadro "Análise de Conversão".
+  function buscarConversaoMes(anoAlvo: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'operador'; nome: string } | { tipo: 'geral' }) {
+    setDamMesConversao(null)
+    setDamMesConversaoErro(false)
+    const qs = new URLSearchParams({ ano: String(anoAlvo), mes: String(mesAlvo), tipo: filtro.tipo })
+    if (filtro.tipo === 'tributo') qs.set('codigos', filtro.codigos.join(','))
+    if (filtro.tipo === 'operador') qs.set('nome', filtro.nome)
+    fetch(`/api/cobranca/analise-conversao-mes?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => { if (res && !res.error && typeof res.lancado === 'number') setDamMesConversao(res); else setDamMesConversaoErro(true) })
+      .catch(() => setDamMesConversaoErro(true))
+  }
+
+  function selecionarDamDrillMes(mesAlvo: number) {
+    if (damDrillMesSel === mesAlvo) { setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoErro(false); return }
+    setDamDrillMesSel(mesAlvo)
+    if (damDrillTributo) buscarConversaoMes(ano, mesAlvo, { tipo: 'tributo', codigos: damDrillTributo.codigos })
+    else if (damDrillOperador) buscarConversaoMes(ano, mesAlvo, { tipo: 'operador', nome: damDrillOperador.nome })
+  }
+
+  // Caixa com Lançado/Arrecadado/Conversão do mês exato selecionado no 3º nível do painel
+  // DAM — mesma métrica e mesma paleta (azul/verde) do quadro "Análise de Conversão".
+  function renderConversaoMesBox() {
+    if (damMesConversaoErro) {
+      return (
+        <div style={{ marginTop: 10, textAlign: 'center', padding: '10px 0' }}>
+          <div style={{ fontSize: 11, color: '#9098a8' }}>Não foi possível carregar a conversão deste mês.</div>
+        </div>
+      )
+    }
+    if (!damMesConversao) return <div style={{ marginTop: 10, height: 58, borderRadius: 10, background: '#eef1f7' }} />
+    const it = damMesConversao
+    const maxV = Math.max(1, it.lancado, it.arrecadado)
+    const wLanc = Math.max(3, 100 * it.lancado / maxV)
+    const wArr = Math.max(3, 100 * it.arrecadado / maxV)
+    return (
+      <div style={{ marginTop: 10, background: '#f7f9fd', borderRadius: 10, padding: '10px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: '#5b6477' }}>Análise de Conversão</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: convCor(it.conversao) }}>{fmtPct(it.conversao)}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${wLanc.toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 50, textAlign: 'right' }}>{fmtAbrev(it.lancado)}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${wArr.toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 50, textAlign: 'right' }}>{fmtAbrev(it.arrecadado)}</span>
+        </div>
+      </div>
+    )
+  }
+
   function selecionarPeriodoAno(anoSel: number) {
     setDamPeriodoDrillMes(null)
     setDamPeriodoDrillData(null)
     setDamPeriodoDrillErro(false)
+    setDamMesConversao(null)
+    setDamMesConversaoErro(false)
     if (conversaoPeriodoAno === anoSel) { setConversaoPeriodoAno(null); setDamsPeriodo(null); return }
     setConversaoPeriodoAno(anoSel)
     setDamsPeriodo(null)
@@ -460,9 +533,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // nível quebrando aquele mês específico por tributo, substituindo o gráfico (não abre outra
   // card).
   function selecionarDamPeriodoMes(anoAlvo: number, mesAlvo: number) {
-    if (damPeriodoDrillMes === mesAlvo) { setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); return }
+    if (damPeriodoDrillMes === mesAlvo) { setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamMesConversao(null); setDamMesConversaoErro(false); return }
     setDamPeriodoDrillMes(mesAlvo)
     buscarDamPeriodoTributoMes(anoAlvo, mesAlvo)
+    buscarConversaoMes(anoAlvo, mesAlvo, { tipo: 'geral' })
   }
 
   function buscarResultadoPorTributoMes(anoAlvo: number, mesAlvo: number) {
@@ -724,7 +798,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null); setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false) }}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null); setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoErro(false) }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',
@@ -1104,6 +1178,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                               </div>
                             )
                           })()}
+                          {/* Drill de 3º nível (a pedido do usuário) — Lançado/Arrecadado/
+                              Conversão do mês exato, igual ao quadro "Análise de Conversão". */}
+                          {renderConversaoMesBox()}
                         </div>
                       ) : !dmPeriodo ? (
                         <div style={{ height: 180, marginTop: 10, borderRadius: 12, background: '#eef1f7' }} />
@@ -1184,6 +1261,26 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                           ) : null}
                         </div>
                       )}
+                      {/* Chips de mês pra descer + um nível (a pedido do usuário) — mesmo
+                          padrão de alvo de clique dedicado já usado em "Por período (mês)". */}
+                      {damDrillMesData ? (
+                        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {damDrillMesData.filter(m => m.qt > 0).map(m => {
+                            const ativo = damDrillMesSel === m.mes
+                            return (
+                              <button key={m.mes} onClick={() => selecionarDamDrillMes(m.mes)}
+                                title={`Análise de Conversão de ${MESES_ABREV[m.mes - 1]}/${ano} — ${damDrillTributo.nome}`}
+                                style={{
+                                  border: 'none', borderRadius: 7, padding: '3px 9px', fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
+                                  background: ativo ? '#283e93' : '#f4f7fc', color: ativo ? '#fff' : '#5b6477',
+                                }}>
+                                {MESES_ABREV[m.mes - 1]}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : null}
+                      {damDrillMesSel ? renderConversaoMesBox() : null}
                     </div>
                   ) : (
                   <div style={{ marginTop: 18 }}>
@@ -1250,6 +1347,26 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                           ) : null}
                         </div>
                       )}
+                      {/* Chips de mês pra descer + um nível (a pedido do usuário) — mesmo
+                          padrão de alvo de clique dedicado já usado em "Por período (mês)". */}
+                      {damDrillMesData ? (
+                        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {damDrillMesData.filter(m => m.qt > 0).map(m => {
+                            const ativo = damDrillMesSel === m.mes
+                            return (
+                              <button key={m.mes} onClick={() => selecionarDamDrillMes(m.mes)}
+                                title={`Análise de Conversão de ${MESES_ABREV[m.mes - 1]}/${ano} — ${damDrillOperador.nome}`}
+                                style={{
+                                  border: 'none', borderRadius: 7, padding: '3px 9px', fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
+                                  background: ativo ? '#283e93' : '#f4f7fc', color: ativo ? '#fff' : '#5b6477',
+                                }}>
+                                {MESES_ABREV[m.mes - 1]}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : null}
+                      {damDrillMesSel ? renderConversaoMesBox() : null}
                     </div>
                   ) : (
                   <div style={{ marginTop: 18 }}>

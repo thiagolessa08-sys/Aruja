@@ -775,3 +775,45 @@ async function conversaoDrillOperadorRaw(ano: number, mes: number | undefined, f
     .sort((a, b) => b.lancado - a.lancado)
     .map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
 }
+
+export type ConversaoMesFiltro =
+  | { tipo: 'tributo'; codigos: number[] }
+  | { tipo: 'operador'; nome: string }
+  | { tipo: 'geral' }
+
+/**
+ * Drill de 3º nível do painel DAM — a pedido do usuário, ao clicar num mês (depois de já ter
+ * descido por tributo/operador, ou dentro de "Por Período") mostra a mesma métrica de
+ * Lançado/Arrecadado/Conversão do quadro "Análise de Conversão", só que pro mês EXATO
+ * (MONTH(p.dt_vencimento) = mesAlvo, não o acumulado "<=" do resto da tela) e já restrito à
+ * dimensão escolhida (tributo/operador) ou geral (lente "Por Período", sem filtro de
+ * dimensão). Mesmo modelo posição e mesma composição de "Internet" (literal + sem letra) dos
+ * drills de 2º nível acima — sem a correção de IPTU oficial, pela mesma razão: bater com o
+ * lançado/arrecadado já exibido no nível anterior, que também não usa a correção.
+ */
+export async function analiseConversaoMes(ano: number, mesAlvo: number, filtro: ConversaoMesFiltro): Promise<ConversaoItem> {
+  const chave = filtro.tipo === 'tributo' ? `trib:${filtro.codigos.join(',')}` : filtro.tipo === 'operador' ? `oper:${filtro.nome}` : 'geral'
+  return cached(`conversaoMes:${ano}:${mesAlvo}:${chave}`, TTL_15MIN, () => analiseConversaoMesRaw(ano, mesAlvo, filtro))
+}
+
+async function analiseConversaoMesRaw(ano: number, mesAlvo: number, filtro: ConversaoMesFiltro): Promise<ConversaoItem> {
+  const excl = CODIGOS_EXCLUIDOS.join(',')
+  const filtroDim = filtro.tipo === 'tributo'
+    ? ` AND g.cd_tributo IN (${filtro.codigos.join(',')})`
+    : filtro.tipo === 'operador'
+      ? (filtro.nome === 'Internet'
+          ? ` AND (g.cd_usuario_gerador = 'Internet' OR PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) = 0)`
+          : ` AND g.cd_usuario_gerador = '${filtro.nome.replace(/'/g, "''")}'`)
+      : ''
+
+  const r = await agentQuery(`
+    SELECT SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+    FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+    JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+    JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+    WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano} AND MONTH(p.dt_vencimento) = ${mesAlvo}${filtroDim}`, 1)
+
+  const lancado = num(r.rows[0]?.[0])
+  const arrecadado = num(r.rows[0]?.[1])
+  return { nome: String(mesAlvo), lancado, arrecadado, conversao: lancado ? (arrecadado / lancado) * 100 : 0 }
+}
