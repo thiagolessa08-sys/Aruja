@@ -154,6 +154,23 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
     try {
       const c = v.cards
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const trac = '—'
+
+      // Inscrição/ID Físico (a pedido do usuário) é coluna FIXA — sempre exportada. A
+      // Evolução é agregada por exercício (não é de um imóvel específico), então fica em
+      // branco; quando há um drill de "Vínculos mobiliários e imobiliários" aberto na tela
+      // (mesma lista já carregada em imoveisVinculo), cada imóvel entra com sua inscrição
+      // real, igual ao critério já usado em IPTU/ITBI.
+      const linhas: (string | number)[][] = v.evolucao.map(e => [
+        e.previsto ? `${e.ano} *` : e.ano, trac, money(e.lancado), money(e.arrecadado),
+        `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia),
+      ])
+      if (vinculoSel && imoveisVinculo.length) {
+        for (const it of imoveisVinculo) {
+          linhas.push([`Vínculo: ${vinculoSel.label}`, it.inscricao || trac, it.proprietario || `Imóvel ${it.cd}`, trac, trac, trac, trac])
+        }
+      }
+
       const dados: DadosRelatorio = {
         titulo: `ISSCC — Exercício ${v.anoRef}`,
         subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}`,
@@ -165,11 +182,8 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           { rotulo: 'Isento', valor: money(c.isento.atual) },
           { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
         ],
-        colunas: ['Exercício', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência'],
-        linhas: v.evolucao.map(e => [
-          e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
-          `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia),
-        ]),
+        colunas: ['Exercício', 'Inscrição / ID Físico', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência'],
+        linhas,
         arquivo: `ISSCC-${v.anoRef}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
