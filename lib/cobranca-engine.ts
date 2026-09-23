@@ -783,37 +783,90 @@ export type ConversaoMesFiltro =
 
 /**
  * Drill de 3º nível do painel DAM — a pedido do usuário, ao clicar num mês (depois de já ter
- * descido por tributo/operador, ou dentro de "Por Período") mostra a mesma métrica de
- * Lançado/Arrecadado/Conversão do quadro "Análise de Conversão", só que pro mês EXATO
- * (MONTH(p.dt_vencimento) = mesAlvo, não o acumulado "<=" do resto da tela) e já restrito à
- * dimensão escolhida (tributo/operador) ou geral (lente "Por Período", sem filtro de
- * dimensão). Mesmo modelo posição e mesma composição de "Internet" (literal + sem letra) dos
- * drills de 2º nível acima — sem a correção de IPTU oficial, pela mesma razão: bater com o
- * lançado/arrecadado já exibido no nível anterior, que também não usa a correção.
+ * descido por tributo/operador, ou dentro de "Por Período") mostra a MESMA quebra do quadro
+ * "Análise de Conversão" (lista com Lançado/Arrecadado por item + "Melhor desempenho"), só que
+ * pro mês EXATO (MONTH(p.dt_vencimento) = mesAlvo, não o acumulado "<=" do resto da tela).
+ * Duas funções, uma por eixo de quebra (a mesma dualidade de conversaoDrillTributo/
+ * conversaoDrillOperador): "Por Tributo"/"Por Período" do DAM já filtram por tributo/nada, daí
+ * quebrar POR OPERADOR faz sentido só pra "Por Tributo"; "Por Operador" do DAM já filtra por
+ * operador, daí quebra POR TRIBUTO. Mesmo modelo posição e mesma composição de "Internet"
+ * (literal + sem letra) dos drills de 2º nível — sem a correção de IPTU oficial, pela mesma
+ * razão: bater com o lançado/arrecadado já exibido no nível anterior, que também não usa a
+ * correção.
  */
-export async function analiseConversaoMes(ano: number, mesAlvo: number, filtro: ConversaoMesFiltro): Promise<ConversaoItem> {
-  const chave = filtro.tipo === 'tributo' ? `trib:${filtro.codigos.join(',')}` : filtro.tipo === 'operador' ? `oper:${filtro.nome}` : 'geral'
-  return cached(`conversaoMes:${ano}:${mesAlvo}:${chave}`, TTL_15MIN, () => analiseConversaoMesRaw(ano, mesAlvo, filtro))
+export async function analiseConversaoMesPorTributo(ano: number, mesAlvo: number, filtro: { tipo: 'operador'; nome: string } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
+  const chave = filtro.tipo === 'operador' ? `oper:${filtro.nome}` : 'geral'
+  return cached(`conversaoMesPorTributo:${ano}:${mesAlvo}:${chave}`, TTL_15MIN, () => analiseConversaoMesPorTributoRaw(ano, mesAlvo, filtro))
 }
 
-async function analiseConversaoMesRaw(ano: number, mesAlvo: number, filtro: ConversaoMesFiltro): Promise<ConversaoItem> {
+async function analiseConversaoMesPorTributoRaw(ano: number, mesAlvo: number, filtro: { tipo: 'operador'; nome: string } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
   const excl = CODIGOS_EXCLUIDOS.join(',')
-  const filtroDim = filtro.tipo === 'tributo'
-    ? ` AND g.cd_tributo IN (${filtro.codigos.join(',')})`
-    : filtro.tipo === 'operador'
-      ? (filtro.nome === 'Internet'
-          ? ` AND (g.cd_usuario_gerador = 'Internet' OR PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) = 0)`
-          : ` AND g.cd_usuario_gerador = '${filtro.nome.replace(/'/g, "''")}'`)
-      : ''
+  const filtroOperador = filtro.tipo === 'operador'
+    ? (filtro.nome === 'Internet'
+        ? ` AND (g.cd_usuario_gerador = 'Internet' OR PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) = 0)`
+        : ` AND g.cd_usuario_gerador = '${filtro.nome.replace(/'/g, "''")}'`)
+    : ''
 
   const r = await agentQuery(`
-    SELECT SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+    SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-    WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano} AND MONTH(p.dt_vencimento) = ${mesAlvo}${filtroDim}`, 1)
+    LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+    WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano} AND MONTH(p.dt_vencimento) = ${mesAlvo}${filtroOperador}
+    GROUP BY g.cd_tributo, t.ds_tributo`, 200)
 
-  const lancado = num(r.rows[0]?.[0])
-  const arrecadado = num(r.rows[0]?.[1])
-  return { nome: String(mesAlvo), lancado, arrecadado, conversao: lancado ? (arrecadado / lancado) * 100 : 0 }
+  return r.rows
+    .map(row => ({ nome: String(row[1] ?? '').trim() || `Tributo ${num(row[0])}`, lancado: num(row[2]), arrecadado: num(row[3]) }))
+    .filter(x => x.lancado > 0)
+    .sort((a, b) => b.lancado - a.lancado)
+    .map(x => ({ ...x, conversao: x.lancado ? (x.arrecadado / x.lancado) * 100 : 0 }))
+}
+
+export async function analiseConversaoMesPorOperador(ano: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
+  const chave = filtro.tipo === 'tributo' ? `trib:${filtro.codigos.join(',')}` : 'geral'
+  return cached(`conversaoMesPorOperador:${ano}:${mesAlvo}:${chave}`, TTL_15MIN, () => analiseConversaoMesPorOperadorRaw(ano, mesAlvo, filtro))
+}
+
+async function analiseConversaoMesPorOperadorRaw(ano: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
+  const excl = CODIGOS_EXCLUIDOS.join(',')
+  const filtroTributo = filtro.tipo === 'tributo' ? ` AND g.cd_tributo IN (${filtro.codigos.join(',')})` : ''
+
+  const [totalR, operR] = await Promise.all([
+    agentQuery(`
+      SELECT SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano} AND MONTH(p.dt_vencimento) = ${mesAlvo}${filtroTributo}`, 1),
+    agentQuery(`
+      SELECT g.cd_usuario_gerador, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano} AND MONTH(p.dt_vencimento) = ${mesAlvo}${filtroTributo}
+        AND PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) > 0
+      GROUP BY g.cd_usuario_gerador`, 300),
+  ])
+
+  const totalLancado = num(totalR.rows[0]?.[0])
+  const totalPago = num(totalR.rows[0]?.[1])
+
+  const operNomeados = operR.rows
+    .map(row => ({ nome: String(row[0] ?? '').trim(), lancado: num(row[1]), pago: num(row[2]) }))
+    .filter(x => x.nome && x.lancado > 0)
+  const somaNomeadoLancado = operNomeados.reduce((s, x) => s + x.lancado, 0)
+  const somaNomeadoPago = operNomeados.reduce((s, x) => s + x.pago, 0)
+  const internetLancado = Math.max(0, totalLancado - somaNomeadoLancado)
+  const internetPago = Math.max(0, totalPago - somaNomeadoPago)
+  const operList = [...operNomeados]
+  if (internetLancado > 0) {
+    const internetExistente = operList.find(x => x.nome === 'Internet')
+    if (internetExistente) { internetExistente.lancado += internetLancado; internetExistente.pago += internetPago }
+    else operList.push({ nome: 'Internet', lancado: internetLancado, pago: internetPago })
+  }
+
+  return operList
+    .sort((a, b) => b.lancado - a.lancado)
+    .map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
 }

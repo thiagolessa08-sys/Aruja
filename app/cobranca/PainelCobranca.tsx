@@ -269,11 +269,14 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [buscaDam, setBuscaDam] = useState('')
   // Drill de 3º nível do painel DAM (a pedido do usuário) — depois de já estar no nível de
   // mês (lentes "Por Tributo"/"Por Operador", ou dentro de "Por Período"), clicar num mês
-  // mostra a mesma métrica de Lançado/Arrecadado/Conversão do quadro "Análise de Conversão"
-  // pra aquele mês exato + dimensão já selecionada. `damDrillMesSel` só é usado nas lentes
-  // Por Tributo/Por Operador (Por Período já tem seu próprio `damPeriodoDrillMes`).
+  // mostra a MESMA quebra do quadro "Análise de Conversão" (lista por tributo/usuário com
+  // Lançado/Arrecadado + "Melhor desempenho"), só que pra aquele mês exato + dimensão já
+  // selecionada. `damDrillMesSel` só é usado nas lentes Por Tributo/Por Operador (Por Período
+  // já tem seu próprio `damPeriodoDrillMes`). `damMesConversaoEixo` guarda POR QUE eixo veio
+  // a quebra (tributo ou operador), pra rotular a lista e o "Melhor desempenho" certo.
   const [damDrillMesSel, setDamDrillMesSel] = useState<number | null>(null)
-  const [damMesConversao, setDamMesConversao] = useState<ConversaoItem | null>(null)
+  const [damMesConversao, setDamMesConversao] = useState<ConversaoItem[] | null>(null)
+  const [damMesConversaoEixo, setDamMesConversaoEixo] = useState<'tributo' | 'operador' | null>(null)
   const [damMesConversaoErro, setDamMesConversaoErro] = useState(false)
   // Ao clicar num ano em "Por Período" (Análise de Conversão), o gráfico "Por período (mês)"
   // do painel DAM passa a mostrar os meses DAQUELE ano em vez do exercício global da tela.
@@ -339,6 +342,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setDamPeriodoDrillErro(false)
     setDamDrillMesSel(null)
     setDamMesConversao(null)
+    setDamMesConversaoEixo(null)
     setDamMesConversaoErro(false)
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
@@ -426,7 +430,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   function selecionarDamTributo(t: DamTributo) {
-    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoErro(false)
+    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false)
     if (damDrillTributo?.nome === t.nome) { setDamDrillTributo(null); setDamDrillMesData(null); return }
     setDamDrillOperador(null)
     setDamDrillTributo(t)
@@ -437,7 +441,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   function selecionarDamOperador(o: DamOperador) {
-    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoErro(false)
+    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false)
     if (damDrillOperador?.nome === o.nome) { setDamDrillOperador(null); setDamDrillMesData(null); return }
     setDamDrillTributo(null)
     setDamDrillOperador(o)
@@ -448,59 +452,90 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   // Drill de 3º nível (a pedido do usuário) — clicar num mês dentro de "Por Tributo"/"Por
-  // Operador" (depois de já ter selecionado o tributo/operador) mostra Lançado/Arrecadado/
-  // Conversão daquele mês exato, igual ao quadro "Análise de Conversão".
+  // Operador" (depois de já ter selecionado o tributo/operador) ou dentro de "Por Período"
+  // mostra a mesma quebra (lista por tributo/usuário) do quadro "Análise de Conversão",
+  // restrita àquele mês exato.
   function buscarConversaoMes(anoAlvo: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'operador'; nome: string } | { tipo: 'geral' }) {
     setDamMesConversao(null)
+    setDamMesConversaoEixo(null)
     setDamMesConversaoErro(false)
     const qs = new URLSearchParams({ ano: String(anoAlvo), mes: String(mesAlvo), tipo: filtro.tipo })
     if (filtro.tipo === 'tributo') qs.set('codigos', filtro.codigos.join(','))
     if (filtro.tipo === 'operador') qs.set('nome', filtro.nome)
     fetch(`/api/cobranca/analise-conversao-mes?${qs}`).then(r => r.ok ? r.json() : null)
-      .then(res => { if (res && !res.error && typeof res.lancado === 'number') setDamMesConversao(res); else setDamMesConversaoErro(true) })
+      .then(res => {
+        if (res && !res.error && Array.isArray(res.itens)) { setDamMesConversao(res.itens); setDamMesConversaoEixo(res.eixo === 'operador' ? 'operador' : 'tributo') }
+        else setDamMesConversaoErro(true)
+      })
       .catch(() => setDamMesConversaoErro(true))
   }
 
   function selecionarDamDrillMes(mesAlvo: number) {
-    if (damDrillMesSel === mesAlvo) { setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoErro(false); return }
+    if (damDrillMesSel === mesAlvo) { setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); return }
     setDamDrillMesSel(mesAlvo)
     if (damDrillTributo) buscarConversaoMes(ano, mesAlvo, { tipo: 'tributo', codigos: damDrillTributo.codigos })
     else if (damDrillOperador) buscarConversaoMes(ano, mesAlvo, { tipo: 'operador', nome: damDrillOperador.nome })
   }
 
-  // Caixa com Lançado/Arrecadado/Conversão do mês exato selecionado no 3º nível do painel
-  // DAM — mesma métrica e mesma paleta (azul/verde) do quadro "Análise de Conversão".
+  // Caixa com a quebra por tributo/usuário (Lançado/Arrecadado por item) + "Melhor
+  // desempenho" do mês exato selecionado no 3º nível do painel DAM — mesmo formato e mesma
+  // paleta (azul/verde) do quadro "Análise de Conversão" (a pedido do usuário, conforme
+  // evidência anexada mostrando o drill "CalebeAM — por tributo" + "Melhor desempenho — Por
+  // Tributo (em CalebeAM)").
   function renderConversaoMesBox() {
     if (damMesConversaoErro) {
       return (
         <div style={{ marginTop: 10, textAlign: 'center', padding: '10px 0' }}>
-          <div style={{ fontSize: 11, color: '#9098a8' }}>Não foi possível carregar a conversão deste mês.</div>
+          <div style={{ fontSize: 11, color: '#9098a8' }}>Não foi possível carregar a Análise de Conversão deste mês.</div>
         </div>
       )
     }
-    if (!damMesConversao) return <div style={{ marginTop: 10, height: 58, borderRadius: 10, background: '#eef1f7' }} />
-    const it = damMesConversao
-    const maxV = Math.max(1, it.lancado, it.arrecadado)
-    const wLanc = Math.max(3, 100 * it.lancado / maxV)
-    const wArr = Math.max(3, 100 * it.arrecadado / maxV)
+    if (!damMesConversao || !damMesConversaoEixo) {
+      return (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[0, 1, 2].map(i => (<div key={i} style={{ height: 28, borderRadius: 8, background: '#eef1f7' }} />))}
+        </div>
+      )
+    }
+    const eixoLabel = damMesConversaoEixo === 'operador' ? 'usuário' : 'tributo'
+    const itens = damMesConversaoEixo === 'operador'
+      ? damMesConversao.filter(o => o.nome !== 'Internet' && o.nome !== 'Schedule')
+      : damMesConversao.filter(t => !/^Demais tributos/.test(t.nome))
+    if (!itens.length) return <div style={{ fontSize: 11, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Sem lançamento por {eixoLabel} neste mês.</div>
+    const maxV = Math.max(1, ...itens.flatMap(i => [i.lancado, i.arrecadado]))
+    const melhor = [...itens].sort((a, b) => b.conversao - a.conversao)[0]
     return (
-      <div style={{ marginTop: 10, background: '#f7f9fd', borderRadius: 10, padding: '10px 12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 600, color: '#5b6477' }}>Análise de Conversão</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: convCor(it.conversao) }}>{fmtPct(it.conversao)}</span>
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: '#5b6477', marginBottom: 6 }}>Análise de Conversão — por {eixoLabel}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 220, overflowY: 'auto', paddingRight: 4 }}>
+          {itens.map(it => {
+            const wLanc = Math.max(3, 100 * it.lancado / maxV)
+            const wArr = Math.max(3, 100 * it.arrecadado / maxV)
+            return (
+              <div key={it.nome}>
+                <span title={it.nome} style={{ fontSize: 11, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginBottom: 3 }}>{it.nome}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                  <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${wLanc.toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 50, textAlign: 'right' }}>{fmtAbrev(it.lancado)}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${wArr.toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 50, textAlign: 'right' }}>{fmtAbrev(it.arrecadado)}</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${wLanc.toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
+        {melhor ? (
+          <div style={{ marginTop: 10, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '9px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 10.5, color: '#5b6477' }}>Melhor {eixoLabel}</span>
+            <span title={melhor.nome} style={{ fontSize: 10.5, fontWeight: 700, color: convCor(melhor.conversao), textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{melhor.nome} · {fmtPct(melhor.conversao)}</span>
           </div>
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 50, textAlign: 'right' }}>{fmtAbrev(it.lancado)}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${wArr.toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
-          </div>
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 50, textAlign: 'right' }}>{fmtAbrev(it.arrecadado)}</span>
-        </div>
+        ) : null}
       </div>
     )
   }
@@ -510,6 +545,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setDamPeriodoDrillData(null)
     setDamPeriodoDrillErro(false)
     setDamMesConversao(null)
+    setDamMesConversaoEixo(null)
     setDamMesConversaoErro(false)
     if (conversaoPeriodoAno === anoSel) { setConversaoPeriodoAno(null); setDamsPeriodo(null); return }
     setConversaoPeriodoAno(anoSel)
@@ -533,7 +569,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // nível quebrando aquele mês específico por tributo, substituindo o gráfico (não abre outra
   // card).
   function selecionarDamPeriodoMes(anoAlvo: number, mesAlvo: number) {
-    if (damPeriodoDrillMes === mesAlvo) { setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamMesConversao(null); setDamMesConversaoErro(false); return }
+    if (damPeriodoDrillMes === mesAlvo) { setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); return }
     setDamPeriodoDrillMes(mesAlvo)
     buscarDamPeriodoTributoMes(anoAlvo, mesAlvo)
     buscarConversaoMes(anoAlvo, mesAlvo, { tipo: 'geral' })
@@ -798,7 +834,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null); setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoErro(false) }}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null); setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false) }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',
