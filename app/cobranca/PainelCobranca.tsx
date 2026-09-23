@@ -1882,7 +1882,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <span style={reportBadge}>Por mês</span>
               </div>
               <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-                Saldo devedor por mês de vencimento{potSel.codigos.length > 1 ? ` — soma de ${potSel.codigos.length} códigos` : ''}. Barras vermelhas já venceram; laranjas ainda vão vencer. Clique num mês pra ver os devedores.
+                {potSel.codigos.length === 1 && potSel.codigos[0] === 1
+                  ? 'Saldo devedor acumulado desde o início do exercício até cada mês de vencimento (mesmo critério do KPI "Em Aberto" da tela de IPTU, filtrado por Mês).'
+                  : `Saldo devedor por mês de vencimento${potSel.codigos.length > 1 ? ` — soma de ${potSel.codigos.length} códigos` : ''}.`} Barras vermelhas já venceram; laranjas ainda vão vencer. Clique num mês pra ver os devedores.
               </div>
 
               {!potMensal ? (

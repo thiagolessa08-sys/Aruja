@@ -1191,13 +1191,13 @@ async function iptuOficialQuandoVenceRaw(ano: number, mes?: number): Promise<Pot
   const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const r = await agentQuery(`
     SELECT vy, vm, SUM(valor) vl FROM (
-      SELECT YEAR(p.dt_vencimento) vy, MONTH(p.dt_vencimento) vm, g.cd_devedor dev, SUM(pm.vl_movimento * pm.no_sinal) valor
+      SELECT YEAR(p.dt_vencimento) vy, MONTH(p.dt_vencimento) vm, g.cd_devedor dev, p.dt_vencimento venc, SUM(pm.vl_movimento * pm.no_sinal) valor
       FROM ${SCHEMA}.tb_dsod_guias g
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
       WHERE g.cd_tributo IN (${IPTU_COD}) AND g.no_exercicio_lancamento = ${ano} AND p.no_parcela <> 0
         AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${filtroMes}
-      GROUP BY YEAR(p.dt_vencimento), MONTH(p.dt_vencimento), g.cd_devedor
+      GROUP BY YEAR(p.dt_vencimento), MONTH(p.dt_vencimento), g.cd_devedor, p.dt_vencimento
       HAVING SUM(pm.vl_movimento * pm.no_sinal) > 0
     ) t GROUP BY vy, vm`, 500)
 
@@ -1212,6 +1212,22 @@ async function iptuOficialQuandoVenceRaw(ano: number, mes?: number): Promise<Pot
     })
     .filter(x => x.saldo > 0 && x.ano >= 2005 && x.ano <= 2035 && x.mes >= 1 && x.mes <= 12)
     .sort((a, b) => a.ano - b.ano || a.mes - b.mes)
+}
+
+/**
+ * Versão ACUMULADA (a pedido do usuário) de iptuOficialQuandoVence pro gráfico "Quando Vence"
+ * — cada mês passa a somar tudo desde o início do exercício até ele (igual ao KPI "Em Aberto"
+ * quando se filtra por Mês na tela de IPTU), em vez do valor isolado daquele mês. NÃO usada
+ * pelo ranking de "Potencial de Arrecadação" (que precisa do valor isolado por mês pra separar
+ * corretamente vencido/a vencer sem somar em dobro) — só pelo drill "Quando Vence" em si.
+ */
+export async function iptuOficialQuandoVenceAcumulado(ano: number, mes?: number): Promise<PotencialMes[]> {
+  const porMes = await iptuOficialQuandoVence(ano, mes)
+  let acumulado = 0
+  return porMes.map(x => {
+    acumulado += x.saldo
+    return { ano: x.ano, mes: x.mes, saldo: acumulado, vencido: x.vencido }
+  })
 }
 
 async function saldoVAraw(grupo: GrupoTributo): Promise<Map<number, { vencido: number; aberto: number }>> {
