@@ -201,6 +201,13 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
     try {
       const c = v.cards
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const trac = '—'
+      // Inscrição/ID Físico (a pedido do usuário) é coluna FIXA — sempre exportada. Exercício
+      // e os agregados de situação/pagamento não são de um imóvel específico, então ficam em
+      // branco; quando um drill de "Imóveis por situação da guia" ou "Imóveis por status de
+      // pagamento" está aberto na tela (mesmas listas já carregadas em imoveisSituacao/
+      // imoveisPagto), cada imóvel entra com sua inscrição real, igual ao critério já usado
+      // em IPTU/ITBI/ISSCC.
       const dados: DadosRelatorio = {
         titulo: `TCA — Exercício ${v.anoRef}${filtroLabel ? ' · ' + filtroLabel : ''}`,
         subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${filtroLabel ? ` · filtrado por ${filtroLabel}` : ''}`,
@@ -212,20 +219,27 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           { rotulo: 'Isento', valor: money(c.isento.atual) },
           { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
         ],
-        colunas: ['Exercício', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso'],
-        // Uma única tabela: linhas de exercício (todas as 8 colunas) seguidas das linhas de
-        // situação da guia e status de pagamento (só as 2 primeiras colunas preenchidas —
-        // as demais ficam em "—", já que não fazem sentido para essas linhas). Respeitam o
-        // bairro/rua selecionados no gráfico "TCA por Bairro" (ou tudo, se nada selecionado).
+        colunas: ['Exercício', 'Inscrição / ID Físico', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso'],
+        // Uma única tabela: linhas de exercício (todas as colunas) seguidas das linhas de
+        // situação da guia e status de pagamento (agregado — só "Lançado" preenchido, o
+        // resto "—"), e por fim os imóveis do drill aberto (se houver), com inscrição real.
+        // Respeitam o bairro/rua selecionados no gráfico "TCA por Bairro" (ou tudo, se nada
+        // selecionado).
         linhas: [
           ...v.evolucao.map(e => [
-            e.previsto ? `${e.ano} *` : e.ano, money(e.lancado), money(e.arrecadado),
+            e.previsto ? `${e.ano} *` : e.ano, trac, money(e.lancado), money(e.arrecadado),
             `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
           ]),
           ...(res ? [
-            ...res.situacao.map(s => [`${s.situacao} (situação)`, s.qt.toLocaleString('pt-BR'), '—', '—', '—', '—', '—', '—']),
-            ...res.pagamento.map(p => [`${p.status} (pagamento)`, p.qt.toLocaleString('pt-BR'), '—', '—', '—', '—', '—', '—']),
+            ...res.situacao.map(s => [`${s.situacao} (situação)`, trac, s.qt.toLocaleString('pt-BR'), trac, trac, trac, trac, trac, trac]),
+            ...res.pagamento.map(p => [`${p.status} (pagamento)`, trac, p.qt.toLocaleString('pt-BR'), trac, trac, trac, trac, trac, trac]),
           ] : []),
+          ...(situacaoSel && imoveisSituacao.length ? imoveisSituacao.map(it => [
+            `Imóvel · ${situacaoSel} (situação)`, it.inscricao || trac, it.nome || `Imóvel ${it.cd}`, trac, trac, trac, trac, trac, trac,
+          ]) : []),
+          ...(pagtoSel && imoveisPagto.length ? imoveisPagto.map(it => [
+            `Imóvel · ${pagtoSel.status} (pagamento)`, it.inscricao || trac, it.nome || `Imóvel ${it.cd}`, trac, trac, trac, trac, trac, trac,
+          ]) : []),
         ],
         arquivo: `TCA-${v.anoRef}${bairroFiltro ? '-' + bairroFiltro.replace(/\s+/g, '-') : ''}`,
       }
