@@ -379,7 +379,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       if (semNumero) p.set('semnumero', '1')
       const rel = await fetchJson(`/api/imobiliario/iptu-relatorio?${p}`)
       if (!rel?.itens) { alert('Não foi possível gerar o relatório. Tente novamente.'); return }
-      const itens: { nome: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; imoveis: number; espolio: number; semNumero: number }[] = rel.itens
+      const itens: { nome: string; inscricao: string; lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number; imoveis: number; espolio: number; semNumero: number }[] = rel.itens
       const filtroExtra = [espolio ? 'espólio' : '', semNumero ? 'sem número' : ''].filter(Boolean).join(' + ')
 
       // Colunas: "Todos" (seletor de métrica do gráfico IPTU por Bairro) exporta tudo;
@@ -400,12 +400,16 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       }
 
       const ruaAtiva = bairroSel && ruaSel ? ruaSel : null
+      // Inscrição/ID Físico do imóvel (a pedido do usuário) é coluna FIXA — sempre exportada,
+      // independente da métrica escolhida no seletor "Todos/Lançado/...". Só vem preenchida
+      // quando a linha é um único imóvel (proprietário com mais de um imóvel não tem uma
+      // inscrição só sua — ver relatorioIptu() em lib/iptu-relatorio.ts).
       const dados: DadosRelatorio = {
         titulo: `IPTU — Exercício ${v.anoRef}${bairroSel ? ' · ' + bairroSel : ''}${ruaAtiva ? ' · ' + ruaAtiva : ''}`,
         subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)} · ${ruaAtiva ? 'contribuintes da rua' : bairroSel ? 'contribuintes do bairro' : 'todos os bairros'}${filtroExtra ? ` · filtro: ${filtroExtra}` : ''}`,
         cards: idsAtivos.map(cl => cardPorId[cl.id]).filter((x): x is { rotulo: string; valor: string } => !!x),
-        colunas: [bairroSel ? 'Contribuinte' : 'Bairro', ...idsAtivos.map(cl => cl.label)],
-        linhas: itens.map(l => [l.nome, ...idsAtivos.map(cl => valorPorId[cl.id](l))]),
+        colunas: [bairroSel ? 'Contribuinte' : 'Bairro', 'Inscrição / ID Físico', ...idsAtivos.map(cl => cl.label)],
+        linhas: itens.map(l => [l.nome, l.inscricao || '—', ...idsAtivos.map(cl => valorPorId[cl.id](l))]),
         arquivo: `IPTU-${ruaAtiva ? ruaAtiva.replace(/\s+/g, '-') : bairroSel ? bairroSel.replace(/\s+/g, '-') : 'bairros'}-${v.anoRef}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel

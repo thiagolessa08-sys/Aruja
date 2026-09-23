@@ -13,6 +13,7 @@ const SEM_RV = ` AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
 export interface FiltrosRelatorioIptu { ano: number; mes: number | null; bairro: string | null; rua: string | null; espolio: boolean; semNumero: boolean }
 export interface LinhaRelatorioIptu {
   nome: string
+  inscricao: string
   lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number
   imoveis: number; espolio: number; semNumero: number
 }
@@ -41,21 +42,25 @@ function base(f: FiltrosRelatorioIptu) {
 const mesFlow = (f: FiltrosRelatorioIptu, aplica: boolean) => aplica && f.mes ? ` AND MONTH(p.dt_vencimento) <= ${f.mes}` : ''
 const chaveValida = (f: FiltrosRelatorioIptu, k: string) => f.bairro ? (k !== '' && k !== '0' && k !== 'null') : true
 
-// Métrica "simples" (soma direta): lançado (com nome+imóveis), arrecadado, isento.
+// Métrica "simples" (soma direta): lançado (com nome+imóveis+inscrição), arrecadado, isento.
 async function metricaSimples(f: FiltrosRelatorioIptu, extraFrom: string, extraWhere: string, aplicaMes: boolean, comNome: boolean) {
   const b = base(f)
-  const nomeSel = comNome ? (f.bairro ? ', MIN(cp.nm_rsocial) nome' : ', c.nm_bairro nome') : ''
+  // Inscrição do imóvel (a pedido do usuário, coluna fixa no relatório) só faz sentido quando
+  // a linha é UM imóvel — MIN() é só pra satisfazer o GROUP BY; quando o grupo tem mais de um
+  // imóvel (bairro inteiro, ou proprietário com várias matrículas) o valor é descartado lá
+  // embaixo em relatorioIptu(), pra não sugerir que aquele é "o" imóvel da linha.
+  const nomeSel = comNome ? (f.bairro ? ', MIN(cp.nm_rsocial) nome, MIN(i.no_inscricao_imovel) inscricao' : ', c.nm_bairro nome, MIN(i.no_inscricao_imovel) inscricao') : ''
   const q = `SELECT ${b.grupo} k${nomeSel}, COUNT(DISTINCT g.cd_devedor) im, SUM(pm.vl_movimento) vl
     ${b.from}${extraFrom}
     WHERE ${b.where}${extraWhere}${mesFlow(f, aplicaMes)}
     GROUP BY ${b.grupo}`
   const r = await agentQuery(q, 3000)
-  const map = new Map<string, { nome: string; imoveis: number; valor: number }>()
+  const map = new Map<string, { nome: string; inscricao: string; imoveis: number; valor: number }>()
   for (const row of r.rows) {
     const k = String(row[0] ?? '').trim()
     if (!chaveValida(f, k)) continue
-    if (comNome) map.set(k, { nome: String(row[1] ?? '').trim() || '—', imoveis: num(row[2]), valor: num(row[3]) })
-    else map.set(k, { nome: k, imoveis: num(row[1]), valor: num(row[2]) })
+    if (comNome) map.set(k, { nome: String(row[1] ?? '').trim() || '—', inscricao: String(row[2] ?? '').trim(), imoveis: num(row[3]), valor: num(row[4]) })
+    else map.set(k, { nome: k, inscricao: '', imoveis: num(row[1]), valor: num(row[2]) })
   }
   return map
 }
@@ -140,6 +145,7 @@ export async function relatorioIptu(f: FiltrosRelatorioIptu): Promise<LinhaRelat
   for (const [k, l] of lanc) {
     linhas.push({
       nome: l.nome,
+      inscricao: l.imoveis === 1 ? l.inscricao : '',
       lancado: l.valor,
       arrecadado: arrec.get(k)?.valor ?? 0,
       emAberto: aberto.get(k) ?? 0,
