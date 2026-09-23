@@ -1094,6 +1094,19 @@ async function potencialArrecadacaoRaw(ano?: number, mes?: number): Promise<Pote
     porCd.set(cd, cur)
   }
 
+  // IPTU (cd=1) troca pro modelo OFICIAL de Imobiliário (a pedido do usuário) — mesma troca já
+  // feita em analiseConversao/iptuOficialAno (Análise de Conversão), aqui aplicada ao vencido/
+  // a vencer de "Potencial de Arrecadação" pra bater com o drill "Quando Vence" (que usa a
+  // mesma fonte). Só quando há exercício selecionado — a query oficial é por-exercício, igual
+  // ao resto do IPTU oficial.
+  if (ano) {
+    const oficial = await iptuOficialQuandoVence(ano, mes)
+    const nomeIptu = porCd.get(1)?.nome ?? 'IPTU'
+    const vencidoOficial = oficial.filter(x => x.vencido).reduce((s, x) => s + x.saldo, 0)
+    const aVencerOficial = oficial.filter(x => !x.vencido).reduce((s, x) => s + x.saldo, 0)
+    porCd.set(1, { nome: nomeIptu, vencido: vencidoOficial, aVencer: aVencerOficial })
+  }
+
   const lista = Array.from(porCd.entries())
     .map(([cd, v]) => ({ cd, nome: v.nome, vencido: v.vencido, aVencer: v.aVencer }))
     .filter(x => x.vencido > 0 || x.aVencer > 0)
@@ -1153,6 +1166,49 @@ async function potencialMensalTributoRaw(codigos: number[], ano?: number, mes?: 
     .map(row => {
       const ano2 = num(row[0]), mes = num(row[1]), saldo = num(row[2])
       return { ano: ano2, mes, saldo, vencido: ano2 < curY || (ano2 === curY && mes < curM) }
+    })
+    .filter(x => x.saldo > 0 && x.ano >= 2005 && x.ano <= 2035 && x.mes >= 1 && x.mes <= 12)
+    .sort((a, b) => a.ano - b.ano || a.mes - b.mes)
+}
+
+/**
+ * Versão OFICIAL (a pedido do usuário) de potencialMensalTributo, só pro IPTU (cd_tributo=1) —
+ * mesma fonte/regra/critério do "Em aberto"/"Inadimplência" já usado na tela de Imobiliário
+ * (qEmAbertoInad/bucketsIptu, tb_dsod_parcela_movimento): net por (devedor, vencimento), com
+ * HAVING > 0 pra nunca deixar uma parcela de saldo negativo (renegociação/correção) cancelar
+ * uma parcela de saldo positivo do mesmo mês antes da agregação — mesmo cuidado já aplicado no
+ * "Em Aberto" do Consultar Contribuinte. Aqui a agregação final é por (ano,mês) de vencimento
+ * em vez de por exercício, pra alimentar a série "Quando Vence"/o ranking de "Potencial de
+ * Arrecadação" quando o item for só o IPTU (cd=1) — "IPTU Diferença de Área" (cd=25) e
+ * qualquer combinação com outros tributos ficam de fora, igual à troca já feita em
+ * analiseConversao (Cobrança) e iptuOficialAno.
+ */
+export async function iptuOficialQuandoVence(ano: number, mes?: number): Promise<PotencialMes[]> {
+  return cached(`iptuOficialQuandoVence:${ano}:${mes ?? ''}`, TTL_15MIN, () => iptuOficialQuandoVenceRaw(ano, mes))
+}
+
+async function iptuOficialQuandoVenceRaw(ano: number, mes?: number): Promise<PotencialMes[]> {
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
+  const r = await agentQuery(`
+    SELECT vy, vm, SUM(valor) vl FROM (
+      SELECT YEAR(p.dt_vencimento) vy, MONTH(p.dt_vencimento) vm, g.cd_devedor dev, SUM(pm.vl_movimento * pm.no_sinal) valor
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND g.no_exercicio_lancamento = ${ano} AND p.no_parcela <> 0
+        AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${filtroMes}
+      GROUP BY YEAR(p.dt_vencimento), MONTH(p.dt_vencimento), g.cd_devedor
+      HAVING SUM(pm.vl_movimento * pm.no_sinal) > 0
+    ) t GROUP BY vy, vm`, 500)
+
+  const now = new Date()
+  const curY = now.getFullYear()
+  const curM = now.getMonth() + 1
+
+  return r.rows
+    .map(row => {
+      const vy = num(row[0]), vm = num(row[1]), saldo = num(row[2])
+      return { ano: vy, mes: vm, saldo, vencido: vy < curY || (vy === curY && vm < curM) }
     })
     .filter(x => x.saldo > 0 && x.ano >= 2005 && x.ano <= 2035 && x.mes >= 1 && x.mes <= 12)
     .sort((a, b) => a.ano - b.ano || a.mes - b.mes)

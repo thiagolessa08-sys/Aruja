@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { potencialMensalTributo } from '@/lib/tributo-engine'
+import { potencialMensalTributo, iptuOficialQuandoVence } from '@/lib/tributo-engine'
 
 // Drill "quando vence" do ranking de Potencial de Arrecadação (Cobrança): saldo por mês de
 // vencimento de um ou mais códigos de tributo.
@@ -18,7 +18,13 @@ export async function GET(req: NextRequest) {
   const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
 
   try {
-    const itens = await potencialMensalTributo(codigos, ano, mes)
+    // IPTU sozinho (cd_tributo=1) usa o modelo OFICIAL de Imobiliário (a pedido do usuário) —
+    // mesmo critério já usado em Análise de Conversão/Potencial de Arrecadação. "IPTU
+    // Diferença de Área" (cd=25) e qualquer combinação com outros tributos ("Demais
+    // tributos") continuam no modelo antigo de posição.
+    const itens = (codigos.length === 1 && codigos[0] === 1 && ano)
+      ? await iptuOficialQuandoVence(ano, mes)
+      : await potencialMensalTributo(codigos, ano, mes)
     return NextResponse.json({ itens })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
