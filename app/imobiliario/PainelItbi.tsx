@@ -250,15 +250,19 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const trac = '—'
 
-      // Uma única tabela para tudo: cabeçalho genérico (Seção | Item | Valor 1..7), cada
-      // bloco de dados preenche o que faz sentido e deixa o resto em "—". Substitui as
-      // 4 tabelas separadas (evolução + 3 seções) por uma tabela só, empilhada.
+      // Uma única tabela para tudo: cabeçalho genérico (Seção | Item | Inscrição/ID Físico |
+      // Valor 1..7), cada bloco de dados preenche o que faz sentido e deixa o resto em "—".
+      // Substitui as 4 tabelas separadas (evolução + 3 seções) por uma tabela só, empilhada.
+      // Inscrição/ID Físico (a pedido do usuário) é coluna FIXA — sempre exportada — mas só
+      // vem preenchida quando a linha corresponde a UM imóvel (Evolução e "ITBI por Bairro"
+      // agregado por bairro/rua não têm uma inscrição única; ver mesmo critério em
+      // lib/iptu-relatorio.ts).
       const linhas: (string | number)[][] = []
 
-      // 1) Evolução (sempre global — Ano/Mês da tela)
+      // 1) Evolução (sempre global — Ano/Mês da tela) — não é de um imóvel específico.
       for (const e of v.evolucao) {
         linhas.push([
-          'Evolução', e.previsto ? `${e.ano} *` : e.ano,
+          'Evolução', e.previsto ? `${e.ano} *` : e.ano, trac,
           money(e.lancado), money(e.arrecadado), `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
           money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
         ])
@@ -275,25 +279,27 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       const listaBairroRel = [...bairrosFiltradosRel].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
       for (const b of listaBairroRel) {
         linhas.push(nivelBairro === 'imovel'
-          ? [secaoBairro, b.nome, `Insc. ${b.inscricao || trac}`, `Nº ${b.numero || trac}`, money(b.valor), trac, trac, trac, trac]
-          : [secaoBairro, b.nome, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, money(b.valor), trac, trac, trac, trac, trac])
+          ? [secaoBairro, b.nome, b.inscricao || trac, `Nº ${b.numero || trac}`, money(b.valor), trac, trac, trac, trac, trac]
+          : [secaoBairro, b.nome, trac, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, money(b.valor), trac, trac, trac, trac, trac])
       }
 
-      // 3) Imóveis mais transmitidos — respeita a busca ativa (senão, ranking completo).
+      // 3) Imóveis mais transmitidos — respeita a busca ativa (senão, ranking completo). Cada
+      // linha já é um imóvel só, então a inscrição vem sempre preenchida.
       if (ranking) {
         const qRankRel = buscaRanking.trim().toLowerCase()
         const itensRankRel = qRankRel ? ranking.itens.filter(it => it.inscricao.toLowerCase().includes(qRankRel) || it.endereco.toLowerCase().includes(qRankRel)) : ranking.itens
         itensRankRel.forEach((it, i) => {
-          linhas.push([`Imóveis mais transmitidos${ano ? ` · ${ano}` : ''}`, `${i + 1}. ${it.inscricao || `Imóvel ${it.cd}`}`, it.endereco || trac, `${it.qt}×`, trac, trac, trac, trac, trac])
+          linhas.push([`Imóveis mais transmitidos${ano ? ` · ${ano}` : ''}`, `${i + 1}º`, it.inscricao || trac, it.endereco || trac, `${it.qt}×`, trac, trac, trac, trac, trac])
         })
       }
 
-      // 4) Consultar Imóvel — só se houver um imóvel aberto na tela.
+      // 4) Consultar Imóvel — só se houver um imóvel aberto na tela. Todas as linhas (o
+      // indicador e cada transmissão) são desse mesmo imóvel, então repetem a inscrição.
       if (imovel) {
         const ind = imovel.indicadores
         const secaoImovel = `Consultar Imóvel · ${imovel.inscricao || `Imóvel ${imovel.cd}`} — ${imovel.endereco}${imovel.proprietario ? ` · ${imovel.proprietario}` : ''}`
         linhas.push([
-          secaoImovel, 'Indicadores',
+          secaoImovel, 'Indicadores', imovel.inscricao || trac,
           `Transmissões: ${fmtInt(ind.qtTransmissoes)}`,
           `Valorização venal: ${(ind.valorizacao >= 0 ? '+' : '') + ind.valorizacao.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`,
           `Intervalo médio: ${ind.intervaloMedioAnos ? ind.intervaloMedioAnos.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' a' : trac}`,
@@ -302,7 +308,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         for (const t of imovel.transmissoes) {
           const alerta = t.valorTransacao > 0 && t.valorVenal > 0 && t.valorTransacao < t.valorVenal ? 'Abaixo do venal' : trac
           linhas.push([
-            secaoImovel, `ITBI ${t.cdItbi || trac}`,
+            secaoImovel, `ITBI ${t.cdItbi || trac}`, imovel.inscricao || trac,
             t.data ? t.data.split('-').reverse().join('/') : trac, t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : trac, t.natureza || trac,
             t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, alerta,
           ])
@@ -320,7 +326,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           { rotulo: 'Isento', valor: money(c.isento.atual) },
           { rotulo: 'Lançado (Guias Ativas)', valor: money(c.lancadoAtivo.atual) },
         ],
-        colunas: ['Seção', 'Item', 'Valor 1', 'Valor 2', 'Valor 3', 'Valor 4', 'Valor 5', 'Valor 6', 'Valor 7'],
+        colunas: ['Seção', 'Item', 'Inscrição / ID Físico', 'Valor 1', 'Valor 2', 'Valor 3', 'Valor 4', 'Valor 5', 'Valor 6', 'Valor 7'],
         linhas,
         arquivo: `ITBI-${v.anoRef}${bairroSel ? '-' + bairroSel.replace(/\s+/g, '-') : ''}`,
       }
