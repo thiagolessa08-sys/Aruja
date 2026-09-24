@@ -299,6 +299,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [damDrillMesSel, setDamDrillMesSel] = useState<number | null>(null)
   const [damMesConversao, setDamMesConversao] = useState<ConversaoItem[] | null>(null)
   const [damMesConversaoEixo, setDamMesConversaoEixo] = useState<'tributo' | 'operador' | null>(null)
+  // `generico`: no eixo tributo, soma lançado/arrecadado dos códigos administrativos (ex.: cod.
+  // 20 "Documento de Arrecadacao") presentes no mês, fora de `itens` (que já filtra igual à
+  // Análise de Conversão); no eixo operador, `true` quando o próprio tributo selecionado é
+  // administrativo (a quebra por usuário abaixo não é de um tributo específico).
+  const [damMesConversaoGenerico, setDamMesConversaoGenerico] = useState<{ lancado: number; arrecadado: number } | boolean | null>(null)
   const [damMesConversaoErro, setDamMesConversaoErro] = useState(false)
   // Ao clicar num ano em "Por Período" (Análise de Conversão), o gráfico "Por período (mês)"
   // do painel DAM passa a mostrar os meses DAQUELE ano em vez do exercício global da tela.
@@ -367,7 +372,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setDamDrillMesSel(null)
     setDamMesConversao(null)
     setDamMesConversaoEixo(null)
-    setDamMesConversaoErro(false)
+    setDamMesConversaoErro(false); setDamMesConversaoGenerico(null)
     const sufMes = mes ? `&mes=${mes}` : ''
     fetch(`/api/cobranca/resumo?ano=${ano}${sufMes}`).then(r => r.ok ? r.json() : null)
       .then(x => {
@@ -458,7 +463,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   function selecionarDamTributo(t: DamTributo) {
-    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false)
+    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); setDamMesConversaoGenerico(null)
     if (damDrillTributo?.nome === t.nome) { setDamDrillTributo(null); setDamDrillMesData(null); return }
     setDamDrillOperador(null)
     setDamDrillTributo(t)
@@ -469,7 +474,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   function selecionarDamOperador(o: DamOperador) {
-    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false)
+    setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); setDamMesConversaoGenerico(null)
     if (damDrillOperador?.nome === o.nome) { setDamDrillOperador(null); setDamDrillMesData(null); return }
     setDamDrillTributo(null)
     setDamDrillOperador(o)
@@ -486,20 +491,24 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   function buscarConversaoMes(anoAlvo: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'operador'; nome: string } | { tipo: 'geral' }) {
     setDamMesConversao(null)
     setDamMesConversaoEixo(null)
-    setDamMesConversaoErro(false)
+    setDamMesConversaoErro(false); setDamMesConversaoGenerico(null)
     const qs = new URLSearchParams({ ano: String(anoAlvo), mes: String(mesAlvo), tipo: filtro.tipo })
     if (filtro.tipo === 'tributo') qs.set('codigos', filtro.codigos.join(','))
     if (filtro.tipo === 'operador') qs.set('nome', filtro.nome)
     fetch(`/api/cobranca/analise-conversao-mes?${qs}`).then(r => r.ok ? r.json() : null)
       .then(res => {
-        if (res && !res.error && Array.isArray(res.itens)) { setDamMesConversao(res.itens); setDamMesConversaoEixo(res.eixo === 'operador' ? 'operador' : 'tributo') }
+        if (res && !res.error && Array.isArray(res.itens)) {
+          setDamMesConversao(res.itens)
+          setDamMesConversaoEixo(res.eixo === 'operador' ? 'operador' : 'tributo')
+          setDamMesConversaoGenerico(res.generico ?? null)
+        }
         else setDamMesConversaoErro(true)
       })
       .catch(() => setDamMesConversaoErro(true))
   }
 
   function selecionarDamDrillMes(mesAlvo: number) {
-    if (damDrillMesSel === mesAlvo) { setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); return }
+    if (damDrillMesSel === mesAlvo) { setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); setDamMesConversaoGenerico(null); return }
     setDamDrillMesSel(mesAlvo)
     if (damDrillTributo) buscarConversaoMes(ano, mesAlvo, { tipo: 'tributo', codigos: damDrillTributo.codigos })
     else if (damDrillOperador) buscarConversaoMes(ano, mesAlvo, { tipo: 'operador', nome: damDrillOperador.nome })
@@ -529,12 +538,35 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     const itens = damMesConversaoEixo === 'operador'
       ? damMesConversao.filter(o => o.nome !== 'Internet' && o.nome !== 'Schedule')
       : damMesConversao.filter(t => !/^Demais tributos/.test(t.nome))
-    if (!itens.length) return <div style={{ fontSize: 11, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Sem lançamento por {eixoLabel} neste mês.</div>
+    // No eixo tributo, `generico` é a soma dos códigos administrativos (cod. 20 "Documento de
+    // Arrecadacao" etc.) do mês, fora de `itens` (que já segue o mesmo filtro da Análise de
+    // Conversão). No eixo operador, é um booleano: o próprio tributo do drill é administrativo.
+    const genericoValor = damMesConversaoEixo === 'tributo' && damMesConversaoGenerico && typeof damMesConversaoGenerico === 'object'
+      ? damMesConversaoGenerico as { lancado: number; arrecadado: number }
+      : null
+    const genericoOperador = damMesConversaoEixo === 'operador' && damMesConversaoGenerico === true
+    if (!itens.length) {
+      if (genericoValor) {
+        return (
+          <div style={{ marginTop: 10, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '10px 12px' }}>
+            <div style={{ fontSize: 11, color: '#5b6477' }}>Nenhum tributo específico neste mês — só código genérico/administrativo (Documento de Arrecadação).</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#283e93' }}>Lançado {fmtAbrev(genericoValor.lancado)}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#1fa463' }}>Arrecadado {fmtAbrev(genericoValor.arrecadado)}</span>
+            </div>
+          </div>
+        )
+      }
+      return <div style={{ fontSize: 11, color: '#9098a8', textAlign: 'center', padding: '10px 0' }}>Sem lançamento por {eixoLabel} neste mês.</div>
+    }
     const maxV = Math.max(1, ...itens.flatMap(i => [i.lancado, i.arrecadado]))
     const melhor = [...itens].sort((a, b) => b.conversao - a.conversao)[0]
     return (
       <div style={{ marginTop: 10 }}>
         <div style={{ fontSize: 10.5, fontWeight: 600, color: '#5b6477', marginBottom: 6 }}>Análise de Conversão — por {eixoLabel}</div>
+        {genericoOperador ? (
+          <div style={{ fontSize: 10.5, color: '#9098a8', marginBottom: 6 }}>Tributo genérico/administrativo (Documento de Arrecadação) — a quebra abaixo é só de quem gerou as guias, não de um tributo específico.</div>
+        ) : null}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 220, overflowY: 'auto', paddingRight: 4 }}>
           {itens.map(it => {
             const wLanc = Math.max(3, 100 * it.lancado / maxV)
@@ -558,6 +590,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             )
           })}
         </div>
+        {genericoValor ? (
+          <div style={{ marginTop: 8, fontSize: 10, color: '#9098a8' }}>+ {fmtAbrev(genericoValor.lancado)} em código genérico/administrativo (Documento de Arrecadação), não incluído acima.</div>
+        ) : null}
         {melhor ? (
           <div style={{ marginTop: 10, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '9px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 10.5, color: '#5b6477' }}>Melhor {eixoLabel}</span>
@@ -574,7 +609,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setDamPeriodoDrillErro(false)
     setDamMesConversao(null)
     setDamMesConversaoEixo(null)
-    setDamMesConversaoErro(false)
+    setDamMesConversaoErro(false); setDamMesConversaoGenerico(null)
     if (conversaoPeriodoAno === anoSel) { setConversaoPeriodoAno(null); setDamsPeriodo(null); return }
     setConversaoPeriodoAno(anoSel)
     setDamsPeriodo(null)
@@ -597,7 +632,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // nível quebrando aquele mês específico por tributo, substituindo o gráfico (não abre outra
   // card).
   function selecionarDamPeriodoMes(anoAlvo: number, mesAlvo: number) {
-    if (damPeriodoDrillMes === mesAlvo) { setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); return }
+    if (damPeriodoDrillMes === mesAlvo) { setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); setDamMesConversaoGenerico(null); return }
     setDamPeriodoDrillMes(mesAlvo)
     buscarDamPeriodoTributoMes(anoAlvo, mesAlvo)
     buscarConversaoMes(anoAlvo, mesAlvo, { tipo: 'geral' })
@@ -866,7 +901,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </div>
             <div style={{ display: 'flex', background: '#f4f7fc', borderRadius: 12, padding: 3, gap: 2 }}>
               {([['tributo', 'Por Tributo'], ['periodo', 'Por Período'], ['operador', 'Por Operador']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null); setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false) }}
+                <button key={key} onClick={() => { setConversaoDim(key); setBuscaConversao(''); setDamDrillTributo(null); setDamDrillOperador(null); setBuscaDam(''); setConversaoPeriodoAno(null); setDamsPeriodo(null); setConversaoDrillItem(null); setConversaoDrillData(null); setConversaoDrillErro(false); setConversaoDrillOperPeriodo(null); setDamPeriodoDrillMes(null); setDamPeriodoDrillData(null); setDamPeriodoDrillErro(false); setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); setDamMesConversaoGenerico(null) }}
                   style={{
                     border: 'none', borderRadius: 9, padding: '6px 13px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                     background: (conversaoDim ?? 'tributo') === key ? '#283e93' : 'transparent',

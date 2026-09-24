@@ -25,16 +25,16 @@ export async function GET(req: NextRequest) {
     if (tipo === 'tributo' && codigosRaw) {
       const codigos = codigosRaw.split(',').map(Number).filter(n => Number.isFinite(n))
       if (!codigos.length) return NextResponse.json({ error: 'codigos inválidos' }, { status: 400 })
-      const itens = await analiseConversaoMesPorOperador(ano, mes, { tipo: 'tributo', codigos })
-      return NextResponse.json({ eixo: 'operador', itens })
+      const { itens, generico } = await analiseConversaoMesPorOperador(ano, mes, { tipo: 'tributo', codigos })
+      return NextResponse.json({ eixo: 'operador', itens, generico })
     }
     if (tipo === 'operador' && nome) {
-      const itens = await analiseConversaoMesPorTributo(ano, mes, { tipo: 'operador', nome })
-      return NextResponse.json({ eixo: 'tributo', itens })
+      const { itens, generico } = await analiseConversaoMesPorTributo(ano, mes, { tipo: 'operador', nome })
+      return NextResponse.json({ eixo: 'tributo', itens, generico })
     }
     if (tipo === 'geral') {
-      const itens = await analiseConversaoMesPorTributo(ano, mes, { tipo: 'geral' })
-      return NextResponse.json({ eixo: 'tributo', itens })
+      const { itens, generico } = await analiseConversaoMesPorTributo(ano, mes, { tipo: 'geral' })
+      return NextResponse.json({ eixo: 'tributo', itens, generico })
     }
     return NextResponse.json({ error: 'Parâmetros inválidos: informe tipo=tributo&codigos=..., tipo=operador&nome=... ou tipo=geral' }, { status: 400 })
   } catch (e) {

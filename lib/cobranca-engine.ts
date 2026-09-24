@@ -763,17 +763,22 @@ export type ConversaoMesFiltro =
  * razão: bater com o lançado/arrecadado já exibido no nível anterior, que também não usa a
  * correção.
  */
-export async function analiseConversaoMesPorTributo(ano: number, mesAlvo: number, filtro: { tipo: 'operador'; nome: string } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
+export interface ConversaoMesGenerico { lancado: number; arrecadado: number }
+export interface ConversaoMesPorTributoResultado { itens: ConversaoItem[]; generico: ConversaoMesGenerico | null }
+
+export async function analiseConversaoMesPorTributo(ano: number, mesAlvo: number, filtro: { tipo: 'operador'; nome: string } | { tipo: 'geral' }): Promise<ConversaoMesPorTributoResultado> {
   const chave = filtro.tipo === 'operador' ? `oper:${filtro.nome}` : 'geral'
   return cached(`conversaoMesPorTributo:${ano}:${mesAlvo}:${chave}`, TTL_15MIN, () => analiseConversaoMesPorTributoRaw(ano, mesAlvo, filtro))
 }
 
-async function analiseConversaoMesPorTributoRaw(ano: number, mesAlvo: number, filtro: { tipo: 'operador'; nome: string } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
-  // Sem CODIGOS_EXCLUIDOS aqui (diferente da Análise de Conversão) — o próprio painel DAM
+async function analiseConversaoMesPorTributoRaw(ano: number, mesAlvo: number, filtro: { tipo: 'operador'; nome: string } | { tipo: 'geral' }): Promise<ConversaoMesPorTributoResultado> {
+  // Traz TODOS os códigos (sem excluir nada na query) — o próprio painel DAM
   // (damsGeradasRaw/damsDrillMesRaw) já mostra "Documento de Arrecadacao" (cd_tributo=20, o
-  // DAM genérico) como item normal em "Por tributo", então esse drill precisa incluí-lo
-  // também: um operador que só gerou guias genéricas naquele mês (ex.: FrancineB em agosto)
-  // ficava com a lista vazia mesmo tendo barra > 0 no gráfico — bug relatado pelo usuário.
+  // DAM genérico) como item normal em "Por tributo", então esse drill precisa incluí-lo na
+  // soma. Mas na volta, separa em `itens` (tributos reais, mesmo filtro de CODIGOS_EXCLUIDOS
+  // da Análise de Conversão) e `generico` (soma dos códigos administrativos presentes no mês) —
+  // a pedido do usuário, pra "considerar o nível da Análise de Conversão" sem esconder o
+  // código 20 quando é só o que existe (ex.: FrancineB em agosto só gerou guias genéricas).
   const filtroOperador = filtro.tipo === 'operador'
     ? (filtro.nome === 'Internet'
         ? ` AND (g.cd_usuario_gerador = 'Internet' OR PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) = 0)`
@@ -789,22 +794,37 @@ async function analiseConversaoMesPorTributoRaw(ano: number, mesAlvo: number, fi
     WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroOperador}
     GROUP BY g.cd_tributo, t.ds_tributo`, 200)
 
-  return r.rows
-    .map(row => ({ nome: String(row[1] ?? '').trim() || `Tributo ${num(row[0])}`, lancado: num(row[2]), arrecadado: num(row[3]) }))
+  const rows = r.rows
+    .map(row => ({ cd: num(row[0]), nome: String(row[1] ?? '').trim() || `Tributo ${num(row[0])}`, lancado: num(row[2]), arrecadado: num(row[3]) }))
     .filter(x => x.lancado > 0)
+  const reais = rows.filter(x => !CODIGOS_EXCLUIDOS.includes(x.cd))
+  const genericos = rows.filter(x => CODIGOS_EXCLUIDOS.includes(x.cd))
+
+  const itens = reais
     .sort((a, b) => b.lancado - a.lancado)
-    .map(x => ({ ...x, conversao: x.lancado ? (x.arrecadado / x.lancado) * 100 : 0 }))
+    .map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.arrecadado, conversao: x.lancado ? (x.arrecadado / x.lancado) * 100 : 0 }))
+  const generico = genericos.length
+    ? { lancado: genericos.reduce((s, x) => s + x.lancado, 0), arrecadado: genericos.reduce((s, x) => s + x.arrecadado, 0) }
+    : null
+
+  return { itens, generico }
 }
 
-export async function analiseConversaoMesPorOperador(ano: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
+export interface ConversaoMesPorOperadorResultado { itens: ConversaoItem[]; generico: boolean }
+
+export async function analiseConversaoMesPorOperador(ano: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'geral' }): Promise<ConversaoMesPorOperadorResultado> {
   const chave = filtro.tipo === 'tributo' ? `trib:${filtro.codigos.join(',')}` : 'geral'
   return cached(`conversaoMesPorOperador:${ano}:${mesAlvo}:${chave}`, TTL_15MIN, () => analiseConversaoMesPorOperadorRaw(ano, mesAlvo, filtro))
 }
 
-async function analiseConversaoMesPorOperadorRaw(ano: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
-  // Sem CODIGOS_EXCLUIDOS aqui — mesmo motivo de analiseConversaoMesPorTributoRaw acima (o
-  // painel DAM não exclui "Documento de Arrecadacao"/outros códigos administrativos).
-  const filtroTributo = filtro.tipo === 'tributo' ? ` AND g.cd_tributo IN (${filtro.codigos.join(',')})` : ''
+async function analiseConversaoMesPorOperadorRaw(ano: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'geral' }): Promise<ConversaoMesPorOperadorResultado> {
+  // Sem CODIGOS_EXCLUIDOS na query — mesmo motivo de analiseConversaoMesPorTributoRaw acima (o
+  // painel DAM não exclui "Documento de Arrecadacao"/outros códigos administrativos). Aqui o
+  // recorte já é de UM tributo (DamTributo tem sempre 1 código); se esse código for
+  // administrativo, `generico` avisa que a quebra por operador abaixo não é de um tributo
+  // específico — a pedido do usuário, mesma ideia da separação feita em PorTributoRaw.
+  const filtroTributoMes = filtro.tipo === 'tributo' ? ` AND g.cd_tributo IN (${filtro.codigos.join(',')})` : ''
+  const genericoMes = filtro.tipo === 'tributo' && filtro.codigos.length > 0 && filtro.codigos.every(cd => CODIGOS_EXCLUIDOS.includes(cd))
 
   const [totalR, operR] = await Promise.all([
     agentQuery(`
@@ -812,13 +832,13 @@ async function analiseConversaoMesPorOperadorRaw(ano: number, mesAlvo: number, f
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroTributo}`, 1),
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroTributoMes}`, 1),
     agentQuery(`
       SELECT g.cd_usuario_gerador, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroTributo}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroTributoMes}
         AND PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) > 0
       GROUP BY g.cd_usuario_gerador`, 300),
   ])
@@ -840,7 +860,8 @@ async function analiseConversaoMesPorOperadorRaw(ano: number, mesAlvo: number, f
     else operList.push({ nome: 'Internet', lancado: internetLancado, pago: internetPago })
   }
 
-  return operList
+  const itens = operList
     .sort((a, b) => b.lancado - a.lancado)
     .map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
+  return { itens, generico: genericoMes }
 }
