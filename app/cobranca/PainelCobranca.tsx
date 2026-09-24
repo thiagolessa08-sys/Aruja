@@ -1446,9 +1446,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           const rm = resultado ?? FALLBACK_RESULTADO
           const cdRes = compDamId ?? FALLBACK_COMP_DAM_ID
           const pctPagas = rm.totalGeradas ? (rm.totalPagas / rm.totalGeradas) * 100 : 0
+          const pctPagasIds = rm.totalGeradas ? (cdRes.totalPagas / rm.totalGeradas) * 100 : 0
           return (
             <>
-              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
                 <div style={{ background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 14, padding: '14px 16px' }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>DAM Geradas em {rm.ano}</div>
                   <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalGeradas)}</div>
@@ -1457,6 +1458,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#1fa463' }}>DAM Pagas em {rm.ano}</div>
                   <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(rm.totalPagas)}</div>
                   <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctPagas)} das geradas no ano</div>
+                </div>
+                <div style={{ background: '#fdecec', border: '1px solid #f3c9c9', borderRadius: 14, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#d64545' }}>DAM Pagas (IDs distintos) em {rm.ano}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(cdRes.totalPagas)}</div>
+                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctPagasIds)} das geradas no ano</div>
                 </div>
               </div>
 
