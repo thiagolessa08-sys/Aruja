@@ -225,6 +225,15 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [resultadoDrillMes, setResultadoDrillMes] = useState<number | null>(null)
   const [resultadoDrillData, setResultadoDrillData] = useState<ResultadoTributoMes[] | null>(null)
   const [resultadoDrillErro, setResultadoDrillErro] = useState(false)
+  // Drill "Comparativo Por Usuário e Tributo" do gráfico "Baixas Processadas por Ano" (a
+  // pedido do usuário) — ao clicar numa barra de ano, mostra o ranking de tributos arrecadados
+  // e o melhor resultado por usuário DAQUELE ano, reaproveitando os mesmos endpoints da lente
+  // "Por Período" da Análise de Conversão (tipo=periodo), com estado próprio pra não colidir
+  // com o drill da própria Análise de Conversão.
+  const [baixasAnoSel, setBaixasAnoSel] = useState<number | null>(null)
+  const [baixasAnoTributo, setBaixasAnoTributo] = useState<ConversaoItem[] | null>(null)
+  const [baixasAnoOperador, setBaixasAnoOperador] = useState<ConversaoItem[] | null>(null)
+  const [baixasAnoErro, setBaixasAnoErro] = useState(false)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
   const [potMensal, setPotMensal] = useState<PotMes[] | null>(null)
@@ -308,6 +317,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setResultadoDrillMes(null)
     setResultadoDrillData(null)
     setResultadoDrillErro(false)
+    setBaixasAnoSel(null)
+    setBaixasAnoTributo(null)
+    setBaixasAnoOperador(null)
+    setBaixasAnoErro(false)
     setCompDamId(null)
     setAnalise(null)
     setPotSel(null)
@@ -563,6 +576,26 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setDamPeriodoDrillMes(mesAlvo)
     buscarDamPeriodoTributoMes(anoAlvo, mesAlvo)
     buscarConversaoMes(anoAlvo, mesAlvo, { tipo: 'geral' })
+  }
+
+  // Clique numa barra de "Baixas Processadas por Ano" — desce um nível mostrando o ranking de
+  // maiores tributos arrecadados e o melhor resultado por usuário daquele ano (a pedido do
+  // usuário), reaproveitando os endpoints da lente "Por Período" da Análise de Conversão.
+  function selecionarBaixasAno(anoSel: number) {
+    if (baixasAnoSel === anoSel) { setBaixasAnoSel(null); setBaixasAnoTributo(null); setBaixasAnoOperador(null); setBaixasAnoErro(false); return }
+    setBaixasAnoSel(anoSel)
+    setBaixasAnoTributo(null)
+    setBaixasAnoOperador(null)
+    setBaixasAnoErro(false)
+    const qs = new URLSearchParams({ tipo: 'periodo', anoDrill: String(anoSel), ano: String(ano), ...(mes ? { mes: String(mes) } : {}) })
+    fetch(`/api/cobranca/analise-conversao-drill?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => {
+        if (res && !res.error && Array.isArray(res.itens)) setBaixasAnoTributo(res.itens)
+        else setBaixasAnoErro(true)
+      }).catch(() => setBaixasAnoErro(true))
+    fetch(`/api/cobranca/analise-conversao-drill-operador?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => { if (res && !res.error && Array.isArray(res.itens)) setBaixasAnoOperador(res.itens) })
+      .catch(() => {})
   }
 
   function buscarResultadoPorTributoMes(anoAlvo: number, mesAlvo: number) {
@@ -1898,7 +1931,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   </g>
                 )
               })}
-              {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip({ left: `${(b.cx / gb.W * 100).toFixed(1)}%`, top: `${(b.y / gb.H * 100).toFixed(1)}%`, ano: b.ano, n: b.n })} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />))}
+              {gb.bars.map((b, i) => (<rect key={i} onMouseEnter={() => setTip({ left: `${(b.cx / gb.W * 100).toFixed(1)}%`, top: `${(b.y / gb.H * 100).toFixed(1)}%`, ano: b.ano, n: b.n })} onClick={() => selecionarBaixasAno(b.ano)} x={(b.cx - gb.bw).toFixed(1)} y="0" width={(gb.bw * 2).toFixed(1)} height={String(gb.H - 20)} fill="transparent" pointerEvents="all" />))}
             </svg>
             {tip ? (
               <div style={{ position: 'absolute', left: tip.left, top: tip.top, transform: 'translate(-50%,-115%)', background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 5 }}>
@@ -1907,6 +1940,78 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
               </div>
             ) : null}
           </div>
+          <div style={{ fontSize: 10, color: '#aeb6c6', marginTop: 6 }}>Clique numa barra pra ver o comparativo por usuário e tributo daquele ano.</div>
+
+          {/* Comparativo Por Usuário e Tributo (a pedido do usuário) — ranking de maiores
+              tributos arrecadados + melhores resultados por usuário do ano clicado. Reaproveita
+              os mesmos endpoints da lente "Por Período" da Análise de Conversão. */}
+          {baixasAnoSel ? (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #eef1f7' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#1f2a44' }}>Comparativo Por Usuário e Tributo · {baixasAnoSel}</span>
+                <button onClick={() => { setBaixasAnoSel(null); setBaixasAnoTributo(null); setBaixasAnoOperador(null); setBaixasAnoErro(false) }}
+                  style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
+              </div>
+              {baixasAnoErro ? (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div style={{ fontSize: 12, color: '#9098a8' }}>Não foi possível carregar o comparativo.</div>
+                  <button onClick={() => selecionarBaixasAno(baixasAnoSel)} style={{ marginTop: 8, border: '1px solid #e3e8f1', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 11.5, fontWeight: 600, color: '#283e93', cursor: 'pointer' }}>Tentar novamente</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#1f2a44', marginTop: 14 }}>Ranking — Maiores tributos arrecadados</div>
+                  {!baixasAnoTributo ? (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {[0, 1, 2].map(i => (<div key={i} style={{ height: 26, borderRadius: 8, background: '#eef1f7' }} />))}
+                    </div>
+                  ) : !baixasAnoTributo.length ? (
+                    <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '14px 0' }}>Sem lançamento neste ano.</div>
+                  ) : (() => {
+                    const itensTrib = [...baixasAnoTributo].filter(t => !/^Demais tributos/.test(t.nome)).sort((a, b) => b.arrecadado - a.arrecadado).slice(0, 8)
+                    const maxTrib = Math.max(1, ...itensTrib.map(t => t.arrecadado))
+                    return (
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 9 }}>
+                        {itensTrib.map((t, i) => (
+                          <div key={t.nome} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 10.5, color: '#9098a8', fontWeight: 700, flex: 'none', width: 14 }}>{i + 1}º</span>
+                            <span title={t.nome} style={{ fontSize: 11, color: '#3a4256', flex: '0 0 130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.nome}</span>
+                            <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.max(3, 100 * t.arrecadado / maxTrib).toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
+                            </div>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 58, textAlign: 'right' }}>{fmtAbrev(t.arrecadado)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#1f2a44', marginTop: 18 }}>Melhores resultados por Usuários</div>
+                  {!baixasAnoOperador ? (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {[0, 1, 2].map(i => (<div key={i} style={{ height: 26, borderRadius: 8, background: '#eef1f7' }} />))}
+                    </div>
+                  ) : (() => {
+                    const PISO_LANCADO = 1e6
+                    const itensOper = [...baixasAnoOperador]
+                      .filter(o => o.lancado > PISO_LANCADO && o.nome !== 'Internet' && o.nome !== 'Schedule')
+                      .sort((a, b) => b.conversao - a.conversao)
+                      .slice(0, 8)
+                    if (!itensOper.length) return <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '14px 0' }}>Nenhum usuário acima do piso de R$ 1 mi lançado neste ano.</div>
+                    return (
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {itensOper.map((o, i) => (
+                          <div key={o.nome} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <span style={{ fontSize: 11, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span style={{ color: '#9098a8', fontWeight: 700 }}>{i + 1}º</span> {o.nome}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: convCor(o.conversao), flex: 'none' }}>{fmtPct(o.conversao)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </>
+              )}
+            </div>
+          ) : null}
         </div>
 
         {/* Conversão por Tributo */}
