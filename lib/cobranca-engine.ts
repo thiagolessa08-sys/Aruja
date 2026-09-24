@@ -749,7 +749,12 @@ export type ConversaoMesFiltro =
  * Drill de 3º nível do painel DAM — a pedido do usuário, ao clicar num mês (depois de já ter
  * descido por tributo/operador, ou dentro de "Por Período") mostra a MESMA quebra do quadro
  * "Análise de Conversão" (lista com Lançado/Arrecadado por item + "Melhor desempenho"), só que
- * pro mês EXATO (MONTH(p.dt_vencimento) = mesAlvo, não o acumulado "<=" do resto da tela).
+ * pro mês EXATO. Filtra por DATA DE GERAÇÃO da guia (YEAR/MONTH(g.dt_geracao)) — não por
+ * vencimento da parcela — porque é essa a mesma data que o próprio painel DAM usa pra montar
+ * os meses (damsGeradas/damsDrillMes); geração e vencimento são datas independentes (uma guia
+ * gerada em agosto pode ter parcela vencendo em qualquer mês), então filtrar por vencimento
+ * dava mês vazio quase sempre — bug relatado pelo usuário (drill "FrancineB · Ago" vinha "Sem
+ * lançamento", mesmo com barra > 0 no gráfico).
  * Duas funções, uma por eixo de quebra (a mesma dualidade de conversaoDrillTributo/
  * conversaoDrillOperador): "Por Tributo"/"Por Período" do DAM já filtram por tributo/nada, daí
  * quebrar POR OPERADOR faz sentido só pra "Por Tributo"; "Por Operador" do DAM já filtra por
@@ -764,7 +769,11 @@ export async function analiseConversaoMesPorTributo(ano: number, mesAlvo: number
 }
 
 async function analiseConversaoMesPorTributoRaw(ano: number, mesAlvo: number, filtro: { tipo: 'operador'; nome: string } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
-  const excl = CODIGOS_EXCLUIDOS.join(',')
+  // Sem CODIGOS_EXCLUIDOS aqui (diferente da Análise de Conversão) — o próprio painel DAM
+  // (damsGeradasRaw/damsDrillMesRaw) já mostra "Documento de Arrecadacao" (cd_tributo=20, o
+  // DAM genérico) como item normal em "Por tributo", então esse drill precisa incluí-lo
+  // também: um operador que só gerou guias genéricas naquele mês (ex.: FrancineB em agosto)
+  // ficava com a lista vazia mesmo tendo barra > 0 no gráfico — bug relatado pelo usuário.
   const filtroOperador = filtro.tipo === 'operador'
     ? (filtro.nome === 'Internet'
         ? ` AND (g.cd_usuario_gerador = 'Internet' OR PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) = 0)`
@@ -777,7 +786,7 @@ async function analiseConversaoMesPorTributoRaw(ano: number, mesAlvo: number, fi
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
     LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
-    WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano} AND MONTH(p.dt_vencimento) = ${mesAlvo}${filtroOperador}
+    WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroOperador}
     GROUP BY g.cd_tributo, t.ds_tributo`, 200)
 
   return r.rows
@@ -793,7 +802,8 @@ export async function analiseConversaoMesPorOperador(ano: number, mesAlvo: numbe
 }
 
 async function analiseConversaoMesPorOperadorRaw(ano: number, mesAlvo: number, filtro: { tipo: 'tributo'; codigos: number[] } | { tipo: 'geral' }): Promise<ConversaoItem[]> {
-  const excl = CODIGOS_EXCLUIDOS.join(',')
+  // Sem CODIGOS_EXCLUIDOS aqui — mesmo motivo de analiseConversaoMesPorTributoRaw acima (o
+  // painel DAM não exclui "Documento de Arrecadacao"/outros códigos administrativos).
   const filtroTributo = filtro.tipo === 'tributo' ? ` AND g.cd_tributo IN (${filtro.codigos.join(',')})` : ''
 
   const [totalR, operR] = await Promise.all([
@@ -802,13 +812,13 @@ async function analiseConversaoMesPorOperadorRaw(ano: number, mesAlvo: number, f
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano} AND MONTH(p.dt_vencimento) = ${mesAlvo}${filtroTributo}`, 1),
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroTributo}`, 1),
     agentQuery(`
       SELECT g.cd_usuario_gerador, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
-      WHERE g.cd_tributo NOT IN (${excl}) AND g.no_exercicio_lancamento = ${ano} AND MONTH(p.dt_vencimento) = ${mesAlvo}${filtroTributo}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroTributo}
         AND PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) > 0
       GROUP BY g.cd_usuario_gerador`, 300),
   ])
