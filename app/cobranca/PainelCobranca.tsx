@@ -219,7 +219,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [tip, setTip] = useState<{ left: string; top: string; ano: number; n: number } | null>(null)
   const [tipQV, setTipQV] = useState<{ left: number; top: number; label: string; saldo: number } | null>(null)
   const [tipDam, setTipDam] = useState<{ left: number; top: number; label: string; qt: number } | null>(null)
-  const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number } | null>(null)
+  const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number; pagasIds: number } | null>(null)
   // Drill "por tributo" do Resultado Mensal da Arrecadação — ao clicar num mês (chip abaixo
   // do gráfico, mesmo padrão do painel DAM), substitui o gráfico pela quebra geradas × pagas
   // daquele mês por tributo, in-place, com "‹ Voltar".
@@ -1457,7 +1457,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           efetivamente paga, meses depois. Sobe pra ficar logo abaixo de "Análise de Conversão",
           a pedido do usuário. "DAM Recebidas" (todo tipo de baixa, não só pagamento) removida
           a pedido do usuário — ficou só Geradas × Pagas. Chips de mês abaixo do gráfico descem
-          um nível: geradas × pagas daquele mês por tributo (mesmo padrão do painel DAM). */}
+          um nível: geradas × pagas daquele mês por tributo (mesmo padrão do painel DAM).
+          Terceira barra "Pagas (IDs distintos)" (vermelha, a pedido do usuário) reaproveita
+          compDamId.porMes (já carregado pro card "Comparativo de DAM por ID" ao lado) — conta
+          DOCUMENTOS distintos (COUNT DISTINCT cd_guia) em vez de eventos de baixa, por isso é
+          sempre ≤ "Pagas" (uma guia parcelada gera vários eventos de baixa, um por parcela). */}
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div>
@@ -1469,6 +1473,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
 
         {(() => {
           const rm = resultado ?? FALLBACK_RESULTADO
+          const cdRes = compDamId ?? FALLBACK_COMP_DAM_ID
           const pctPagas = rm.totalGeradas ? (rm.totalPagas / rm.totalGeradas) * 100 : 0
           return (
             <>
@@ -1532,16 +1537,19 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <>
                   <div style={{ height: 220, marginTop: 16, position: 'relative' }} onMouseLeave={() => setTipResultado(null)}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={rm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 48, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+                      <BarChart data={rm.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1], pagasIds: cdRes.porMes.find(c => c.mes === m.mes)?.pagas ?? 0 }))} margin={{ top: 48, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
                         <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
                         <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
                         <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
-                        <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
-                          onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas }) }}
+                        <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={22}
+                          onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string; pagasIds: number }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas, pagasIds: p.pagasIds }) }}
                           onMouseLeave={() => setTipResultado(null)} />
-                        <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={26}
-                          onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas }) }}
+                        <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={22}
+                          onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string; pagasIds: number }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas, pagasIds: p.pagasIds }) }}
+                          onMouseLeave={() => setTipResultado(null)} />
+                        <Bar dataKey="pagasIds" name="Pagas (IDs distintos)" fill="#d64545" radius={[4, 4, 0, 0]} maxBarSize={22}
+                          onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoMes & { label: string; pagasIds: number }; setTipResultado({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas, pagasIds: p.pagasIds }) }}
                           onMouseLeave={() => setTipResultado(null)} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1550,6 +1558,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                         {tipBox(tipResultado.label, [
                           { texto: `Geradas: ${fmtInt(tipResultado.geradas)} DAMs`, cor: '#283e93' },
                           { texto: `Pagas: ${fmtInt(tipResultado.pagas)} DAMs`, cor: '#1fa463' },
+                          { texto: `Pagas (IDs distintos): ${fmtInt(tipResultado.pagasIds)} DAMs`, cor: '#d64545' },
                         ])}
                       </div>
                     ) : null}
