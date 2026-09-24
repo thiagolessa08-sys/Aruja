@@ -11,11 +11,20 @@ const MOV_ABERTO = '0,1,2,3,11,12,14,20', LANC_ABERTO = '0,4,7,10,1'
 const SEM_RV = ` AND g.ds_situacao NOT IN ('Recalculo','Validacao')`
 
 export interface FiltrosRelatorioIptu { ano: number; mes: number | null; bairro: string | null; rua: string | null; espolio: boolean; semNumero: boolean }
+export interface LinhaImovelIptu {
+  inscricao: string
+  lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number
+  semNumero: number
+}
 export interface LinhaRelatorioIptu {
   nome: string
   inscricao: string
   lancado: number; arrecadado: number; emAberto: number; inadimplencia: number; isento: number; suspenso: number
   imoveis: number; espolio: number; semNumero: number
+  // Drill de 2º nível (a pedido do usuário) — só presente quando imoveis > 1 (contribuinte com
+  // mais de uma matrícula no bairro): lista CADA imóvel individual com sua própria inscrição e
+  // valores, já que a inscrição do grupo (acima) fica vazia nesse caso (ver metricaSimples).
+  detalhe?: LinhaImovelIptu[]
 }
 
 function base(f: FiltrosRelatorioIptu) {
@@ -123,6 +132,73 @@ async function contagem(f: FiltrosRelatorioIptu, extraWhere: string) {
   return map
 }
 
+// --- Drill de 2º nível (a pedido do usuário): contribuinte com mais de 1 imóvel no bairro
+// (ex.: incorporadora com centenas de lotes) ganha a lista de CADA imóvel individual, com sua
+// própria inscrição e valores. Mesmas métricas de metricaSimples/Liquida/Suspenso acima, só que
+// agrupadas por IMÓVEL (g.cd_devedor) em vez de contribuinte/bairro, e restritas de uma vez só
+// aos contribuintes com imoveis > 1 (uma leva de ~6 queries no total, não por contribuinte) —
+// funções isoladas (não reaproveitam base()) pro mesmo motivo do comentário no topo do arquivo:
+// não arriscar o agrupamento já validado do nível contribuinte/bairro.
+function baseImovel(f: FiltrosRelatorioIptu, contribsIn: string[]) {
+  let w = `g.cd_tributo IN (1) AND g.no_exercicio_lancamento = ${f.ano} AND p.no_parcela <> 0
+    AND i.cd_contr_proprietario IN (${contribsIn.join(',')})`
+  if (f.bairro) w += ` AND c.nm_bairro = '${f.bairro.replace(/'/g, "''")}'`
+  if (f.bairro && f.rua) w += ` AND c.ds_endereco = '${f.rua.replace(/'/g, "''")}'`
+  if (f.espolio) w += ` AND cp.nm_rsocial LIKE '%ESP_LIO%'`
+  if (f.semNumero) w += ` AND (i.no_imovel IS NULL OR i.no_imovel = 0)`
+  const from = `FROM ${S}.tb_dsod_guias g
+    JOIN ${S}.tb_dsod_imovel_urbano i ON i.cd_imovel_urbano = g.cd_devedor
+    JOIN ${S}.tb_dsod_cep c ON c.cd_cep = i.cd_cep
+    LEFT JOIN ${S}.tb_dsod_contribuinte cp ON cp.cd_contr = i.cd_contr_proprietario
+    JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+    JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas`
+  return { from, where: w }
+}
+
+async function metricaSimplesImovel(f: FiltrosRelatorioIptu, contribsIn: string[], extraFrom: string, extraWhere: string, aplicaMes: boolean) {
+  const b = baseImovel(f, contribsIn)
+  const q = `SELECT g.cd_devedor k, MIN(i.cd_contr_proprietario) contrib, MIN(i.no_inscricao_imovel) inscricao,
+      MIN(CASE WHEN i.no_imovel IS NULL OR i.no_imovel = 0 THEN 1 ELSE 0 END) semNumero, SUM(pm.vl_movimento) vl
+    ${b.from}${extraFrom}
+    WHERE ${b.where}${extraWhere}${mesFlow(f, aplicaMes)}
+    GROUP BY g.cd_devedor`
+  const r = await agentQuery(q, 5000)
+  const map = new Map<string, { contrib: string; inscricao: string; semNumero: number; valor: number }>()
+  for (const row of r.rows) {
+    map.set(String(row[0]), { contrib: String(row[1] ?? '').trim(), inscricao: String(row[2] ?? '').trim(), semNumero: num(row[3]), valor: num(row[4]) })
+  }
+  return map
+}
+
+async function metricaLiquidaImovel(f: FiltrosRelatorioIptu, contribsIn: string[], vencido: boolean, aplicaMes: boolean) {
+  const b = baseImovel(f, contribsIn)
+  const venc = vencido ? ' AND p.dt_vencimento < getdate()-1' : ''
+  const th = vencido ? 1 : 0
+  const q = `SELECT k, SUM(valor) vl FROM (
+      SELECT g.cd_devedor k, p.dt_vencimento venc, SUM(pm.vl_movimento*pm.no_sinal) valor
+      ${b.from}
+      WHERE ${b.where} AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${venc}${mesFlow(f, aplicaMes)}
+      GROUP BY g.cd_devedor, p.dt_vencimento
+      HAVING SUM(pm.vl_movimento*pm.no_sinal) > ${th}
+    ) t GROUP BY k`
+  const r = await agentQuery(q, 5000)
+  const map = new Map<string, number>()
+  for (const row of r.rows) map.set(String(row[0]), Math.max(0, num(row[1])))
+  return map
+}
+
+async function metricaSuspensoImovel(f: FiltrosRelatorioIptu, contribsIn: string[]) {
+  const b = baseImovel(f, contribsIn)
+  const q = `SELECT g.cd_devedor k, SUM(pm.vl_movimento*pm.no_sinal) net
+    ${b.from}
+    WHERE ${b.where} AND pm.cd_tipo_movimento IN (20)
+    GROUP BY g.cd_devedor`
+  const r = await agentQuery(q, 5000)
+  const map = new Map<string, number>()
+  for (const row of r.rows) map.set(String(row[0]), Math.max(0, -num(row[1])))
+  return map
+}
+
 export async function relatorioIptu(f: FiltrosRelatorioIptu): Promise<LinhaRelatorioIptu[]> {
   const arrecFrom = ` JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
     JOIN ${S}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa`
@@ -142,8 +218,9 @@ export async function relatorioIptu(f: FiltrosRelatorioIptu): Promise<LinhaRelat
   ])
 
   const linhas: LinhaRelatorioIptu[] = []
+  const chavePorLinha = new Map<LinhaRelatorioIptu, string>()
   for (const [k, l] of lanc) {
-    linhas.push({
+    const linha: LinhaRelatorioIptu = {
       nome: l.nome,
       inscricao: l.imoveis === 1 ? l.inscricao : '',
       lancado: l.valor,
@@ -155,7 +232,48 @@ export async function relatorioIptu(f: FiltrosRelatorioIptu): Promise<LinhaRelat
       imoveis: l.imoveis,
       espolio: esp.get(k) ?? 0,
       semNumero: semNum.get(k) ?? 0,
-    })
+    }
+    linhas.push(linha)
+    chavePorLinha.set(linha, k)
   }
+
+  // Drill de 2º nível (a pedido do usuário) — só existe com bairro selecionado, que é onde o
+  // agrupamento é por contribuinte e pode ter mais de 1 imóvel por linha.
+  if (f.bairro) {
+    const multiImovel = linhas.filter(l => l.imoveis > 1)
+    const idsMulti = multiImovel.map(l => chavePorLinha.get(l)!).filter(id => id && id !== 'null')
+    if (idsMulti.length) {
+      const [lancI, arrecI, isenI, abertoI, inadI, suspI] = await Promise.all([
+        metricaSimplesImovel(f, idsMulti, '', `${SEM_RV} AND pm.cd_tipo_movimento <= 3`, true),
+        metricaSimplesImovel(f, idsMulti, arrecFrom, `${SEM_RV} AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) AND tbx.ds_tipo_baixa <> 'Estorno de Baixa'`, true),
+        metricaSimplesImovel(f, idsMulti, '', isentoWhere, false).catch(() => new Map<string, { contrib: string; inscricao: string; semNumero: number; valor: number }>()),
+        metricaLiquidaImovel(f, idsMulti, false, true),
+        metricaLiquidaImovel(f, idsMulti, true, true),
+        metricaSuspensoImovel(f, idsMulti),
+      ])
+      const porContrib = new Map<string, LinhaImovelIptu[]>()
+      for (const [devedorId, li] of lancI) {
+        const item: LinhaImovelIptu = {
+          inscricao: li.inscricao || '—',
+          lancado: li.valor,
+          arrecadado: arrecI.get(devedorId)?.valor ?? 0,
+          emAberto: abertoI.get(devedorId) ?? 0,
+          inadimplencia: inadI.get(devedorId) ?? 0,
+          isento: isenI.get(devedorId)?.valor ?? 0,
+          suspenso: suspI.get(devedorId) ?? 0,
+          semNumero: li.semNumero,
+        }
+        const lista = porContrib.get(li.contrib) ?? []
+        lista.push(item)
+        porContrib.set(li.contrib, lista)
+      }
+      for (const linha of multiImovel) {
+        const k = chavePorLinha.get(linha)!
+        const detalhe = porContrib.get(k)
+        if (detalhe?.length) linha.detalhe = detalhe.sort((a, b) => b.lancado - a.lancado)
+      }
+    }
+  }
+
   return linhas.sort((a, b) => b.lancado - a.lancado)
 }
