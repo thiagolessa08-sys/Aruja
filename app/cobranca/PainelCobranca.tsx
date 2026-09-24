@@ -23,7 +23,6 @@ interface ResultadoTributoMes { nome: string; geradas: number; pagas: number }
 interface ResultadoMesAnoRanking { ano: number; mes: number; geradas: number }
 interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
 interface ComparativoDamId { ano: number; totalGeradas: number; totalPagas: number; porMes: ComparativoDamIdMes[] }
-interface ComparativoDamIdTributoMes { nome: string; geradas: number; pagas: number }
 interface ConversaoItem { nome: string; lancado: number; arrecadado: number; conversao: number }
 interface AnaliseConversao { ano: number; porTributo: ConversaoItem[]; porPeriodo: ConversaoItem[]; porOperador: ConversaoItem[] }
 interface Resumo {
@@ -226,12 +225,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [resultadoDrillMes, setResultadoDrillMes] = useState<number | null>(null)
   const [resultadoDrillData, setResultadoDrillData] = useState<ResultadoTributoMes[] | null>(null)
   const [resultadoDrillErro, setResultadoDrillErro] = useState(false)
-  const [tipCompDamId, setTipCompDamId] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number } | null>(null)
-  // Drill "por tributo" do Comparativo de DAM por ID — mesmo padrão do Resultado Mensal
-  // acima, só que pagas conta DAMs distintas (COUNT DISTINCT), não eventos de baixa.
-  const [compDamIdDrillMes, setCompDamIdDrillMes] = useState<number | null>(null)
-  const [compDamIdDrillData, setCompDamIdDrillData] = useState<ComparativoDamIdTributoMes[] | null>(null)
-  const [compDamIdDrillErro, setCompDamIdDrillErro] = useState(false)
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
   const [potMensal, setPotMensal] = useState<PotMes[] | null>(null)
@@ -316,9 +309,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setResultadoDrillData(null)
     setResultadoDrillErro(false)
     setCompDamId(null)
-    setCompDamIdDrillMes(null)
-    setCompDamIdDrillData(null)
-    setCompDamIdDrillErro(false)
     setAnalise(null)
     setPotSel(null)
     setPotMensal(null)
@@ -594,22 +584,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     buscarResultadoPorTributoMes(anoAlvo, mesAlvo)
   }
 
-  function buscarCompDamIdPorTributoMes(anoAlvo: number, mesAlvo: number) {
-    setCompDamIdDrillData(null)
-    setCompDamIdDrillErro(false)
-    fetch(`/api/cobranca/comparativo-dam-id-por-tributo-mes?ano=${anoAlvo}&mes=${mesAlvo}`).then(r => r.ok ? r.json() : null)
-      .then(res => {
-        if (res && !res.error && Array.isArray(res.itens)) setCompDamIdDrillData(res.itens)
-        else setCompDamIdDrillErro(true)
-      }).catch(() => setCompDamIdDrillErro(true))
-  }
-
-  // Clique num chip de mês do Comparativo de DAM por ID — mesmo padrão de Resultado Mensal.
-  function selecionarCompDamIdMes(anoAlvo: number, mesAlvo: number) {
-    if (compDamIdDrillMes === mesAlvo) { setCompDamIdDrillMes(null); setCompDamIdDrillData(null); setCompDamIdDrillErro(false); return }
-    setCompDamIdDrillMes(mesAlvo)
-    buscarCompDamIdPorTributoMes(anoAlvo, mesAlvo)
-  }
 
   // "Por Tributo" desce por OPERADOR (endpoint espelho); "Por Período"/"Por Operador" descem
   // por TRIBUTO, como antes.
@@ -1447,10 +1421,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         </div>
       </div>
 
-      {/* Resultado Mensal da Arrecadação lado a lado com Comparativo de DAM por ID — a pedido
-          do usuário, mesma largura (repeat(2,1fr)), já que os dois cards têm a mesma
-          estrutura (2 KPIs + 1 gráfico de barras por mês). */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 18, marginTop: 18, alignItems: 'start' }}>
       {/* Resultado Mensal da Arrecadação — DAM Geradas × DAM Pagas pelo setor de Cobrança,
           por mês. São eventos independentes (data de geração da guia vs. data da
           baixa/pagamento); uma guia gerada num mês só "vira" paga quando o contribuinte
@@ -1459,10 +1429,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           a pedido do usuário — ficou só Geradas × Pagas. Chips de mês abaixo do gráfico descem
           um nível: geradas × pagas daquele mês por tributo (mesmo padrão do painel DAM).
           Terceira barra "Pagas (IDs distintos)" (vermelha, a pedido do usuário) reaproveita
-          compDamId.porMes (já carregado pro card "Comparativo de DAM por ID" ao lado) — conta
-          DOCUMENTOS distintos (COUNT DISTINCT cd_guia) em vez de eventos de baixa, por isso é
-          sempre ≤ "Pagas" (uma guia parcelada gera vários eventos de baixa, um por parcela). */}
-      <div style={card}>
+          compDamId.porMes — mesma fonte que alimentava o card "Comparativo de DAM por ID"
+          (removido a pedido do usuário depois que essa barra passou pra cá). Conta DOCUMENTOS
+          distintos (COUNT DISTINCT cd_guia) em vez de eventos de baixa, por isso é sempre ≤
+          "Pagas" (uma guia parcelada gera vários eventos de baixa, um por parcela). */}
+      <div style={{ ...card, marginTop: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div>
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Resultado Mensal da Arrecadação</span>
@@ -1577,126 +1548,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </>
           )
         })()}
-      </div>
-
-      {/* Comparativo de DAM por ID — GERADAS × PAGAS contando DOCUMENTOS distintos (COUNT
-          DISTINCT cd_guia), não eventos de baixa como no gráfico anterior. Uma guia parcelada
-          (ex.: IPTU em várias cotas) gera uma baixa "paga" por parcela — por isso o número de
-          eventos pagos (gráfico acima) é sempre maior que o número de DAMs distintas pagas
-          (aqui). Uma DAM com parcelas pagas em meses diferentes conta em mais de um mês. Chips
-          de mês abaixo do gráfico descem um nível: geradas × pagas (DAMs distintas) daquele
-          mês por tributo, mesmo padrão do Resultado Mensal acima. */}
-      <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div>
-            <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Comparativo de DAM por ID — Geradas × Pagas</span>
-            <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>Quantidade de documentos (DAM) distintos, não de eventos de baixa — {(compDamId ?? FALLBACK_COMP_DAM_ID).ano}.</div>
-          </div>
-          <span style={reportBadge}>Por documento (ID)</span>
-        </div>
-
-        {(() => {
-          const cd = compDamId ?? FALLBACK_COMP_DAM_ID
-          const pctPagas = cd.totalGeradas ? (cd.totalPagas / cd.totalGeradas) * 100 : 0
-          return (
-            <>
-              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
-                <div style={{ background: '#eef1fb', border: '1px solid #cdd5ef', borderRadius: 14, padding: '14px 16px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#283e93' }}>DAM Geradas (IDs distintos) em {cd.ano}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(cd.totalGeradas)}</div>
-                </div>
-                <div style={{ background: '#eafaf0', border: '1px solid #bfe8d1', borderRadius: 14, padding: '14px 16px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#1fa463' }}>DAM Pagas (IDs distintos) em {cd.ano}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2a44', marginTop: 4 }}>{fmtInt(cd.totalPagas)}</div>
-                  <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>{fmtPct(pctPagas)} das geradas no ano</div>
-                </div>
-              </div>
-
-              {compDamIdDrillMes ? (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>{MESES_ABREV[compDamIdDrillMes - 1]}/{cd.ano} — por tributo</span>
-                    <button onClick={() => { setCompDamIdDrillMes(null); setCompDamIdDrillData(null); setCompDamIdDrillErro(false) }}
-                      style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
-                  </div>
-                  {compDamIdDrillErro ? (
-                    <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                      <div style={{ fontSize: 12, color: '#9098a8' }}>Não foi possível carregar o detalhe por tributo.</div>
-                      <button onClick={() => buscarCompDamIdPorTributoMes(cd.ano, compDamIdDrillMes)}
-                        style={{ marginTop: 8, border: '1px solid #e3e8f1', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 11.5, fontWeight: 600, color: '#283e93', cursor: 'pointer' }}>Tentar novamente</button>
-                    </div>
-                  ) : !compDamIdDrillData ? (
-                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13 }}>
-                      {[0, 1, 2].map(i => (<div key={i} style={{ height: 32, borderRadius: 8, background: '#eef1f7' }} />))}
-                    </div>
-                  ) : !compDamIdDrillData.length ? (
-                    <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '24px 0' }}>Sem movimentação neste mês.</div>
-                  ) : (() => {
-                    const maxVal = Math.max(1, ...compDamIdDrillData.flatMap(t => [t.geradas, t.pagas]))
-                    return (
-                      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
-                        {compDamIdDrillData.map(t => (
-                          <div key={t.nome}>
-                            <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginBottom: 4 }}>{t.nome}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                              <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.max(3, 100 * t.geradas / maxVal).toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
-                              </div>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 46, textAlign: 'right' }}>{fmtInt(t.geradas)}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.max(3, 100 * t.pagas / maxVal).toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
-                              </div>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 46, textAlign: 'right' }}>{fmtInt(t.pagas)}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  })()}
-                </div>
-              ) : (
-                <>
-                  <div style={{ height: 220, marginTop: 16, position: 'relative' }} onMouseLeave={() => setTipCompDamId(null)}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={cd.porMes.map(m => ({ ...m, label: MESES_ABREV[m.mes - 1] }))} margin={{ top: 48, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
-                        <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#9098a8' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
-                        <YAxis width={44} tickFormatter={(val: number) => fmtAbrev(Number(val))} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
-                        <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
-                        <Legend wrapperStyle={{ fontSize: 12 }} />
-                        <Bar dataKey="geradas" name="Geradas" fill="#283e93" radius={[4, 4, 0, 0]} maxBarSize={26}
-                          onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ComparativoDamIdMes & { label: string }; setTipCompDamId({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas }) }}
-                          onMouseLeave={() => setTipCompDamId(null)} />
-                        <Bar dataKey="pagas" name="Pagas" fill="#1fa463" radius={[4, 4, 0, 0]} maxBarSize={26}
-                          onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ComparativoDamIdMes & { label: string }; setTipCompDamId({ left: data.x + data.width / 2, top: data.y, label: p.label, geradas: p.geradas, pagas: p.pagas }) }}
-                          onMouseLeave={() => setTipCompDamId(null)} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                    {tipCompDamId ? (
-                      <div style={{ position: 'absolute', left: tipCompDamId.left, top: tipCompDamId.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
-                        {tipBox(tipCompDamId.label, [
-                          { texto: `Geradas: ${fmtInt(tipCompDamId.geradas)} DAMs`, cor: '#283e93' },
-                          { texto: `Pagas: ${fmtInt(tipCompDamId.pagas)} DAMs`, cor: '#1fa463' },
-                        ])}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {cd.porMes.filter(m => m.geradas > 0 || m.pagas > 0).map(m => (
-                      <button key={m.mes} onClick={() => selecionarCompDamIdMes(cd.ano, m.mes)}
-                        title={`Detalhar ${MESES_ABREV[m.mes - 1]}/${cd.ano} por tributo`}
-                        style={{ border: 'none', borderRadius: 7, padding: '3px 9px', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', background: '#f4f7fc', color: '#5b6477' }}>
-                        {MESES_ABREV[m.mes - 1]}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
-          )
-        })()}
-      </div>
       </div>
 
       {/* Mapa de calor (treemap) — Top 10 Mês/Ano por DAM Geradas, a pedido do usuário
