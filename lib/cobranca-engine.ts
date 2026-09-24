@@ -865,3 +865,52 @@ async function analiseConversaoMesPorOperadorRaw(ano: number, mesAlvo: number, f
     .map(x => ({ nome: x.nome, lancado: x.lancado, arrecadado: x.pago, conversao: x.lancado ? (x.pago / x.lancado) * 100 : 0 }))
   return { itens, generico: genericoMes }
 }
+
+export interface GuiaItem { cdGuia: string; dtGeracao: string; tributo: string; lancado: number; arrecadado: number }
+export interface GuiasOperadorMesResultado { guias: GuiaItem[]; totalGuias: number }
+
+/**
+ * Lista as guias INDIVIDUAIS (não agregadas) de um operador num mês exato — a pedido do
+ * usuário, pra ver quais guias e valores compõem a barra do painel DAM (ex.: FrancineB tem 1
+ * guia em Fev/2026 e 6 em Ago/2026; antes só dava pra ver o total agregado por tributo).
+ * Mesma data-base (dt_geracao) e mesma ausência de CODIGOS_EXCLUIDOS do resto do drill do DAM.
+ * Alguns operadores geram milhares de guias num mês só (ex.: "Internet", "Schedule") — por
+ * isso limita a LISTA (maiores valores primeiro) e devolve `totalGuias` pra avisar quando
+ * corta.
+ */
+export async function guiasOperadorMes(ano: number, mesAlvo: number, nomeOperador: string): Promise<GuiasOperadorMesResultado> {
+  return cached(`guiasOperadorMes:${ano}:${mesAlvo}:${nomeOperador}`, TTL_15MIN, () => guiasOperadorMesRaw(ano, mesAlvo, nomeOperador))
+}
+
+async function guiasOperadorMesRaw(ano: number, mesAlvo: number, nomeOperador: string): Promise<GuiasOperadorMesResultado> {
+  const filtroOperador = nomeOperador === 'Internet'
+    ? ` AND (g.cd_usuario_gerador = 'Internet' OR PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) = 0)`
+    : ` AND g.cd_usuario_gerador = '${nomeOperador.replace(/'/g, "''")}'`
+
+  const [totalR, guiasR] = await Promise.all([
+    agentQuery(`
+      SELECT COUNT(DISTINCT g.cd_guia)
+      FROM ${SCHEMA}.tb_dsod_guias g
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroOperador}`, 1),
+    agentQuery(`
+      SELECT g.cd_guia, g.dt_geracao, g.cd_tributo, t.ds_tributo, SUM(pp.vl_lancto) AS lancado, SUM(pp.vl_pagto) AS pago
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}${filtroOperador}
+      GROUP BY g.cd_guia, g.dt_geracao, g.cd_tributo, t.ds_tributo
+      ORDER BY SUM(pp.vl_lancto) DESC`, 200),
+  ])
+
+  const totalGuias = num(totalR.rows[0]?.[0])
+  const guias = guiasR.rows.map(row => ({
+    cdGuia: String(row[0]),
+    dtGeracao: String(row[1] ?? ''),
+    tributo: String(row[3] ?? '').trim() || `Tributo ${num(row[2])}`,
+    lancado: num(row[4]),
+    arrecadado: num(row[5]),
+  }))
+
+  return { guias, totalGuias }
+}

@@ -24,6 +24,7 @@ interface ResultadoMesAnoRanking { ano: number; mes: number; geradas: number }
 interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
 interface ComparativoDamId { ano: number; totalGeradas: number; totalPagas: number; porMes: ComparativoDamIdMes[] }
 interface ConversaoItem { nome: string; lancado: number; arrecadado: number; conversao: number }
+interface GuiaItem { cdGuia: string; dtGeracao: string; tributo: string; lancado: number; arrecadado: number }
 interface AnaliseConversao { ano: number; porTributo: ConversaoItem[]; porPeriodo: ConversaoItem[]; porOperador: ConversaoItem[] }
 interface Resumo {
   ano: number; lancado: number; arrecadado: number; saldo: number; conversao: number; totalBaixas: number
@@ -304,6 +305,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // Análise de Conversão); no eixo operador, `true` quando o próprio tributo selecionado é
   // administrativo (a quebra por usuário abaixo não é de um tributo específico).
   const [damMesConversaoGenerico, setDamMesConversaoGenerico] = useState<{ lancado: number; arrecadado: number } | boolean | null>(null)
+  // Lista de guias individuais (não agregadas) do operador+mês selecionado — só na lente "Por
+  // Operador" do DAM (a pedido do usuário, exemplo FrancineB: 1 guia em Fev, 6 em Ago).
+  const [damMesGuias, setDamMesGuias] = useState<GuiaItem[] | null>(null)
+  const [damMesGuiasTotal, setDamMesGuiasTotal] = useState(0)
+  const [damMesGuiasErro, setDamMesGuiasErro] = useState(false)
   const [damMesConversaoErro, setDamMesConversaoErro] = useState(false)
   // Ao clicar num ano em "Por Período" (Análise de Conversão), o gráfico "Por período (mês)"
   // do painel DAM passa a mostrar os meses DAQUELE ano em vez do exercício global da tela.
@@ -475,6 +481,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
 
   function selecionarDamOperador(o: DamOperador) {
     setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); setDamMesConversaoGenerico(null)
+    setDamMesGuias(null); setDamMesGuiasTotal(0); setDamMesGuiasErro(false)
     if (damDrillOperador?.nome === o.nome) { setDamDrillOperador(null); setDamDrillMesData(null); return }
     setDamDrillTributo(null)
     setDamDrillOperador(o)
@@ -508,10 +515,29 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   function selecionarDamDrillMes(mesAlvo: number) {
-    if (damDrillMesSel === mesAlvo) { setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); setDamMesConversaoGenerico(null); return }
+    if (damDrillMesSel === mesAlvo) {
+      setDamDrillMesSel(null); setDamMesConversao(null); setDamMesConversaoEixo(null); setDamMesConversaoErro(false); setDamMesConversaoGenerico(null)
+      setDamMesGuias(null); setDamMesGuiasTotal(0); setDamMesGuiasErro(false)
+      return
+    }
     setDamDrillMesSel(mesAlvo)
     if (damDrillTributo) buscarConversaoMes(ano, mesAlvo, { tipo: 'tributo', codigos: damDrillTributo.codigos })
-    else if (damDrillOperador) buscarConversaoMes(ano, mesAlvo, { tipo: 'operador', nome: damDrillOperador.nome })
+    else if (damDrillOperador) { buscarConversaoMes(ano, mesAlvo, { tipo: 'operador', nome: damDrillOperador.nome }); buscarGuiasOperadorMes(ano, mesAlvo, damDrillOperador.nome) }
+  }
+
+  // Guias individuais (não agregadas) do operador+mês — a pedido do usuário, pra ver quais
+  // guias e valores compõem a barra (ex.: FrancineB — 1 guia em Fev/2026, 6 em Ago/2026).
+  function buscarGuiasOperadorMes(anoAlvo: number, mesAlvo: number, nome: string) {
+    setDamMesGuias(null)
+    setDamMesGuiasTotal(0)
+    setDamMesGuiasErro(false)
+    const qs = new URLSearchParams({ ano: String(anoAlvo), mes: String(mesAlvo), nome })
+    fetch(`/api/cobranca/guias-operador-mes?${qs}`).then(r => r.ok ? r.json() : null)
+      .then(res => {
+        if (res && !res.error && Array.isArray(res.guias)) { setDamMesGuias(res.guias); setDamMesGuiasTotal(res.totalGuias ?? res.guias.length) }
+        else setDamMesGuiasErro(true)
+      })
+      .catch(() => setDamMesGuiasErro(true))
   }
 
   // Caixa com a quebra por tributo/usuário (Lançado/Arrecadado por item) + "Melhor
@@ -599,6 +625,46 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             <NomeMaisPct nome={melhor.nome} pct={fmtPct(melhor.conversao)} cor={convCor(melhor.conversao)} maxWidthNome={140} fontSize={10.5} />
           </div>
         ) : null}
+      </div>
+    )
+  }
+
+  // Lista de guias INDIVIDUAIS (não agregadas) do operador+mês selecionado no painel DAM — a
+  // pedido do usuário, pra ver quais guias e valores compõem a barra (ex.: FrancineB tem 1
+  // guia em Fev/2026 e 6 em Ago/2026). Só existe na lente "Por Operador" (buscarGuiasOperadorMes
+  // só é chamada ali); ordenada pelas maiores lançadas, com aviso quando corta a lista.
+  function renderGuiasMesBox() {
+    if (damMesGuiasErro) {
+      return (
+        <div style={{ marginTop: 10, textAlign: 'center', padding: '10px 0' }}>
+          <div style={{ fontSize: 11, color: '#9098a8' }}>Não foi possível carregar as guias deste mês.</div>
+        </div>
+      )
+    }
+    if (!damMesGuias) {
+      return (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {[0, 1].map(i => (<div key={i} style={{ height: 22, borderRadius: 8, background: '#eef1f7' }} />))}
+        </div>
+      )
+    }
+    if (!damMesGuias.length) return null
+    return (
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: '#5b6477', marginBottom: 6 }}>
+          Guias geradas {damMesGuiasTotal > damMesGuias.length ? `(${damMesGuias.length} maiores de ${fmtInt(damMesGuiasTotal)})` : `(${fmtInt(damMesGuiasTotal)})`}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto', paddingRight: 4 }}>
+          {damMesGuias.map(g => (
+            <div key={g.cdGuia} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, padding: '5px 8px', background: '#f7f9fd', borderRadius: 8 }}>
+              <span style={{ color: '#9098a8', flex: 'none', minWidth: 38 }}>{g.dtGeracao.slice(8, 10)}/{g.dtGeracao.slice(5, 7)}</span>
+              <span style={{ color: '#9098a8', flex: 'none' }}>#{g.cdGuia}</span>
+              <span title={g.tributo} style={{ color: '#3a4256', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.tributo}</span>
+              <span style={{ fontWeight: 700, color: '#283e93', flex: 'none' }}>{fmtAbrev(g.lancado)}</span>
+              <span style={{ fontWeight: 700, color: g.arrecadado > 0 ? '#1fa463' : '#c2c9d6', flex: 'none' }}>{fmtAbrev(g.arrecadado)}</span>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -1470,6 +1536,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                         </div>
                       ) : null}
                       {damDrillMesSel ? renderConversaoMesBox() : null}
+                      {damDrillMesSel ? renderGuiasMesBox() : null}
                     </div>
                   ) : (
                   <div style={{ marginTop: 18 }}>
