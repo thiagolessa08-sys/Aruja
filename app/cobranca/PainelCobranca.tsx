@@ -205,6 +205,18 @@ function tipBox(titulo: React.ReactNode, linhas: { texto: string; cor?: string }
   )
 }
 
+// Nome (truncado com reticências se longo) + percentual (nunca truncado) — usado nas caixas
+// "Melhor desempenho/tributo/usuário". Nome e valor ficam em spans separados para o valor
+// nunca ser cortado pela reticência do nome.
+function NomeMaisPct({ nome, pct, cor, maxWidthNome, fontSize = 11.5 }: { nome: string; pct: string; cor: string; maxWidthNome: number; fontSize?: number }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+      <span title={nome} style={{ fontSize, fontWeight: 700, color: cor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: maxWidthNome }}>{nome}</span>
+      <span style={{ fontSize, fontWeight: 700, color: cor, flex: 'none' }}>· {pct}</span>
+    </span>
+  )
+}
+
 function geomBars(d: { ano: number; n: number }[]) {
   const W = 960, H = 280, top = 24, bottom = 232
   const span = bottom - top - 8
@@ -549,7 +561,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         {melhor ? (
           <div style={{ marginTop: 10, background: '#f7f9fd', border: '1px solid #e3e8f1', borderRadius: 10, padding: '9px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 10.5, color: '#5b6477' }}>Melhor {eixoLabel}</span>
-            <span title={melhor.nome} style={{ fontSize: 10.5, fontWeight: 700, color: convCor(melhor.conversao), textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{melhor.nome} · {fmtPct(melhor.conversao)}</span>
+            <NomeMaisPct nome={melhor.nome} pct={fmtPct(melhor.conversao)} cor={convCor(melhor.conversao)} maxWidthNome={140} fontSize={10.5} />
           </div>
         ) : null}
       </div>
@@ -1037,7 +1049,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor usuário</span>
-                      <span title={melhor.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#e8962e', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhor.nome} · {fmtPct(melhor.conversao)}</span>
+                      <NomeMaisPct nome={melhor.nome} pct={fmtPct(melhor.conversao)} cor="#e8962e" maxWidthNome={180} />
                     </div>
                   )}
                 </div>
@@ -1059,18 +1071,18 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor desempenho geral <span style={{ color: '#aeb6c6' }}>({origemGeralP})</span></span>
-                      <span title={melhorGeralP.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#1fa463', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorGeralP.nome} · {fmtPct(melhorGeralP.conversao)}</span>
+                      <NomeMaisPct nome={melhorGeralP.nome} pct={fmtPct(melhorGeralP.conversao)} cor="#1fa463" maxWidthNome={180} />
                     </div>
                     {melhorTribP ? (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor tributo</span>
-                        <span title={melhorTribP.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#283e93', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorTribP.nome} · {fmtPct(melhorTribP.conversao)}</span>
+                        <NomeMaisPct nome={melhorTribP.nome} pct={fmtPct(melhorTribP.conversao)} cor="#283e93" maxWidthNome={180} />
                       </div>
                     ) : null}
                     {melhorOperP ? (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor usuário</span>
-                        <span title={melhorOperP.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#e8962e', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorOperP.nome} · {fmtPct(melhorOperP.conversao)}</span>
+                        <NomeMaisPct nome={melhorOperP.nome} pct={fmtPct(melhorOperP.conversao)} cor="#e8962e" maxWidthNome={180} />
                       </div>
                     ) : null}
                   </div>
@@ -1091,7 +1103,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor tributo</span>
-                      <span title={melhor.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#283e93', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhor.nome} · {fmtPct(melhor.conversao)}</span>
+                      <NomeMaisPct nome={melhor.nome} pct={fmtPct(melhor.conversao)} cor="#283e93" maxWidthNome={180} />
                     </div>
                   )}
                 </div>
@@ -1122,19 +1134,19 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                     {melhorGeral ? (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor desempenho geral <span style={{ color: '#aeb6c6' }}>({origemGeral})</span></span>
-                        <span title={melhorGeral.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#1fa463', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorGeral.nome} · {fmtPct(melhorGeral.conversao)}</span>
+                        <NomeMaisPct nome={melhorGeral.nome} pct={fmtPct(melhorGeral.conversao)} cor="#1fa463" maxWidthNome={180} />
                       </div>
                     ) : null}
                     {melhorTrib && dimAtual !== 'operador' ? (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor tributo</span>
-                        <span title={melhorTrib.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#283e93', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorTrib.nome} · {fmtPct(melhorTrib.conversao)}</span>
+                        <NomeMaisPct nome={melhorTrib.nome} pct={fmtPct(melhorTrib.conversao)} cor="#283e93" maxWidthNome={180} />
                       </div>
                     ) : null}
                     {melhorOper && dimAtual !== 'tributo' ? (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <span style={{ fontSize: 11.5, color: '#5b6477' }}>Melhor usuário</span>
-                        <span title={melhorOper.nome} style={{ fontSize: 11.5, fontWeight: 700, color: '#e8962e', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{melhorOper.nome} · {fmtPct(melhorOper.conversao)}</span>
+                        <NomeMaisPct nome={melhorOper.nome} pct={fmtPct(melhorOper.conversao)} cor="#e8962e" maxWidthNome={180} />
                       </div>
                     ) : null}
                   </div>
