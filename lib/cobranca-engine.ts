@@ -330,17 +330,19 @@ async function resultadoMensalRaw(ano: number, mes?: number): Promise<ResultadoM
   }
 }
 
-export interface ResultadoTributoMes { nome: string; geradas: number; pagas: number }
+export interface ResultadoTributoMes { nome: string; geradas: number; pagas: number; pagasIds: number }
 
 const TOP_N_RESULTADO_TRIB = 10
 
 /**
  * Drill de 2º nível do "Resultado Mensal da Arrecadação" — ao clicar num mês, quebra aquele
- * mês específico (ano + mês EXATOS) por tributo, tanto geradas (tb_dsod_guias.dt_geracao)
- * quanto pagas (tb_dsod_parcela_baixas.dt_baixa, evento de baixa — mesmo critério de
- * resultadoMensalRaw). Como são eventos independentes, um tributo pode ter pagas > 0 num mês
- * sem ter nenhuma guia gerada naquele mesmo mês (guia gerada antes, paga agora) — por isso a
- * lista usa a UNIÃO dos tributos que aparecem em qualquer um dos dois lados, não só quem tem
+ * mês específico (ano + mês EXATOS) por tributo: geradas (tb_dsod_guias.dt_geracao), pagas
+ * (tb_dsod_parcela_baixas.dt_baixa, evento de baixa — mesmo critério de resultadoMensalRaw) e
+ * pagas (IDs distintos) — COUNT DISTINCT cd_guia sobre o mesmo conjunto de baixas, a pedido do
+ * usuário (mesmo critério de "DAM Pagas (IDs distintos)"/compDamId, aqui só restrito a um mês
+ * e já quebrado por tributo). Como são eventos independentes, um tributo pode ter pagas > 0
+ * num mês sem ter nenhuma guia gerada naquele mesmo mês (guia gerada antes, paga agora) — por
+ * isso a lista usa a UNIÃO dos tributos que aparecem em qualquer um dos lados, não só quem tem
  * geradas > 0 (senão a soma de "pagas" da lista ficaria menor que o total da barra do mês).
  */
 export async function resultadoPorTributoMes(ano: number, mesAlvo: number): Promise<ResultadoTributoMes[]> {
@@ -348,7 +350,7 @@ export async function resultadoPorTributoMes(ano: number, mesAlvo: number): Prom
 }
 
 async function resultadoPorTributoMesRaw(ano: number, mesAlvo: number): Promise<ResultadoTributoMes[]> {
-  const [geradasR, pagasR] = await Promise.all([
+  const [geradasR, pagasR, pagasIdsR] = await Promise.all([
     agentQuery(`
       SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(*) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
@@ -364,6 +366,15 @@ async function resultadoPorTributoMesRaw(ano: number, mesAlvo: number): Promise<
       LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
       GROUP BY g.cd_tributo, t.ds_tributo`, 200),
+    agentQuery(`
+      SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, COUNT(DISTINCT p.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
+      GROUP BY g.cd_tributo, t.ds_tributo`, 200),
   ])
 
   const geradasMap = new Map<number, { nome: string; qt: number }>()
@@ -376,6 +387,8 @@ async function resultadoPorTributoMesRaw(ano: number, mesAlvo: number): Promise<
     const cd = num(row[0])
     pagasMap.set(cd, { nome: String(row[1] ?? '').trim() || `Tributo ${cd}`, qt: num(row[2]) })
   }
+  const pagasIdsMap = new Map<number, number>()
+  for (const row of pagasIdsR.rows) { pagasIdsMap.set(num(row[0]), num(row[2])) }
 
   const codigos = new Set([...geradasMap.keys(), ...pagasMap.keys()])
   const lista = Array.from(codigos)
@@ -383,18 +396,20 @@ async function resultadoPorTributoMesRaw(ano: number, mesAlvo: number): Promise<
       nome: geradasMap.get(cd)?.nome ?? pagasMap.get(cd)?.nome ?? `Tributo ${cd}`,
       geradas: geradasMap.get(cd)?.qt ?? 0,
       pagas: pagasMap.get(cd)?.qt ?? 0,
+      pagasIds: pagasIdsMap.get(cd) ?? 0,
     }))
     .filter(x => x.geradas > 0 || x.pagas > 0)
     .sort((a, b) => (b.geradas + b.pagas) - (a.geradas + a.pagas))
 
   const top = lista.slice(0, TOP_N_RESULTADO_TRIB)
   const resto = lista.slice(TOP_N_RESULTADO_TRIB)
-  const porTributo: ResultadoTributoMes[] = top.map(t => ({ nome: t.nome, geradas: t.geradas, pagas: t.pagas }))
+  const porTributo: ResultadoTributoMes[] = top.map(t => ({ nome: t.nome, geradas: t.geradas, pagas: t.pagas, pagasIds: t.pagasIds }))
   if (resto.length) {
     porTributo.push({
       nome: `Demais tributos (${resto.length})`,
       geradas: resto.reduce((s, t) => s + t.geradas, 0),
       pagas: resto.reduce((s, t) => s + t.pagas, 0),
+      pagasIds: resto.reduce((s, t) => s + t.pagasIds, 0),
     })
   }
   return porTributo

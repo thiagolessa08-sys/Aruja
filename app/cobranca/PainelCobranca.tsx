@@ -19,7 +19,7 @@ interface DamOperador { nome: string; qt: number }
 interface DamsGeradas { ano: number; total: number; periodoFim: string | null; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
 interface ResultadoMes { mes: number; geradas: number; pagas: number }
 interface ResultadoMensal { ano: number; totalGeradas: number; totalPagas: number; porMes: ResultadoMes[] }
-interface ResultadoTributoMes { nome: string; geradas: number; pagas: number }
+interface ResultadoTributoMes { nome: string; geradas: number; pagas: number; pagasIds: number }
 interface ResultadoMesAnoRanking { ano: number; mes: number; geradas: number }
 interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
 interface ComparativoDamId { ano: number; totalGeradas: number; totalPagas: number; porMes: ComparativoDamIdMes[] }
@@ -1486,7 +1486,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   ) : !resultadoDrillData.length ? (
                     <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '24px 0' }}>Sem movimentação neste mês.</div>
                   ) : (() => {
-                    const maxVal = Math.max(1, ...resultadoDrillData.flatMap(t => [t.geradas, t.pagas]))
+                    const maxVal = Math.max(1, ...resultadoDrillData.flatMap(t => [t.geradas, t.pagas, t.pagasIds]))
                     return (
                       <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
                         {resultadoDrillData.map(t => (
@@ -1498,11 +1498,17 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                               </div>
                               <span style={{ fontSize: 10, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 46, textAlign: 'right' }}>{fmtInt(t.geradas)}</span>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                               <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
                                 <div style={{ height: '100%', width: `${Math.max(3, 100 * t.pagas / maxVal).toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
                               </div>
                               <span style={{ fontSize: 10, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 46, textAlign: 'right' }}>{fmtInt(t.pagas)}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.max(3, 100 * t.pagasIds / maxVal).toFixed(1)}%`, background: '#d64545', borderRadius: 5 }} />
+                              </div>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#d64545', flex: 'none', minWidth: 46, textAlign: 'right' }}>{fmtInt(t.pagasIds)}</span>
                             </div>
                           </div>
                         ))}
