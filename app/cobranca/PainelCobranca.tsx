@@ -237,6 +237,10 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [potencial, setPotencial] = useState<Potencial | null>(null)
   const [potSel, setPotSel] = useState<PotTrib | null>(null)
   const [potMensal, setPotMensal] = useState<PotMes[] | null>(null)
+  // Total exato de Inadimplência (a pedido do usuário) — só vem preenchido pro IPTU (via
+  // iptuOficialInadimplenciaAno, no grão da parcela); pros demais tributos fica null e o
+  // total exibido cai de volta pra soma dos meses marcados "vencido" em potMensal.
+  const [potInadimplenciaTotal, setPotInadimplenciaTotal] = useState<number | null>(null)
   const [potMesSel, setPotMesSel] = useState<PotMes | null>(null)
   const [devedoresMes, setDevedoresMes] = useState<Devedor[] | null>(null)
   const [devedoresMesErro, setDevedoresMesErro] = useState(false)
@@ -325,6 +329,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setAnalise(null)
     setPotSel(null)
     setPotMensal(null)
+    setPotInadimplenciaTotal(null)
     setPotMesSel(null)
     setDevedoresMes(null)
     setDevedoresMesErro(false)
@@ -376,12 +381,16 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setPotBairros(null)
     setPotBairrosErro(false)
     setPotBairroSel(null)
-    if (potSel?.nome === t.nome) { setPotSel(null); setPotMensal(null); return }
+    if (potSel?.nome === t.nome) { setPotSel(null); setPotMensal(null); setPotInadimplenciaTotal(null); return }
     setPotSel(t)
     setPotMensal(null)
+    setPotInadimplenciaTotal(null)
     const qs = new URLSearchParams({ codigos: t.codigos.join(','), ano: String(g.ano), ...(mes ? { mes: String(mes) } : {}) })
     fetch(`/api/cobranca/potencial-mensal?${qs}`).then(r => r.ok ? r.json() : null)
-      .then(res => { if (res && !res.error && Array.isArray(res.itens)) setPotMensal(res.itens) }).catch(() => {})
+      .then(res => {
+        if (res && !res.error && Array.isArray(res.itens)) setPotMensal(res.itens)
+        if (res && typeof res.inadimplenciaTotal === 'number') setPotInadimplenciaTotal(res.inadimplenciaTotal)
+      }).catch(() => {})
   }
 
   function buscarDevedoresMes(m: PotMes, bairro?: string) {
@@ -1791,6 +1800,34 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   ? 'Saldo devedor acumulado desde o início do exercício até cada mês de vencimento (mesmo critério do KPI "Em Aberto" da tela de IPTU, filtrado por Mês).'
                   : `Saldo devedor por mês de vencimento${potSel.codigos.length > 1 ? ` — soma de ${potSel.codigos.length} códigos` : ''}.`} Barras vermelhas já venceram; laranjas ainda vão vencer. Clique num mês pra ver os devedores.
               </div>
+
+              {/* Totais do ano (a pedido do usuário) — Em Aberto = todos os meses (vencido + a
+                  vencer); Inadimplência = só o que já venceu. Na série acumulada do IPTU
+                  (ehIptuAcumulado), cada mês já soma tudo até ali, então o Em Aberto é o valor
+                  do ÚLTIMO mês; nas séries isoladas dos demais tributos, é a SOMA de todos os
+                  meses. Inadimplência usa potInadimplenciaTotal (exato, no grão da parcela)
+                  quando disponível — a soma dos meses marcados "vencido" subestimaria o total
+                  sempre que o mês corrente estiver só PARCIALMENTE vencido (a marcação de
+                  potMensal compara ano/mês, não o dia exato de vencimento). */}
+              {potMensal && potMensal.length ? (() => {
+                const ehIptuAcumulado = potSel.codigos.length === 1 && potSel.codigos[0] === 1
+                const emAbertoTotal = ehIptuAcumulado ? potMensal[potMensal.length - 1].saldo : potMensal.reduce((s, m) => s + m.saldo, 0)
+                const vencidos = potMensal.filter(m => m.vencido)
+                const inadimplenciaAproximada = ehIptuAcumulado ? (vencidos.length ? vencidos[vencidos.length - 1].saldo : 0) : vencidos.reduce((s, m) => s + m.saldo, 0)
+                const inadimplenciaTotal = potInadimplenciaTotal ?? inadimplenciaAproximada
+                return (
+                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
+                    <div style={{ background: '#fdf2e6', border: '1px solid #f3ddb8', borderRadius: 10, padding: '8px 12px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#e8962e' }}>Em Aberto · {ano}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1f2a44', marginTop: 2 }}>{fmtAbrev(emAbertoTotal)}</div>
+                    </div>
+                    <div style={{ background: '#fdecec', border: '1px solid #f3c9c9', borderRadius: 10, padding: '8px 12px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#d64545' }}>Inadimplência · {ano}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1f2a44', marginTop: 2 }}>{fmtAbrev(inadimplenciaTotal)}</div>
+                    </div>
+                  </div>
+                )
+              })() : null}
 
               {!potMensal ? (
                 <div style={{ marginTop: 16, height: 220, borderRadius: 12, background: '#eef1f7' }} />
