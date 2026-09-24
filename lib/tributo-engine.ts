@@ -301,6 +301,7 @@ export interface RankTributo {
   lancado: number
   arrecadado: number
   saldo: number
+  inadimplencia: number
 }
 
 export async function rankingTributos(somenteOutros = true, ano?: number, mes?: number): Promise<RankTributo[]> {
@@ -314,11 +315,16 @@ async function rankingTributosRaw(somenteOutros: boolean, ano?: number, mes?: nu
     ? `g.cd_tributo NOT IN (${EXCL})`
     : `g.cd_tributo NOT IN (${CODIGOS_EXCLUIDOS.join(',')})`
 
+  // `inadimplencia` (a pedido do usuário) restringe o saldo (vl_saldo, já líquido por
+  // natureza) às parcelas efetivamente VENCIDAS (dt_vencimento < hoje-1, mesmo corte de
+  // qEmAbertoInad/bucketsIptu) — "saldo" continua sendo o Em Aberto total (vencido + a
+  // vencer), sem mudar o contrato de quem já usa esse campo (aba Outros Tributos).
   const r = await agentQuery(`
     SELECT g.cd_tributo AS cd, t.ds_tributo AS nome,
            SUM(pp.vl_lancto) AS lancado,
            SUM(pp.vl_pagto) AS pago,
-           SUM(pp.vl_saldo) AS saldo
+           SUM(pp.vl_saldo) AS saldo,
+           SUM(CASE WHEN p.dt_vencimento < GETDATE()-1 THEN pp.vl_saldo ELSE 0 END) AS inadimplencia
     FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
     JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
     JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
@@ -333,6 +339,7 @@ async function rankingTributosRaw(somenteOutros: boolean, ano?: number, mes?: nu
       lancado: num(row[2]),
       arrecadado: num(row[3]),
       saldo: num(row[4]),
+      inadimplencia: num(row[5]),
     }))
     .sort((a, b) => b.lancado - a.lancado)
 }
@@ -529,6 +536,34 @@ async function iptuOficialAnoRaw(ano: number, mes?: number): Promise<IptuOficial
     .filter(r => !LANC_SIT_EXCLUIR.has(String(r[0] ?? '').trim()))
     .reduce((s, r) => s + num(r[1]), 0)
   return { lancado: soma(lancR.rows), arrecadado: soma(arrecR.rows) }
+}
+
+/**
+ * Inadimplência OFICIAL do IPTU pra UM único exercício (a pedido do usuário — "A Recuperar"
+ * da tabela "Conversão por Tributo" em Cobrança deve refletir a mesma inadimplência da tela
+ * de Imobiliário, não o Em Aberto total do modelo antigo de posição). Mesma fórmula de
+ * qEmAbertoInad(true) abaixo, mas escopada a um `ano` só (like iptuOficialAno), evitando
+ * calcular todos os exercícios de uma vez.
+ */
+export async function iptuOficialInadimplenciaAno(ano: number, mes?: number): Promise<number> {
+  return cached(`iptuOficialInadAno:${ano}:${mes ?? ''}`, TTL_15MIN, () => iptuOficialInadimplenciaAnoRaw(ano, mes))
+}
+
+async function iptuOficialInadimplenciaAnoRaw(ano: number, mes?: number): Promise<number> {
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
+  const r = await agentQuery(`
+    SELECT SUM(valor) vl FROM (
+      SELECT g.cd_devedor dev, p.dt_vencimento venc, SUM(pm.vl_movimento*pm.no_sinal) valor
+      FROM ${SCHEMA}.tb_dsod_guias g
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo IN (${IPTU_COD}) AND g.no_exercicio_lancamento = ${ano} AND p.no_parcela <> 0
+        AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})
+        AND p.dt_vencimento < getdate()-1${filtroMes}
+      GROUP BY g.cd_devedor, p.dt_vencimento
+      HAVING SUM(pm.vl_movimento*pm.no_sinal) > 1
+    ) t`, 1)
+  return Math.max(0, num(r.rows[0]?.[0]))
 }
 
 export async function bucketsIptu(): Promise<Map<number, BucketsIptuAno>> {

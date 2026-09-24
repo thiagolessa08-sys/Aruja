@@ -1,19 +1,23 @@
 import { agentQuery } from '@/lib/agent'
-import { rankingTributos, iptuOficialAno, type RankTributo } from '@/lib/tributo-engine'
+import { rankingTributos, iptuOficialAno, iptuOficialInadimplenciaAno, type RankTributo } from '@/lib/tributo-engine'
 import { CODIGOS_EXCLUIDOS } from '@/lib/tributos'
 import { cached, TTL_15MIN } from '@/lib/cache'
 
 // Sobrescreve a linha do IPTU (cd_tributo=1) do ranking genérico (rankingTributos, modelo
-// tb_dsod_parcela_posicao) pelo lançado/arrecadado OFICIAL usado nos KPIs de Imobiliário
-// (ver iptuOficialAno em tributo-engine.ts) — usado tanto pelo resumo (KPIs do topo + tabela
-// "Conversão por Tributo") quanto pela Análise de Conversão ("Por Tributo"), pra manter os
-// dois consistentes entre si e com a tela de Imobiliário. Não mexe em `saldo` (não foi
-// pedido, e "A Recuperar" da tabela de resumo fica sem uma definição oficial equivalente
-// aqui) nem em "IPTU Diferença de Área" (cd_tributo=25), que também fica de fora do IPTU
-// oficial de Imobiliário.
+// tb_dsod_parcela_posicao) pelo lançado/arrecadado/inadimplência OFICIAIS usados nos KPIs de
+// Imobiliário (ver iptuOficialAno/iptuOficialInadimplenciaAno em tributo-engine.ts) — usado só
+// pelo resumo (KPIs do topo + tabela "Conversão por Tributo"; Análise de Conversão faz sua
+// própria troca de lancado/arrecadado, inline, sem inadimplência). `inadimplencia` (a pedido
+// do usuário) é o que alimenta "A Recuperar"/"Potencial a Recuperar" agora — antes usavam
+// `saldo` (Em Aberto total, vencido + a vencer), que ficava incoerente com o rótulo
+// "inadimplência" já usado no KPI. "IPTU Diferença de Área" (cd_tributo=25) fica de fora,
+// igual ao resto do IPTU oficial de Imobiliário.
 async function aplicarIptuOficial(rank: RankTributo[], ano: number, mes?: number): Promise<RankTributo[]> {
-  const iptuOficial = await iptuOficialAno(ano, mes)
-  return rank.map(t => t.cd === 1 ? { ...t, lancado: iptuOficial.lancado, arrecadado: iptuOficial.arrecadado } : t)
+  const [iptuOficial, inadimplenciaOficial] = await Promise.all([
+    iptuOficialAno(ano, mes),
+    iptuOficialInadimplenciaAno(ano, mes),
+  ])
+  return rank.map(t => t.cd === 1 ? { ...t, lancado: iptuOficial.lancado, arrecadado: iptuOficial.arrecadado, inadimplencia: inadimplenciaOficial } : t)
 }
 
 const SCHEMA = 'pref_aruja_sp'
@@ -74,14 +78,18 @@ async function resumoCobrancaRaw(ano: number, mes?: number): Promise<ResumoCobra
 
   const rankAjustado = await aplicarIptuOficial(rank, ano, mes)
 
+  // `saldo` (aqui e no total abaixo) é a INADIMPLÊNCIA (vencido), não o Em Aberto total — a
+  // pedido do usuário, pra "A Recuperar"/"Potencial a Recuperar" refletirem só o que já
+  // venceu (mesmo critério de bucketsIptu no IPTU, e do corte "vencido" do modelo antigo de
+  // posição nos demais tributos).
   const tributos = rankAjustado
     .filter(t => t.lancado > 0)
-    .map(t => ({ nome: t.nome, lancado: t.lancado, arrecadado: t.arrecadado, saldo: t.saldo, conversao: t.lancado ? (t.arrecadado / t.lancado) * 100 : 0 }))
+    .map(t => ({ nome: t.nome, lancado: t.lancado, arrecadado: t.arrecadado, saldo: t.inadimplencia, conversao: t.lancado ? (t.arrecadado / t.lancado) * 100 : 0 }))
     .slice(0, 10)
 
   const lancado = rankAjustado.reduce((a, t) => a + t.lancado, 0)
   const arrecadado = rankAjustado.reduce((a, t) => a + t.arrecadado, 0)
-  const saldo = rankAjustado.reduce((a, t) => a + t.saldo, 0)
+  const saldo = rankAjustado.reduce((a, t) => a + t.inadimplencia, 0)
 
   const canais = canaisR.rows
     .map(r => ({ nome: String(r[0] ?? '').trim() || 'Outros', n: num(r[1]) }))
