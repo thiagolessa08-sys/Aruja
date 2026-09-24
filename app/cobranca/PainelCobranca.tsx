@@ -157,6 +157,10 @@ const FALLBACK_ANALISE: AnaliseConversao = {
 }
 
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+// Espelha TRIBUTOS_MODELO_OFICIAL_ABERTO (lib/tributo-engine.ts) — tributos cujo "Quando
+// Vence"/"Potencial de Arrecadação" usa o modelo oficial (tb_dsod_parcela_movimento) em vez
+// do modelo antigo de posição. Só usado aqui pra ajustar o texto/cálculo de exibição.
+const TRIBUTOS_MODELO_OFICIAL = [1, 10]
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const CANAL_CORES = ['#283e93', '#3f5bb5', '#5870c4', '#7d8fce', '#9cabd9', '#b9c4e8', '#cdd9ee', '#e8962e']
 const convCor = (c: number) => c >= 75 ? '#1fa463' : c >= 50 ? '#e8962e' : '#d64545'
@@ -1796,24 +1800,24 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <span style={reportBadge}>Por mês</span>
               </div>
               <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>
-                {potSel.codigos.length === 1 && potSel.codigos[0] === 1
-                  ? 'Saldo devedor acumulado desde o início do exercício até cada mês de vencimento (mesmo critério do KPI "Em Aberto" da tela de IPTU, filtrado por Mês).'
+                {potSel.codigos.length === 1 && TRIBUTOS_MODELO_OFICIAL.includes(potSel.codigos[0])
+                  ? 'Saldo devedor acumulado desde o início do exercício até cada mês de vencimento (mesmo critério do KPI "Em Aberto" de Imobiliário, filtrado por Mês).'
                   : `Saldo devedor por mês de vencimento${potSel.codigos.length > 1 ? ` — soma de ${potSel.codigos.length} códigos` : ''}.`} Barras vermelhas já venceram; laranjas ainda vão vencer. Clique num mês pra ver os devedores.
               </div>
 
               {/* Totais do ano (a pedido do usuário) — Em Aberto = todos os meses (vencido + a
-                  vencer); Inadimplência = só o que já venceu. Na série acumulada do IPTU
-                  (ehIptuAcumulado), cada mês já soma tudo até ali, então o Em Aberto é o valor
+                  vencer); Inadimplência = só o que já venceu. Na série acumulada (IPTU/ITBI,
+                  ehModeloOficial), cada mês já soma tudo até ali, então o Em Aberto é o valor
                   do ÚLTIMO mês; nas séries isoladas dos demais tributos, é a SOMA de todos os
                   meses. Inadimplência usa potInadimplenciaTotal (exato, no grão da parcela)
                   quando disponível — a soma dos meses marcados "vencido" subestimaria o total
                   sempre que o mês corrente estiver só PARCIALMENTE vencido (a marcação de
                   potMensal compara ano/mês, não o dia exato de vencimento). */}
               {potMensal && potMensal.length ? (() => {
-                const ehIptuAcumulado = potSel.codigos.length === 1 && potSel.codigos[0] === 1
-                const emAbertoTotal = ehIptuAcumulado ? potMensal[potMensal.length - 1].saldo : potMensal.reduce((s, m) => s + m.saldo, 0)
+                const ehModeloOficial = potSel.codigos.length === 1 && TRIBUTOS_MODELO_OFICIAL.includes(potSel.codigos[0])
+                const emAbertoTotal = ehModeloOficial ? potMensal[potMensal.length - 1].saldo : potMensal.reduce((s, m) => s + m.saldo, 0)
                 const vencidos = potMensal.filter(m => m.vencido)
-                const inadimplenciaAproximada = ehIptuAcumulado ? (vencidos.length ? vencidos[vencidos.length - 1].saldo : 0) : vencidos.reduce((s, m) => s + m.saldo, 0)
+                const inadimplenciaAproximada = ehModeloOficial ? (vencidos.length ? vencidos[vencidos.length - 1].saldo : 0) : vencidos.reduce((s, m) => s + m.saldo, 0)
                 const inadimplenciaTotal = potInadimplenciaTotal ?? inadimplenciaAproximada
                 return (
                   <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>

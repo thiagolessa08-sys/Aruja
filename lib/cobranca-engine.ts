@@ -1,23 +1,32 @@
 import { agentQuery } from '@/lib/agent'
-import { rankingTributos, iptuOficialAno, iptuOficialInadimplenciaAno, type RankTributo } from '@/lib/tributo-engine'
+import { rankingTributos, iptuOficialAno, tributoOficialInadimplenciaAno, TRIBUTOS_MODELO_OFICIAL_ABERTO, type RankTributo } from '@/lib/tributo-engine'
 import { CODIGOS_EXCLUIDOS } from '@/lib/tributos'
 import { cached, TTL_15MIN } from '@/lib/cache'
 
-// Sobrescreve a linha do IPTU (cd_tributo=1) do ranking genérico (rankingTributos, modelo
-// tb_dsod_parcela_posicao) pelo lançado/arrecadado/inadimplência OFICIAIS usados nos KPIs de
-// Imobiliário (ver iptuOficialAno/iptuOficialInadimplenciaAno em tributo-engine.ts) — usado só
-// pelo resumo (KPIs do topo + tabela "Conversão por Tributo"; Análise de Conversão faz sua
-// própria troca de lancado/arrecadado, inline, sem inadimplência). `inadimplencia` (a pedido
-// do usuário) é o que alimenta "A Recuperar"/"Potencial a Recuperar" agora — antes usavam
-// `saldo` (Em Aberto total, vencido + a vencer), que ficava incoerente com o rótulo
-// "inadimplência" já usado no KPI. "IPTU Diferença de Área" (cd_tributo=25) fica de fora,
-// igual ao resto do IPTU oficial de Imobiliário.
+// Sobrescreve as linhas de IPTU/ITBI do ranking genérico (rankingTributos, modelo
+// tb_dsod_parcela_posicao) pelo lançado/arrecadado/inadimplência OFICIAIS de Imobiliário (ver
+// iptuOficialAno/tributoOficialInadimplenciaAno em tributo-engine.ts) — usado só pelo resumo
+// (KPIs do topo + tabela "Conversão por Tributo"; Análise de Conversão faz sua própria troca
+// de lancado/arrecadado, inline, sem inadimplência). `inadimplencia` (a pedido do usuário) é o
+// que alimenta "A Recuperar"/"Potencial a Recuperar" agora — antes usavam `saldo` (Em Aberto
+// total, vencido + a vencer), que ficava incoerente com o rótulo "inadimplência" já usado no
+// KPI. Só o IPTU tem lançado/arrecadado oficiais (iptuOficialAno, Regras 1-6 de Imobiliário);
+// o ITBI (e qualquer outro tributo em TRIBUTOS_MODELO_OFICIAL_ABERTO) só troca a
+// inadimplência — não foi pedido trocar lançado/arrecadado dele. "IPTU Diferença de Área"
+// (cd_tributo=25) fica de fora, igual ao resto do IPTU oficial de Imobiliário.
 async function aplicarIptuOficial(rank: RankTributo[], ano: number, mes?: number): Promise<RankTributo[]> {
-  const [iptuOficial, inadimplenciaOficial] = await Promise.all([
+  const [iptuOficial, ...inadimplenciasOficiais] = await Promise.all([
     iptuOficialAno(ano, mes),
-    iptuOficialInadimplenciaAno(ano, mes),
+    ...TRIBUTOS_MODELO_OFICIAL_ABERTO.map(cd => tributoOficialInadimplenciaAno(cd, ano, mes)),
   ])
-  return rank.map(t => t.cd === 1 ? { ...t, lancado: iptuOficial.lancado, arrecadado: iptuOficial.arrecadado, inadimplencia: inadimplenciaOficial } : t)
+  const inadPorCd = new Map(TRIBUTOS_MODELO_OFICIAL_ABERTO.map((cd, i) => [cd, inadimplenciasOficiais[i]]))
+  return rank.map(t => {
+    const inadOficial = inadPorCd.get(t.cd)
+    if (inadOficial === undefined) return t
+    return t.cd === 1
+      ? { ...t, lancado: iptuOficial.lancado, arrecadado: iptuOficial.arrecadado, inadimplencia: inadOficial }
+      : { ...t, inadimplencia: inadOficial }
+  })
 }
 
 const SCHEMA = 'pref_aruja_sp'

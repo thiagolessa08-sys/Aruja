@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { potencialMensalTributo, iptuOficialQuandoVenceAcumulado, iptuOficialInadimplenciaAno } from '@/lib/tributo-engine'
+import { potencialMensalTributo, tributoOficialQuandoVenceAcumulado, tributoOficialInadimplenciaAno, TRIBUTOS_MODELO_OFICIAL_ABERTO } from '@/lib/tributo-engine'
 
 // Drill "quando vence" do ranking de Potencial de Arrecadação (Cobrança): saldo por mês de
 // vencimento de um ou mais códigos de tributo.
@@ -18,20 +18,23 @@ export async function GET(req: NextRequest) {
   const mes = Number(req.nextUrl.searchParams.get('mes')) || undefined
 
   try {
-    // IPTU sozinho (cd_tributo=1) usa o modelo OFICIAL de Imobiliário (a pedido do usuário),
-    // com cada mês ACUMULANDO desde o início do exercício (a pedido do usuário — bate com o
-    // KPI "Em Aberto" quando se filtra por Mês na tela de IPTU, não o valor isolado do mês).
-    // "IPTU Diferença de Área" (cd=25) e combinações com outros tributos ("Demais tributos")
+    // Tributos com modelo OFICIAL conhecido (IPTU/ITBI — TRIBUTOS_MODELO_OFICIAL_ABERTO),
+    // sozinhos (não combinados com outro código), usam tb_dsod_parcela_movimento (a pedido do
+    // usuário), com cada mês ACUMULANDO desde o início do exercício (bate com o KPI "Em
+    // Aberto" quando se filtra por Mês em Imobiliário, não o valor isolado do mês). "IPTU
+    // Diferença de Área" (cd=25) e combinações com outros tributos ("Demais tributos")
     // continuam no modelo antigo de posição.
-    const ehIptu = codigos.length === 1 && codigos[0] === 1 && !!ano
+    const ehOficial = codigos.length === 1 && TRIBUTOS_MODELO_OFICIAL_ABERTO.includes(codigos[0]) && !!ano
     const [itens, inadimplenciaTotal] = await Promise.all([
-      ehIptu ? iptuOficialQuandoVenceAcumulado(ano!, mes) : potencialMensalTributo(codigos, ano, mes),
+      ehOficial ? tributoOficialQuandoVenceAcumulado(codigos[0], ano!, mes) : potencialMensalTributo(codigos, ano, mes),
       // Total exato de Inadimplência (a pedido do usuário) — não dá pra derivar da série
       // mensal acima somando os meses marcados "vencido", porque essa marcação compara só
       // ANO/MÊS (não o dia exato de vencimento): o mês corrente pode estar PARCIALMENTE
-      // vencido e ficaria de fora inteiro, subestimando o total. iptuOficialInadimplenciaAno
-      // já filtra por dt_vencimento < hoje-1 no grão da parcela, então dá o valor certo.
-      ehIptu ? iptuOficialInadimplenciaAno(ano!, mes) : Promise.resolve(null),
+      // vencido e ficaria de fora inteiro, subestimando o total (foi o caso do ITBI: setembro
+      // concentra quase todo o saldo do ano e ficava inteiro do lado "a vencer").
+      // tributoOficialInadimplenciaAno já filtra por dt_vencimento < hoje-1 no grão da
+      // parcela, então dá o valor certo.
+      ehOficial ? tributoOficialInadimplenciaAno(codigos[0], ano!, mes) : Promise.resolve(null),
     ])
     return NextResponse.json({ itens, inadimplenciaTotal })
   } catch (e) {

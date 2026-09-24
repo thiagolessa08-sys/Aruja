@@ -538,18 +538,26 @@ async function iptuOficialAnoRaw(ano: number, mes?: number): Promise<IptuOficial
   return { lancado: soma(lancR.rows), arrecadado: soma(arrecR.rows) }
 }
 
+// Tributos com modelo OFICIAL (tb_dsod_parcela_movimento) já validado pro Em Aberto/
+// Inadimplência de Cobrança — IPTU (1) e ITBI (10, a pedido do usuário: modelo antigo de
+// posição mostrava só R$ 314 mil de vencido, oficial dá R$ 4,14 mi — mesma causa do IPTU,
+// não é modelo errado, é o mês corrente ficando de fora inteiro do "vencido" na série
+// isolada). Lançado/arrecadado desses tributos fora do IPTU continuam no modelo antigo
+// (não foi pedido trocar).
+export const TRIBUTOS_MODELO_OFICIAL_ABERTO = [1, 10]
+
 /**
- * Inadimplência OFICIAL do IPTU pra UM único exercício (a pedido do usuário — "A Recuperar"
- * da tabela "Conversão por Tributo" em Cobrança deve refletir a mesma inadimplência da tela
- * de Imobiliário, não o Em Aberto total do modelo antigo de posição). Mesma fórmula de
- * qEmAbertoInad(true) abaixo, mas escopada a um `ano` só (like iptuOficialAno), evitando
- * calcular todos os exercícios de uma vez.
+ * Inadimplência OFICIAL de um tributo (IPTU/ITBI) pra UM único exercício — "A Recuperar" da
+ * tabela "Conversão por Tributo" e o total do gráfico "Quando Vence" em Cobrança devem
+ * refletir essa inadimplência, não o Em Aberto total do modelo antigo de posição. Mesma
+ * fórmula de qEmAbertoInad(true) abaixo, mas escopada a um `ano` só (like iptuOficialAno),
+ * evitando calcular todos os exercícios de uma vez.
  */
-export async function iptuOficialInadimplenciaAno(ano: number, mes?: number): Promise<number> {
-  return cached(`iptuOficialInadAno:${ano}:${mes ?? ''}`, TTL_15MIN, () => iptuOficialInadimplenciaAnoRaw(ano, mes))
+export async function tributoOficialInadimplenciaAno(cdTributo: number, ano: number, mes?: number): Promise<number> {
+  return cached(`tributoOficialInadAno:${cdTributo}:${ano}:${mes ?? ''}`, TTL_15MIN, () => tributoOficialInadimplenciaAnoRaw(cdTributo, ano, mes))
 }
 
-async function iptuOficialInadimplenciaAnoRaw(ano: number, mes?: number): Promise<number> {
+async function tributoOficialInadimplenciaAnoRaw(cdTributo: number, ano: number, mes?: number): Promise<number> {
   const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const r = await agentQuery(`
     SELECT SUM(valor) vl FROM (
@@ -557,7 +565,7 @@ async function iptuOficialInadimplenciaAnoRaw(ano: number, mes?: number): Promis
       FROM ${SCHEMA}.tb_dsod_guias g
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      WHERE g.cd_tributo IN (${IPTU_COD}) AND g.no_exercicio_lancamento = ${ano} AND p.no_parcela <> 0
+      WHERE g.cd_tributo IN (${cdTributo}) AND g.no_exercicio_lancamento = ${ano} AND p.no_parcela <> 0
         AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})
         AND p.dt_vencimento < getdate()-1${filtroMes}
       GROUP BY g.cd_devedor, p.dt_vencimento
@@ -1129,17 +1137,28 @@ async function potencialArrecadacaoRaw(ano?: number, mes?: number): Promise<Pote
     porCd.set(cd, cur)
   }
 
-  // IPTU (cd=1) troca pro modelo OFICIAL de Imobiliário (a pedido do usuário) — mesma troca já
-  // feita em analiseConversao/iptuOficialAno (Análise de Conversão), aqui aplicada ao vencido/
-  // a vencer de "Potencial de Arrecadação" pra bater com o drill "Quando Vence" (que usa a
-  // mesma fonte). Só quando há exercício selecionado — a query oficial é por-exercício, igual
-  // ao resto do IPTU oficial.
+  // IPTU e ITBI trocam pro modelo OFICIAL de Imobiliário (a pedido do usuário) — mesma troca
+  // já feita em analiseConversao/iptuOficialAno (Análise de Conversão), aqui aplicada ao
+  // vencido/a vencer de "Potencial de Arrecadação" pra bater com o drill "Quando Vence" (que
+  // usa a mesma fonte). Total EXATO (tributoOficialInadimplenciaAno, no grão da parcela) em
+  // vez de filtrar+somar a série isolada por "vencido" — essa marcação só compara ano/mês, não
+  // o dia exato, e subestimaria o vencido sempre que o mês corrente estiver parcialmente
+  // vencido (foi exatamente o que aconteceu com o ITBI: setembro concentra a maior parte do
+  // saldo do ano e ficava inteiro classificado como "a vencer"). Só quando há exercício
+  // selecionado — a query oficial é por-exercício, igual ao resto do modelo oficial.
   if (ano) {
-    const oficial = await iptuOficialQuandoVence(ano, mes)
-    const nomeIptu = porCd.get(1)?.nome ?? 'IPTU'
-    const vencidoOficial = oficial.filter(x => x.vencido).reduce((s, x) => s + x.saldo, 0)
-    const aVencerOficial = oficial.filter(x => !x.vencido).reduce((s, x) => s + x.saldo, 0)
-    porCd.set(1, { nome: nomeIptu, vencido: vencidoOficial, aVencer: aVencerOficial })
+    const candidatos = TRIBUTOS_MODELO_OFICIAL_ABERTO.filter(cd => porCd.has(cd))
+    const ajustes = await Promise.all(candidatos.map(async cd => {
+      const [emAbertoSerie, inadimplenciaExata] = await Promise.all([
+        tributoOficialQuandoVence(cd, ano, mes),
+        tributoOficialInadimplenciaAno(cd, ano, mes),
+      ])
+      return { cd, emAbertoTotal: emAbertoSerie.reduce((s, x) => s + x.saldo, 0), inadimplenciaExata }
+    }))
+    for (const { cd, emAbertoTotal, inadimplenciaExata } of ajustes) {
+      const nome = porCd.get(cd)!.nome
+      porCd.set(cd, { nome, vencido: inadimplenciaExata, aVencer: Math.max(0, emAbertoTotal - inadimplenciaExata) })
+    }
   }
 
   const lista = Array.from(porCd.entries())
@@ -1207,22 +1226,23 @@ async function potencialMensalTributoRaw(codigos: number[], ano?: number, mes?: 
 }
 
 /**
- * Versão OFICIAL (a pedido do usuário) de potencialMensalTributo, só pro IPTU (cd_tributo=1) —
- * mesma fonte/regra/critério do "Em aberto"/"Inadimplência" já usado na tela de Imobiliário
- * (qEmAbertoInad/bucketsIptu, tb_dsod_parcela_movimento): net por (devedor, vencimento), com
- * HAVING > 0 pra nunca deixar uma parcela de saldo negativo (renegociação/correção) cancelar
- * uma parcela de saldo positivo do mesmo mês antes da agregação — mesmo cuidado já aplicado no
- * "Em Aberto" do Consultar Contribuinte. Aqui a agregação final é por (ano,mês) de vencimento
- * em vez de por exercício, pra alimentar a série "Quando Vence"/o ranking de "Potencial de
- * Arrecadação" quando o item for só o IPTU (cd=1) — "IPTU Diferença de Área" (cd=25) e
- * qualquer combinação com outros tributos ficam de fora, igual à troca já feita em
+ * Versão OFICIAL (a pedido do usuário) de potencialMensalTributo, pra tributos com modelo
+ * oficial conhecido (IPTU e ITBI — ver TRIBUTOS_MODELO_OFICIAL_ABERTO) — mesma fonte/regra/
+ * critério do "Em aberto"/"Inadimplência" já usado na tela de Imobiliário (qEmAbertoInad/
+ * bucketsIptu, tb_dsod_parcela_movimento): net por (devedor, vencimento), com HAVING > 0 pra
+ * nunca deixar uma parcela de saldo negativo (renegociação/correção) cancelar uma parcela de
+ * saldo positivo do mesmo mês antes da agregação — mesmo cuidado já aplicado no "Em Aberto" do
+ * Consultar Contribuinte. Aqui a agregação final é por (ano,mês) de vencimento em vez de por
+ * exercício, pra alimentar a série "Quando Vence"/o ranking de "Potencial de Arrecadação"
+ * quando o item selecionado for só esse tributo (cd sozinho) — "IPTU Diferença de Área" (cd=25)
+ * e qualquer combinação com outros tributos ficam de fora, igual à troca já feita em
  * analiseConversao (Cobrança) e iptuOficialAno.
  */
-export async function iptuOficialQuandoVence(ano: number, mes?: number): Promise<PotencialMes[]> {
-  return cached(`iptuOficialQuandoVence:${ano}:${mes ?? ''}`, TTL_15MIN, () => iptuOficialQuandoVenceRaw(ano, mes))
+export async function tributoOficialQuandoVence(cdTributo: number, ano: number, mes?: number): Promise<PotencialMes[]> {
+  return cached(`tributoOficialQuandoVence:${cdTributo}:${ano}:${mes ?? ''}`, TTL_15MIN, () => tributoOficialQuandoVenceRaw(cdTributo, ano, mes))
 }
 
-async function iptuOficialQuandoVenceRaw(ano: number, mes?: number): Promise<PotencialMes[]> {
+async function tributoOficialQuandoVenceRaw(cdTributo: number, ano: number, mes?: number): Promise<PotencialMes[]> {
   const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
   const r = await agentQuery(`
     SELECT vy, vm, SUM(valor) vl FROM (
@@ -1230,7 +1250,7 @@ async function iptuOficialQuandoVenceRaw(ano: number, mes?: number): Promise<Pot
       FROM ${SCHEMA}.tb_dsod_guias g
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
       JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
-      WHERE g.cd_tributo IN (${IPTU_COD}) AND g.no_exercicio_lancamento = ${ano} AND p.no_parcela <> 0
+      WHERE g.cd_tributo IN (${cdTributo}) AND g.no_exercicio_lancamento = ${ano} AND p.no_parcela <> 0
         AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})${filtroMes}
       GROUP BY YEAR(p.dt_vencimento), MONTH(p.dt_vencimento), g.cd_devedor, p.dt_vencimento
       HAVING SUM(pm.vl_movimento * pm.no_sinal) > 0
@@ -1250,14 +1270,15 @@ async function iptuOficialQuandoVenceRaw(ano: number, mes?: number): Promise<Pot
 }
 
 /**
- * Versão ACUMULADA (a pedido do usuário) de iptuOficialQuandoVence pro gráfico "Quando Vence"
- * — cada mês passa a somar tudo desde o início do exercício até ele (igual ao KPI "Em Aberto"
- * quando se filtra por Mês na tela de IPTU), em vez do valor isolado daquele mês. NÃO usada
- * pelo ranking de "Potencial de Arrecadação" (que precisa do valor isolado por mês pra separar
- * corretamente vencido/a vencer sem somar em dobro) — só pelo drill "Quando Vence" em si.
+ * Versão ACUMULADA (a pedido do usuário) de tributoOficialQuandoVence pro gráfico "Quando
+ * Vence" — cada mês passa a somar tudo desde o início do exercício até ele (igual ao KPI "Em
+ * Aberto" quando se filtra por Mês na tela de IPTU/Imobiliário), em vez do valor isolado
+ * daquele mês. NÃO usada pelo ranking de "Potencial de Arrecadação" (que precisa do valor
+ * isolado por mês pra separar corretamente vencido/a vencer sem somar em dobro) — só pelo
+ * drill "Quando Vence" em si.
  */
-export async function iptuOficialQuandoVenceAcumulado(ano: number, mes?: number): Promise<PotencialMes[]> {
-  const porMes = await iptuOficialQuandoVence(ano, mes)
+export async function tributoOficialQuandoVenceAcumulado(cdTributo: number, ano: number, mes?: number): Promise<PotencialMes[]> {
+  const porMes = await tributoOficialQuandoVence(cdTributo, ano, mes)
   let acumulado = 0
   return porMes.map(x => {
     acumulado += x.saldo
