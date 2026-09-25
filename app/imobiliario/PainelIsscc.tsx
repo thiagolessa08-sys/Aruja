@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer, ComposedChart, Line, Legend } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
-import SecaoBairros from '../_components/SecaoBairros'
+import SecaoBairros, { METRICAS, type Metrica } from '../_components/SecaoBairros'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
@@ -86,6 +86,9 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
   const [bairroFiltro, setBairroFiltro] = useState<string | null>(null)
   const [ruaFiltro, setRuaFiltro] = useState<string | null>(null)
   const [imovelFiltro, setImovelFiltro] = useState<number | null>(null)
+  // Métrica ativa no gráfico "ISSCC por Bairro" (Lançado/Arrecadado/Em aberto/…) — pra o
+  // relatório exportado respeitar a mesma análise escolhida na tela, não sempre "Lançado".
+  const [metricaFiltro, setMetricaFiltro] = useState<Metrica>('lancado')
   const [resetBairros, setResetBairros] = useState(0)
   const filtroLabelBairro = imovelFiltro ? `Imóvel ${imovelFiltro}${ruaFiltro ? ` — ${ruaFiltro}` : ''}` : bairroFiltro ? (ruaFiltro ? `${ruaFiltro} — ${bairroFiltro}` : bairroFiltro) : null
   function limparFiltroBairro() { setBairroFiltro(null); setRuaFiltro(null); setImovelFiltro(null); setResetBairros(n => n + 1) }
@@ -172,20 +175,28 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
         ])
       }
 
-      // 2) ISSCC por Bairro — respeita o bairro/rua filtrado na tela (mesmo endpoint do
-      // gráfico interativo). A métrica exportada é sempre Lançado (a métrica escolhida no
-      // próprio gráfico fica só no estado interno de <SecaoBairros>, não chega até aqui).
-      const nivelBairroIsscc = ruaFiltro ? 'imovel' : bairroFiltro ? 'rua' : 'bairro'
-      const secaoBairroIsscc = `ISSCC por Bairro · ${nivelBairroIsscc === 'imovel' ? `Imóveis de ${ruaFiltro}` : nivelBairroIsscc === 'rua' ? `Ruas de ${bairroFiltro}` : 'Bairros'}`
-      const qsBairroIsscc = new URLSearchParams({ ano: String(v.anoRef) })
-      if (mes) qsBairroIsscc.set('mes', String(mes))
-      if (bairroFiltro) qsBairroIsscc.set('bairro', bairroFiltro)
-      if (bairroFiltro && ruaFiltro) qsBairroIsscc.set('rua', ruaFiltro)
-      const respBairroIsscc = await fetchJson(`/api/isscc/bairros?${qsBairroIsscc}`)
-      for (const b of (respBairroIsscc?.bairros ?? []) as { nome: string; imoveis: number; valor: number; inscricao?: string; numero?: string }[]) {
-        linhas.push(nivelBairroIsscc === 'imovel'
-          ? [secaoBairroIsscc, b.nome, b.inscricao || trac, `Nº ${b.numero || trac}`, money(b.valor), trac, trac, trac, trac, trac]
-          : [secaoBairroIsscc, b.nome, trac, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, money(b.valor), trac, trac, trac, trac, trac])
+      // 2) ISSCC por Bairro — só entra no relatório quando HÁ alguma análise escolhida na tela
+      // (bairro/rua/imóvel selecionado); sem isso, o documento padrão fica só com os KPIs
+      // (seção "Indicadores" abaixo, sempre presente) — a pedido do usuário, pra não despejar
+      // os ~50 bairros de uma métrica arbitrária quando nada foi de fato analisado. Quando há
+      // filtro, respeita bairro/rua/imóvel E a métrica ativas na tela (Lançado/Arrecadado/…,
+      // vindas de <SecaoBairros> via onSelecao) — Isento não tem "valor" (é taxa não cobrada),
+      // mesmo critério do gráfico: mostra só a quantidade de imóveis.
+      if (bairroFiltro) {
+        const nivelBairroIsscc = ruaFiltro ? 'imovel' : 'rua'
+        const metLabelIsscc = METRICAS.find(m => m.id === metricaFiltro)?.label ?? metricaFiltro
+        const semValorIsscc = metricaFiltro === 'isento'
+        const secaoBairroIsscc = `ISSCC por Bairro · ${nivelBairroIsscc === 'imovel' ? `Imóveis de ${ruaFiltro}` : `Ruas de ${bairroFiltro}`} · ${metLabelIsscc}`
+        const qsBairroIsscc = new URLSearchParams({ ano: String(v.anoRef), metrica: metricaFiltro, bairro: bairroFiltro })
+        if (mes) qsBairroIsscc.set('mes', String(mes))
+        if (ruaFiltro) qsBairroIsscc.set('rua', ruaFiltro)
+        const respBairroIsscc = await fetchJson(`/api/isscc/bairros?${qsBairroIsscc}`)
+        for (const b of (respBairroIsscc?.bairros ?? []) as { nome: string; imoveis: number; valor: number; inscricao?: string; numero?: string }[]) {
+          const valorCol = semValorIsscc ? 'somente por quantidade' : money(b.valor)
+          linhas.push(nivelBairroIsscc === 'imovel'
+            ? [secaoBairroIsscc, b.nome, b.inscricao || trac, `Nº ${b.numero || trac}`, valorCol, trac, trac, trac, trac, trac]
+            : [secaoBairroIsscc, b.nome, trac, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, valorCol, trac, trac, trac, trac, trac])
+        }
       }
 
       // 3) Vínculos mobiliários e imobiliários — só se houver um drill aberto na tela. Cada
@@ -395,7 +406,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           <SecaoBairros key={resetBairros} endpoint="/api/isscc/bairros" ano={ano} mes={mes}
             titulo={`ISSCC por Bairro · Exercício ${ano}${mesNome ? ` · ${mesNome}` : ''}`}
             mostrarNaoLancados permitirDrillImovel
-            onSelecao={(b, r, im) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im) }} />
+            onSelecao={(b, r, im, m) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im); setMetricaFiltro(m) }} />
 
           {/* Vínculos mobiliários e imobiliários (agregado) — clique numa categoria faz drill pra lista de imóveis */}
           <div style={{ ...card, marginTop: 18, position: 'relative' }}>

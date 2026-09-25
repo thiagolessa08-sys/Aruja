@@ -9,8 +9,8 @@ import { fmtAbrev } from '@/lib/fmt-grafico'
 // Métrica alterna o tipo de lançamento; clicar num bairro detalha por rua (ds_endereco).
 
 interface Bairro { nome: string; imoveis: number; valor: number; cd?: number; inscricao?: string; numero?: string }
-type Metrica = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso' | 'naoLancados'
-const METRICAS: { id: Metrica; label: string; cor: string }[] = [
+export type Metrica = 'lancado' | 'arrecadado' | 'emAberto' | 'inadimplencia' | 'isento' | 'suspenso' | 'naoLancados'
+export const METRICAS: { id: Metrica; label: string; cor: string }[] = [
   { id: 'lancado', label: 'Lançado', cor: '#283e93' },
   { id: 'arrecadado', label: 'Arrecadado', cor: '#1fa463' },
   { id: 'emAberto', label: 'Em aberto', cor: '#e8962e' },
@@ -28,7 +28,7 @@ async function fetchJson(url: string, tries = 3): Promise<any | null> {
   return null
 }
 
-export default function SecaoBairros({ endpoint, ano, mes, titulo = 'Análise por Bairro', mostrarNaoLancados = false, permitirDrillImovel = false, onSelecao }: { endpoint: string; ano: number | ''; mes?: number | ''; titulo?: string; mostrarNaoLancados?: boolean; permitirDrillImovel?: boolean; onSelecao?: (bairro: string | null, rua: string | null, imovel: number | null) => void }) {
+export default function SecaoBairros({ endpoint, ano, mes, titulo = 'Análise por Bairro', mostrarNaoLancados = false, permitirDrillImovel = false, onSelecao }: { endpoint: string; ano: number | ''; mes?: number | ''; titulo?: string; mostrarNaoLancados?: boolean; permitirDrillImovel?: boolean; onSelecao?: (bairro: string | null, rua: string | null, imovel: number | null, metrica: Metrica) => void }) {
   const metricasVisiveis = mostrarNaoLancados ? METRICAS : METRICAS.filter(m => m.id !== 'naoLancados')
   const [metrica, setMetrica] = useState<Metrica>('lancado')
   const [bairroSel, setBairroSel] = useState<string | null>(null)
@@ -47,7 +47,7 @@ export default function SecaoBairros({ endpoint, ano, mes, titulo = 'Análise po
   // da tela. Não inclui `onSelecao` nas deps de propósito: só deve disparar quando a
   // seleção muda, não quando o pai recria a função.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { onSelecao?.(bairroSel, ruaSel, imovelSel) }, [bairroSel, ruaSel, imovelSel])
+  useEffect(() => { onSelecao?.(bairroSel, ruaSel, imovelSel, metrica) }, [bairroSel, ruaSel, imovelSel, metrica])
   function selecionarBairro(nome: string) { setBairroSel(nome); setRuaSel(null); setImovelSel(null) }
   function selecionarRua(nome: string) { setRuaSel(nome); setImovelSel(null) }
   function limparBairro() { setBairroSel(null); setRuaSel(null); setImovelSel(null) }
