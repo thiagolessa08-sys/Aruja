@@ -263,16 +263,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       const nivelLinhas: number[] = []
       const push = (linha: (string | number)[], nivel = 0) => { linhas.push(linha); nivelLinhas.push(nivel) }
 
-      // 1) Evolução (sempre global — Ano/Mês da tela) — não é de um imóvel específico.
-      for (const e of v.evolucao) {
-        push([
-          'Evolução', e.previsto ? `${e.ano} *` : e.ano, trac,
-          money(e.lancado), money(e.arrecadado), `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
-          money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
-        ])
-      }
-
-      // 2) ITBI por Bairro — respeita métrica, bairro/rua/imóvel (drill), espólio/sem número
+      // 1) ITBI por Bairro — respeita métrica, bairro/rua/imóvel (drill), espólio/sem número
       // e a busca ativa na lista, igual ao que está sendo exibido na tela.
       const metLabelBairro = METRICAS_BAIRRO_ITBI.find(m => m.id === metricaBairro)?.label ?? metricaBairro
       const filtroExtraBairro = [espolio ? 'espólio' : '', semNumero ? 'sem número' : ''].filter(Boolean).join(' + ')
@@ -287,7 +278,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           : [secaoBairro, b.nome, trac, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, money(b.valor), trac, trac, trac, trac, trac])
       }
 
-      // 3) Imóveis mais transmitidos — respeita a busca ativa (senão, ranking completo). Cada
+      // 2) Imóveis mais transmitidos — respeita a busca ativa (senão, ranking completo). Cada
       // linha já é um imóvel só, então a inscrição vem sempre preenchida. Imóveis com mais de 1
       // transmissão (qt > 1) ganham, a pedido do usuário (mesmo padrão do drill de imóveis do
       // IPTU), uma linha "↳ ITBI {cd}" oculta/expansível pra CADA transmissão individual — busca
@@ -319,7 +310,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         })
       }
 
-      // 4) Consultar Imóvel — só se houver um imóvel aberto na tela. Todas as linhas (o
+      // 3) Consultar Imóvel — só se houver um imóvel aberto na tela. Todas as linhas (o
       // indicador e cada transmissão) são desse mesmo imóvel, então repetem a inscrição.
       if (imovel) {
         const ind = imovel.indicadores
