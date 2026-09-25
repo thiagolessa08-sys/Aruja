@@ -258,10 +258,14 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       // agregado por bairro/rua não têm uma inscrição única; ver mesmo critério em
       // lib/iptu-relatorio.ts).
       const linhas: (string | number)[][] = []
+      // Nível de agrupamento (Excel: Dados > Agrupar) paralelo a `linhas` — só o drill do
+      // ranking (seção 3) usa nível 1 (oculto/expansível); o resto fica sempre em 0.
+      const nivelLinhas: number[] = []
+      const push = (linha: (string | number)[], nivel = 0) => { linhas.push(linha); nivelLinhas.push(nivel) }
 
       // 1) Evolução (sempre global — Ano/Mês da tela) — não é de um imóvel específico.
       for (const e of v.evolucao) {
-        linhas.push([
+        push([
           'Evolução', e.previsto ? `${e.ano} *` : e.ano, trac,
           money(e.lancado), money(e.arrecadado), `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
           money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
@@ -278,18 +282,40 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       const bairrosFiltradosRel = qBairroRel ? bairros.filter(b => b.nome.toLowerCase().includes(qBairroRel)) : bairros
       const listaBairroRel = [...bairrosFiltradosRel].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
       for (const b of listaBairroRel) {
-        linhas.push(nivelBairro === 'imovel'
+        push(nivelBairro === 'imovel'
           ? [secaoBairro, b.nome, b.inscricao || trac, `Nº ${b.numero || trac}`, money(b.valor), trac, trac, trac, trac, trac]
           : [secaoBairro, b.nome, trac, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, money(b.valor), trac, trac, trac, trac, trac])
       }
 
       // 3) Imóveis mais transmitidos — respeita a busca ativa (senão, ranking completo). Cada
-      // linha já é um imóvel só, então a inscrição vem sempre preenchida.
+      // linha já é um imóvel só, então a inscrição vem sempre preenchida. Imóveis com mais de 1
+      // transmissão (qt > 1) ganham, a pedido do usuário (mesmo padrão do drill de imóveis do
+      // IPTU), uma linha "↳ ITBI {cd}" oculta/expansível pra CADA transmissão individual — busca
+      // em lote só pros imóveis que aparecem no relatório, respeitando ano/mês da tela pra bater
+      // com o `qt` do pai.
       if (ranking) {
         const qRankRel = buscaRanking.trim().toLowerCase()
         const itensRankRel = qRankRel ? ranking.itens.filter(it => it.inscricao.toLowerCase().includes(qRankRel) || it.endereco.toLowerCase().includes(qRankRel)) : ranking.itens
+        const idsMultiTransm = itensRankRel.filter(it => it.qt > 1).map(it => it.cd)
+        let transmPorImovel: Record<string, { cdItbi: number; data: string; dtVencimento: string; natureza: string; valorVenal: number; valorTransacao: number; imposto: number }[]> = {}
+        if (idsMultiTransm.length) {
+          const qs = new URLSearchParams({ ids: idsMultiTransm.join(',') })
+          if (ano) qs.set('ano', String(ano))
+          if (mes) qs.set('mes', String(mes))
+          const respTransm = await fetchJson(`/api/itbi/ranking-transmissoes?${qs}`)
+          if (respTransm?.itens) transmPorImovel = respTransm.itens
+        }
+        const secaoRank = `Imóveis mais transmitidos${ano ? ` · ${ano}` : ''}`
         itensRankRel.forEach((it, i) => {
-          linhas.push([`Imóveis mais transmitidos${ano ? ` · ${ano}` : ''}`, `${i + 1}º`, it.inscricao || trac, it.endereco || trac, `${it.qt}×`, trac, trac, trac, trac, trac])
+          push([secaoRank, `${i + 1}º`, it.inscricao || trac, it.endereco || trac, `${it.qt}×`, trac, trac, trac, trac, trac])
+          for (const t of transmPorImovel[String(it.cd)] ?? []) {
+            const alerta = t.valorTransacao > 0 && t.valorVenal > 0 && t.valorTransacao < t.valorVenal ? 'Abaixo do venal' : trac
+            push([
+              secaoRank, `   ↳ ITBI ${t.cdItbi || trac}`, it.inscricao || trac,
+              t.data ? t.data.split('-').reverse().join('/') : trac, t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : trac, t.natureza || trac,
+              t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, alerta,
+            ], 1)
+          }
         })
       }
 
@@ -298,7 +324,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       if (imovel) {
         const ind = imovel.indicadores
         const secaoImovel = `Consultar Imóvel · ${imovel.inscricao || `Imóvel ${imovel.cd}`} — ${imovel.endereco}${imovel.proprietario ? ` · ${imovel.proprietario}` : ''}`
-        linhas.push([
+        push([
           secaoImovel, 'Indicadores', imovel.inscricao || trac,
           `Transmissões: ${fmtInt(ind.qtTransmissoes)}`,
           `Valorização venal: ${(ind.valorizacao >= 0 ? '+' : '') + ind.valorizacao.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`,
@@ -307,7 +333,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         ])
         for (const t of imovel.transmissoes) {
           const alerta = t.valorTransacao > 0 && t.valorVenal > 0 && t.valorTransacao < t.valorVenal ? 'Abaixo do venal' : trac
-          linhas.push([
+          push([
             secaoImovel, `ITBI ${t.cdItbi || trac}`, imovel.inscricao || trac,
             t.data ? t.data.split('-').reverse().join('/') : trac, t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : trac, t.natureza || trac,
             t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, alerta,
@@ -328,6 +354,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         ],
         colunas: ['Seção', 'Item', 'Inscrição / ID Físico', 'Valor 1', 'Valor 2', 'Valor 3', 'Valor 4', 'Valor 5', 'Valor 6', 'Valor 7'],
         linhas,
+        nivelLinhas,
         arquivo: `ITBI-${v.anoRef}${bairroSel ? '-' + bairroSel.replace(/\s+/g, '-') : ''}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
