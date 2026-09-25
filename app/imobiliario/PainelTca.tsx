@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { AreaChart, Area, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
-import SecaoBairros from '../_components/SecaoBairros'
+import SecaoBairros, { METRICAS, type Metrica } from '../_components/SecaoBairros'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 
@@ -88,6 +88,9 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
   const [bairroFiltro, setBairroFiltro] = useState<string | null>(null)
   const [ruaFiltro, setRuaFiltro] = useState<string | null>(null)
   const [imovelFiltro, setImovelFiltro] = useState<number | null>(null)
+  // Métrica ativa no gráfico "TCA por Bairro" (Lançado/Arrecadado/Em aberto/…) — pro relatório
+  // exportado respeitar a mesma análise escolhida na tela, não sempre "Lançado".
+  const [metricaFiltro, setMetricaFiltro] = useState<Metrica>('lancado')
   // Força o remount de <SecaoBairros> ao limpar o filtro (item abaixo), voltando o próprio
   // gráfico "TCA por Bairro" pro nível de bairro — ele só expõe a seleção via onSelecao
   // (fluxo filho→pai), não tem um jeito de ser resetado de fora a não ser remontando.
@@ -202,12 +205,65 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
       const c = v.cards
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const trac = '—'
-      // Inscrição/ID Físico (a pedido do usuário) é coluna FIXA — sempre exportada. Exercício
-      // e os agregados de situação/pagamento não são de um imóvel específico, então ficam em
-      // branco; quando um drill de "Imóveis por situação da guia" ou "Imóveis por status de
-      // pagamento" está aberto na tela (mesmas listas já carregadas em imoveisSituacao/
-      // imoveisPagto), cada imóvel entra com sua inscrição real, igual ao critério já usado
-      // em IPTU/ITBI/ISSCC.
+
+      // Uma única tabela (Seção | Item | Inscrição/ID Físico | Lançado | Arrecadado | %
+      // Arrec. | Em Aberto | Inadimplência | Isento | Suspenso | Não Lançados) — mesmo padrão
+      // do ISSCC. Inscrição/ID Físico só vem preenchida quando a linha é de UM imóvel (drill
+      // de situação/pagamento ou nível imóvel de "TCA por Bairro").
+      const linhas: (string | number)[][] = []
+      const IDX_METRICA: Record<Metrica, number> = { lancado: 0, arrecadado: 1, emAberto: 3, inadimplencia: 4, isento: 5, suspenso: 6, naoLancados: 7 }
+      const valoresMetrica = (metrica: Metrica, valorFmt: string) => {
+        const arr = [trac, trac, trac, trac, trac, trac, trac, trac]
+        arr[IDX_METRICA[metrica]] = valorFmt
+        return arr
+      }
+
+      // 1) Evolução (sempre global — Exercício da tela) — não é de um imóvel específico.
+      for (const e of v.evolucao) {
+        linhas.push([
+          'Evolução', e.previsto ? `${e.ano} *` : e.ano, trac,
+          money(e.lancado), money(e.arrecadado), `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
+          money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso), trac,
+        ])
+      }
+
+      // 2) TCA por Bairro — a pedido do usuário, sempre entra no relatório: respeita bairro/
+      // rua/imóvel E a métrica ativos na tela (vindos de <SecaoBairros> via onSelecao); quando
+      // nada foi analisado (nível bairro, sem filtro), traz TODOS os bairros — diferente do
+      // ISSCC, que nesse caso omite a seção. Isento e Não Lançados não têm "valor" (não são
+      // fluxo de caixa), mesmo critério do gráfico: mostram só a quantidade de imóveis.
+      {
+        const nivelBairroTca = ruaFiltro ? 'imovel' : bairroFiltro ? 'rua' : 'bairro'
+        const metLabelTca = METRICAS.find(m => m.id === metricaFiltro)?.label ?? metricaFiltro
+        const semValorTca = metricaFiltro === 'isento' || metricaFiltro === 'naoLancados'
+        const secaoBairroTca = `TCA por Bairro · ${nivelBairroTca === 'imovel' ? `Imóveis de ${ruaFiltro}` : nivelBairroTca === 'rua' ? `Ruas de ${bairroFiltro}` : 'Bairros'} · ${metLabelTca}`
+        const qsBairroTca = new URLSearchParams({ ano: String(v.anoRef), metrica: metricaFiltro })
+        if (bairroFiltro) qsBairroTca.set('bairro', bairroFiltro)
+        if (bairroFiltro && ruaFiltro) qsBairroTca.set('rua', ruaFiltro)
+        const respBairroTca = await fetchJson(`/api/tca/bairros?${qsBairroTca}`)
+        for (const b of (respBairroTca?.bairros ?? []) as { nome: string; imoveis: number; valor: number; inscricao?: string; numero?: string }[]) {
+          const valorFmt = semValorTca ? `${b.imoveis.toLocaleString('pt-BR')} imóveis` : money(b.valor)
+          const item = nivelBairroTca === 'imovel' ? `${b.nome} · Nº ${b.numero || trac}` : `${b.nome} · ${b.imoveis.toLocaleString('pt-BR')} imóveis`
+          linhas.push([secaoBairroTca, item, b.inscricao || trac, ...valoresMetrica(metricaFiltro, valorFmt)])
+        }
+      }
+
+      // 3) Imóveis por Situação da Guia / Status de Pagamento (agregado) — respeitam o
+      // bairro/rua/imóvel selecionados em "TCA por Bairro" (mesmo `res` já carregado na tela).
+      if (res) {
+        for (const s of res.situacao) linhas.push(['Imóveis por Situação da Guia', `${s.situacao} · ${s.qt.toLocaleString('pt-BR')} imóveis`, trac, trac, trac, trac, trac, trac, trac, trac, trac])
+        for (const p of res.pagamento) linhas.push(['Imóveis por Status de Pagamento', `${p.status} · ${p.qt.toLocaleString('pt-BR')} imóveis`, trac, trac, trac, trac, trac, trac, trac, trac, trac])
+      }
+
+      // 4) Drill de imóveis (situação/pagamento) — só se houver um aberto na tela. Cada linha
+      // já é um imóvel só, então a inscrição vem sempre preenchida.
+      if (situacaoSel && imoveisSituacao.length) {
+        for (const it of imoveisSituacao) linhas.push([`Imóvel · ${situacaoSel} (situação)`, it.nome || `Imóvel ${it.cd}`, it.inscricao || trac, trac, trac, trac, trac, trac, trac, trac, trac])
+      }
+      if (pagtoSel && imoveisPagto.length) {
+        for (const it of imoveisPagto) linhas.push([`Imóvel · ${pagtoSel.status} (pagamento)`, it.nome || `Imóvel ${it.cd}`, it.inscricao || trac, trac, trac, trac, trac, trac, trac, trac, trac])
+      }
+
       const dados: DadosRelatorio = {
         titulo: `TCA — Exercício ${v.anoRef}${filtroLabel ? ' · ' + filtroLabel : ''}`,
         subtitulo: `Dados atualizados em ${fmtData(v.dataAtualizacao)}${filtroLabel ? ` · filtrado por ${filtroLabel}` : ''}`,
@@ -219,28 +275,8 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           { rotulo: 'Isento', valor: money(c.isento.atual) },
           { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
         ],
-        colunas: ['Exercício', 'Inscrição / ID Físico', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência', 'Isento', 'Suspenso'],
-        // Uma única tabela: linhas de exercício (todas as colunas) seguidas das linhas de
-        // situação da guia e status de pagamento (agregado — só "Lançado" preenchido, o
-        // resto "—"), e por fim os imóveis do drill aberto (se houver), com inscrição real.
-        // Respeitam o bairro/rua selecionados no gráfico "TCA por Bairro" (ou tudo, se nada
-        // selecionado).
-        linhas: [
-          ...v.evolucao.map(e => [
-            e.previsto ? `${e.ano} *` : e.ano, trac, money(e.lancado), money(e.arrecadado),
-            `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia), money(e.isento), money(e.suspenso),
-          ]),
-          ...(res ? [
-            ...res.situacao.map(s => [`${s.situacao} (situação)`, trac, s.qt.toLocaleString('pt-BR'), trac, trac, trac, trac, trac, trac]),
-            ...res.pagamento.map(p => [`${p.status} (pagamento)`, trac, p.qt.toLocaleString('pt-BR'), trac, trac, trac, trac, trac, trac]),
-          ] : []),
-          ...(situacaoSel && imoveisSituacao.length ? imoveisSituacao.map(it => [
-            `Imóvel · ${situacaoSel} (situação)`, it.inscricao || trac, it.nome || `Imóvel ${it.cd}`, trac, trac, trac, trac, trac, trac,
-          ]) : []),
-          ...(pagtoSel && imoveisPagto.length ? imoveisPagto.map(it => [
-            `Imóvel · ${pagtoSel.status} (pagamento)`, it.inscricao || trac, it.nome || `Imóvel ${it.cd}`, trac, trac, trac, trac, trac, trac,
-          ]) : []),
-        ],
+        colunas: ['Seção', 'Item', 'Inscrição / ID Físico', 'Lançado', 'Arrecadado', '% Arrec.', 'Em Aberto', 'Inadimplência', 'Isento', 'Suspenso', 'Não Lançados'],
+        linhas,
         arquivo: `TCA-${v.anoRef}${bairroFiltro ? '-' + bairroFiltro.replace(/\s+/g, '-') : ''}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel
@@ -471,7 +507,7 @@ export default function PainelTca({ ano, mes }: { ano: number | ''; mes?: number
           {/* Análise por bairro/rua/imóvel — a seleção interage com a Evolução da TCA (cards +
               tabela + previsão, acima) e com os quadros de situação/pagamento (abaixo) */}
           <SecaoBairros key={resetBairros} endpoint="/api/tca/bairros" ano={ano} titulo="TCA por Bairro" mostrarNaoLancados permitirDrillImovel
-            onSelecao={(b, r, im) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im) }} />
+            onSelecao={(b, r, im, m) => { setBairroFiltro(b); setRuaFiltro(r); setImovelFiltro(im); setMetricaFiltro(m) }} />
 
           {/* Quadros situação × status de pagamento (igual ao IPTU) — respeitam o bairro/rua/
               imóvel selecionados no gráfico "TCA por Bairro" acima */}
