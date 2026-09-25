@@ -409,12 +409,18 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       // individual — repete o nome do contribuinte (a pedido do usuário, pra identificar o dono
       // ao rolar a planilha) com a inscrição e os valores daquele imóvel específico (drill de
       // 2º nível — quem tem só 1 imóvel continua como uma linha só).
+      // Linhas de detalhe (↳) entram no Excel como Agrupamento de dados (Estrutura de
+      // tópicos) — ocultas por padrão, expansíveis pelo "+" — a pedido do usuário, em vez de
+      // aparecerem soltas na planilha (nivelLinhas é ignorado pelo PDF).
       const linhas: (string | number)[][] = []
+      const nivelLinhas: number[] = []
       for (const l of itens) {
         linhas.push([l.nome, l.inscricao || '—', ...idsAtivos.map(cl => valorPorId[cl.id](l))])
+        nivelLinhas.push(0)
         for (const d of l.detalhe ?? []) {
           const linhaImovel = { nome: l.nome, inscricao: d.inscricao, lancado: d.lancado, arrecadado: d.arrecadado, emAberto: d.emAberto, inadimplencia: d.inadimplencia, isento: d.isento, suspenso: d.suspenso, imoveis: 1, espolio: l.espolio > 0 ? 1 : 0, semNumero: d.semNumero }
           linhas.push([`   ↳ ${l.nome}`, d.inscricao || '—', ...idsAtivos.map(cl => valorPorId[cl.id](linhaImovel))])
+          nivelLinhas.push(1)
         }
       }
       const dados: DadosRelatorio = {
@@ -423,6 +429,7 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
         cards: idsAtivos.map(cl => cardPorId[cl.id]).filter((x): x is { rotulo: string; valor: string } => !!x),
         colunas: [bairroSel ? 'Contribuinte' : 'Bairro', 'Inscrição / ID Físico', ...idsAtivos.map(cl => cl.label)],
         linhas,
+        nivelLinhas,
         arquivo: `IPTU-${ruaAtiva ? ruaAtiva.replace(/\s+/g, '-') : bairroSel ? bairroSel.replace(/\s+/g, '-') : 'bairros'}-${v.anoRef}`,
       }
       const fn = tipo === 'pdf' ? baixarRelatorioPdf : baixarRelatorioExcel

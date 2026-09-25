@@ -13,6 +13,11 @@ export interface DadosRelatorio {
   cards: CardRel[]
   colunas: string[]       // cabeçalho da tabela (única — todo conteúdo é empilhado nela)
   linhas: (string | number)[][] // linhas da tabela
+  // Nível de agrupamento (Excel: Dados > Agrupar/Estrutura de tópicos) por linha, paralelo a
+  // `linhas` — 0/ausente = linha normal, >0 = linha de detalhe que fica OCULTA por padrão,
+  // expansível pelo "+" no Excel (a pedido do usuário, pro drill de imóveis do relatório de
+  // IPTU). Só afeta o Excel — o PDF não tem esse conceito, ignora o campo.
+  nivelLinhas?: number[]
   arquivo: string         // base do nome do arquivo (sem extensão)
 }
 
@@ -113,6 +118,9 @@ export async function baixarRelatorioExcel(d: DadosRelatorio) {
   const ExcelJS = (mod as unknown as { default?: typeof import('exceljs') }).default ?? mod
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Relatório')
+  // Resumo (nível 0) vem ANTES do detalhe (nível >0) nesse relatório — summaryBelow: false
+  // avisa o Excel disso, senão o botão "+/-" de expandir aparece do lado errado do grupo.
+  if (d.nivelLinhas?.some(n => n > 0)) ws.properties.outlineProperties = { summaryBelow: false, summaryRight: false }
   const AZ = 'FF283E93', ALT = 'FFF4F7FC', CINZA = 'FF5A6478', ESCURO = 'FF1F2A44'
   const ncol = Math.max(d.colunas.length, 3)
   ws.mergeCells(1, 1, 1, ncol)
@@ -144,6 +152,8 @@ export async function baixarRelatorioExcel(d: DadosRelatorio) {
       if (ri % 2) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT } }
       if (i === 0) cell.font = { bold: true, color: { argb: ESCURO } }
     })
+    const nivel = d.nivelLinhas?.[ri] ?? 0
+    if (nivel > 0) { rr.outlineLevel = nivel; rr.hidden = true }
     row++
   })
   ws.columns.forEach(col => { col.width = 18 })
