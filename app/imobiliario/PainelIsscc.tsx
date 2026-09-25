@@ -159,19 +159,29 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const trac = '—'
 
-      // Mesmo padrão de IPTU/ITBI: uma única tabela (Seção | Item | Inscrição/ID Físico |
-      // Valor 1..7), cada bloco preenche o que faz sentido e deixa o resto em "—".
-      // Inscrição/ID Físico é coluna FIXA — só vem preenchida quando a linha é de UM imóvel
-      // (Evolução, agregada por exercício, e o nível bairro/rua de "ISSCC por Bairro" não têm
-      // uma inscrição única; só o nível imóvel de "ISSCC por Bairro" e a lista de "Vínculos" têm).
+      // Uma única tabela (Seção | Item | Inscrição/ID Físico | Lançado | Arrecadado | %
+      // Arrec. | Em Aberto | Inadimplência | Isento | Suspenso | Não Lançados) — a pedido do
+      // usuário, colunas com o nome real do valor (não "Valor 1, 2, 3…"). Cada bloco preenche
+      // só a(s) coluna(s) que fazem sentido pra ele e deixa o resto em "—". Inscrição/ID
+      // Físico é coluna FIXA — só vem preenchida quando a linha é de UM imóvel (Evolução,
+      // agregada por exercício, e o nível bairro/rua de "ISSCC por Bairro" não têm uma
+      // inscrição única; só o nível imóvel de "ISSCC por Bairro" e a lista de "Vínculos" têm).
       const linhas: (string | number)[][] = []
+      // Índice (dentro dos 8 slots de valor, dp da Inscrição) de cada métrica de <SecaoBairros>
+      // — usado por "ISSCC por Bairro" pra cair na coluna certa conforme a métrica ativa na tela.
+      const IDX_METRICA: Record<Metrica, number> = { lancado: 0, arrecadado: 1, emAberto: 3, inadimplencia: 4, isento: 5, suspenso: 6, naoLancados: 7 }
+      const valoresMetrica = (metrica: Metrica, valorFmt: string) => {
+        const arr = [trac, trac, trac, trac, trac, trac, trac, trac]
+        arr[IDX_METRICA[metrica]] = valorFmt
+        return arr
+      }
 
       // 1) Evolução (sempre global — Exercício/Mês da tela) — não é de um imóvel específico.
       for (const e of v.evolucao) {
         linhas.push([
           'Evolução', e.previsto ? `${e.ano} *` : e.ano, trac,
           money(e.lancado), money(e.arrecadado), `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
-          money(e.emAberto), money(e.inadimplencia), trac, trac,
+          money(e.emAberto), money(e.inadimplencia), trac, trac, trac,
         ])
       }
 
@@ -180,22 +190,23 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
       // (seção "Indicadores" abaixo, sempre presente) — a pedido do usuário, pra não despejar
       // os ~50 bairros de uma métrica arbitrária quando nada foi de fato analisado. Quando há
       // filtro, respeita bairro/rua/imóvel E a métrica ativas na tela (Lançado/Arrecadado/…,
-      // vindas de <SecaoBairros> via onSelecao) — Isento não tem "valor" (é taxa não cobrada),
-      // mesmo critério do gráfico: mostra só a quantidade de imóveis.
+      // vindas de <SecaoBairros> via onSelecao), caindo na coluna correspondente — Isento e Não
+      // Lançados não têm "valor" (não são fluxo de caixa), mesmo critério do gráfico: mostram
+      // só a quantidade de imóveis. Qtd. de imóveis (ou Nº, no nível imóvel) vai junto do nome
+      // no "Item", já que não é uma das colunas nomeadas de valor.
       if (bairroFiltro) {
         const nivelBairroIsscc = ruaFiltro ? 'imovel' : 'rua'
         const metLabelIsscc = METRICAS.find(m => m.id === metricaFiltro)?.label ?? metricaFiltro
-        const semValorIsscc = metricaFiltro === 'isento'
+        const semValorIsscc = metricaFiltro === 'isento' || metricaFiltro === 'naoLancados'
         const secaoBairroIsscc = `ISSCC por Bairro · ${nivelBairroIsscc === 'imovel' ? `Imóveis de ${ruaFiltro}` : `Ruas de ${bairroFiltro}`} · ${metLabelIsscc}`
         const qsBairroIsscc = new URLSearchParams({ ano: String(v.anoRef), metrica: metricaFiltro, bairro: bairroFiltro })
         if (mes) qsBairroIsscc.set('mes', String(mes))
         if (ruaFiltro) qsBairroIsscc.set('rua', ruaFiltro)
         const respBairroIsscc = await fetchJson(`/api/isscc/bairros?${qsBairroIsscc}`)
         for (const b of (respBairroIsscc?.bairros ?? []) as { nome: string; imoveis: number; valor: number; inscricao?: string; numero?: string }[]) {
-          const valorCol = semValorIsscc ? 'somente por quantidade' : money(b.valor)
-          linhas.push(nivelBairroIsscc === 'imovel'
-            ? [secaoBairroIsscc, b.nome, b.inscricao || trac, `Nº ${b.numero || trac}`, valorCol, trac, trac, trac, trac, trac]
-            : [secaoBairroIsscc, b.nome, trac, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, valorCol, trac, trac, trac, trac, trac])
+          const valorFmt = semValorIsscc ? `${b.imoveis.toLocaleString('pt-BR')} imóveis` : money(b.valor)
+          const item = nivelBairroIsscc === 'imovel' ? `${b.nome} · Nº ${b.numero || trac}` : `${b.nome} · ${b.imoveis.toLocaleString('pt-BR')} imóveis`
+          linhas.push([secaoBairroIsscc, item, b.inscricao || trac, ...valoresMetrica(metricaFiltro, valorFmt)])
         }
       }
 
@@ -204,7 +215,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
       if (vinculoSel && imoveisVinculo.length) {
         const secaoVinculo = `Vínculo: ${vinculoSel.label}`
         for (const it of imoveisVinculo) {
-          linhas.push([secaoVinculo, it.proprietario || `Imóvel ${it.cd}`, it.inscricao || trac, trac, trac, trac, trac, trac, trac, trac])
+          linhas.push([secaoVinculo, it.proprietario || `Imóvel ${it.cd}`, it.inscricao || trac, trac, trac, trac, trac, trac, trac, trac, trac])
         }
       }
 
@@ -219,7 +230,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           { rotulo: 'Isento', valor: money(c.isento.atual) },
           { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
         ],
-        colunas: ['Seção', 'Item', 'Inscrição / ID Físico', 'Valor 1', 'Valor 2', 'Valor 3', 'Valor 4', 'Valor 5', 'Valor 6', 'Valor 7'],
+        colunas: ['Seção', 'Item', 'Inscrição / ID Físico', 'Lançado', 'Arrecadado', '% Arrec.', 'Em Aberto', 'Inadimplência', 'Isento', 'Suspenso', 'Não Lançados'],
         linhas,
         arquivo: `ISSCC-${v.anoRef}`,
       }
