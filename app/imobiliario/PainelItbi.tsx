@@ -250,18 +250,36 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const trac = '—'
 
-      // Uma única tabela para tudo: cabeçalho genérico (Seção | Item | Inscrição/ID Físico |
-      // Valor 1..7), cada bloco de dados preenche o que faz sentido e deixa o resto em "—".
-      // Substitui as 4 tabelas separadas (evolução + 3 seções) por uma tabela só, empilhada.
-      // Inscrição/ID Físico (a pedido do usuário) é coluna FIXA — sempre exportada — mas só
-      // vem preenchida quando a linha corresponde a UM imóvel (Evolução e "ITBI por Bairro"
-      // agregado por bairro/rua não têm uma inscrição única; ver mesmo critério em
-      // lib/iptu-relatorio.ts).
+      // Uma única tabela pra tudo (Seção | Item | Inscrição/ID Físico | + colunas nomeadas),
+      // cada bloco preenche só o que faz sentido e deixa o resto em "—". Inscrição/ID Físico é
+      // coluna FIXA — só vem preenchida quando a linha é de UM imóvel (Evolução e "ITBI por
+      // Bairro" agregado por bairro/rua não têm uma inscrição única; ver mesmo critério em
+      // lib/iptu-relatorio.ts). Duas famílias de coluna nomeada, sem sobreposição: as 6
+      // métricas fiscais de "ITBI por Bairro" (Lançado…Suspenso, a pedido do usuário) e os 7
+      // campos de transação usados por "Imóveis mais transmitidos"/"Consultar Imóvel" (cada
+      // ITBI individual tem data, natureza, valor de transação, valor venal e imposto — não é
+      // a mesma coisa que lançado/arrecadado do ano).
       const linhas: (string | number)[][] = []
       // Nível de agrupamento (Excel: Dados > Agrupar) paralelo a `linhas` — só o drill do
-      // ranking (seção 3) usa nível 1 (oculto/expansível); o resto fica sempre em 0.
+      // ranking (seção 2) usa nível 1 (oculto/expansível); o resto fica sempre em 0.
       const nivelLinhas: number[] = []
       const push = (linha: (string | number)[], nivel = 0) => { linhas.push(linha); nivelLinhas.push(nivel) }
+      const IDX_METRICA_BAIRRO: Record<MetricaBairroItbiUI, number> = { lancado: 0, arrecadado: 1, emAberto: 2, inadimplencia: 3, isento: 4, suspenso: 5 }
+      const kpiSlots = (metrica: MetricaBairroItbiUI, valorFmt: string) => {
+        const arr = [trac, trac, trac, trac, trac, trac]
+        arr[IDX_METRICA_BAIRRO[metrica]] = valorFmt
+        return arr
+      }
+      const TX_VAZIO = [trac, trac, trac, trac, trac, trac, trac] // Data, Vencimento, Natureza, Valor de Transação, Valor Venal, Imposto, Observação
+      const txSlots = (t: { data: string; dtVencimento: string; natureza: string; valorTransacao: number; valorVenal: number; imposto: number }) => [
+        t.data ? t.data.split('-').reverse().join('/') : trac,
+        t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : trac,
+        t.natureza || trac,
+        t.valorTransacao ? money(t.valorTransacao) : trac,
+        t.valorVenal ? money(t.valorVenal) : trac,
+        t.imposto ? money(t.imposto) : trac,
+        t.valorTransacao > 0 && t.valorVenal > 0 && t.valorTransacao < t.valorVenal ? 'Abaixo do venal' : trac,
+      ]
 
       // 1) ITBI por Bairro — respeita métrica, bairro/rua/imóvel (drill), espólio/sem número
       // e a busca ativa na lista, igual ao que está sendo exibido na tela.
@@ -273,9 +291,8 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       const bairrosFiltradosRel = qBairroRel ? bairros.filter(b => b.nome.toLowerCase().includes(qBairroRel)) : bairros
       const listaBairroRel = [...bairrosFiltradosRel].sort((a, b) => ordenarBairro === 'imoveis' ? b.imoveis - a.imoveis : b.valor - a.valor)
       for (const b of listaBairroRel) {
-        push(nivelBairro === 'imovel'
-          ? [secaoBairro, b.nome, b.inscricao || trac, `Nº ${b.numero || trac}`, money(b.valor), trac, trac, trac, trac, trac]
-          : [secaoBairro, b.nome, trac, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, money(b.valor), trac, trac, trac, trac, trac])
+        const item = nivelBairro === 'imovel' ? `${b.nome} · Nº ${b.numero || trac}` : `${b.nome} · ${b.imoveis.toLocaleString('pt-BR')} imóveis`
+        push([secaoBairro, item, b.inscricao || trac, ...kpiSlots(metricaBairro, money(b.valor)), ...TX_VAZIO])
       }
 
       // 2) Imóveis mais transmitidos — respeita a busca ativa (senão, ranking completo). Cada
@@ -298,14 +315,11 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
         }
         const secaoRank = `Imóveis mais transmitidos${ano ? ` · ${ano}` : ''}`
         itensRankRel.forEach((it, i) => {
-          push([secaoRank, `${i + 1}º`, it.inscricao || trac, it.endereco || trac, `${it.qt}×`, trac, trac, trac, trac, trac])
+          const kpiVazio = [trac, trac, trac, trac, trac, trac]
+          const txResumo = [trac, trac, trac, trac, money(it.venal), trac, trac] // só Valor Venal (soma das transmissões)
+          push([secaoRank, `${i + 1}º · ${it.endereco || trac} · ${it.qt}×`, it.inscricao || trac, ...kpiVazio, ...txResumo])
           for (const t of transmPorImovel[String(it.cd)] ?? []) {
-            const alerta = t.valorTransacao > 0 && t.valorVenal > 0 && t.valorTransacao < t.valorVenal ? 'Abaixo do venal' : trac
-            push([
-              secaoRank, `   ↳ ITBI ${t.cdItbi || trac}`, it.inscricao || trac,
-              t.data ? t.data.split('-').reverse().join('/') : trac, t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : trac, t.natureza || trac,
-              t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, alerta,
-            ], 1)
+            push([secaoRank, `   ↳ ITBI ${t.cdItbi || trac}`, it.inscricao || trac, ...kpiVazio, ...txSlots(t)], 1)
           }
         })
       }
@@ -315,20 +329,11 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
       if (imovel) {
         const ind = imovel.indicadores
         const secaoImovel = `Consultar Imóvel · ${imovel.inscricao || `Imóvel ${imovel.cd}`} — ${imovel.endereco}${imovel.proprietario ? ` · ${imovel.proprietario}` : ''}`
-        push([
-          secaoImovel, 'Indicadores', imovel.inscricao || trac,
-          `Transmissões: ${fmtInt(ind.qtTransmissoes)}`,
-          `Valorização venal: ${(ind.valorizacao >= 0 ? '+' : '') + ind.valorizacao.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`,
-          `Intervalo médio: ${ind.intervaloMedioAnos ? ind.intervaloMedioAnos.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' a' : trac}`,
-          `Imposto total: ${money(ind.impostoTotal)}`, trac, trac, trac,
-        ])
+        const kpiVazio = [trac, trac, trac, trac, trac, trac]
+        const itemIndicadores = `Indicadores · Transmissões: ${fmtInt(ind.qtTransmissoes)} · Valorização venal: ${(ind.valorizacao >= 0 ? '+' : '') + ind.valorizacao.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% · Intervalo médio: ${ind.intervaloMedioAnos ? ind.intervaloMedioAnos.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' a' : trac}`
+        push([secaoImovel, itemIndicadores, imovel.inscricao || trac, ...kpiVazio, trac, trac, trac, trac, trac, money(ind.impostoTotal), trac])
         for (const t of imovel.transmissoes) {
-          const alerta = t.valorTransacao > 0 && t.valorVenal > 0 && t.valorTransacao < t.valorVenal ? 'Abaixo do venal' : trac
-          push([
-            secaoImovel, `ITBI ${t.cdItbi || trac}`, imovel.inscricao || trac,
-            t.data ? t.data.split('-').reverse().join('/') : trac, t.dtVencimento ? t.dtVencimento.split('-').reverse().join('/') : trac, t.natureza || trac,
-            t.valorTransacao ? money(t.valorTransacao) : trac, t.valorVenal ? money(t.valorVenal) : trac, t.imposto ? money(t.imposto) : trac, alerta,
-          ])
+          push([secaoImovel, `ITBI ${t.cdItbi || trac}`, imovel.inscricao || trac, ...kpiVazio, ...txSlots(t)])
         }
       }
 
@@ -343,7 +348,7 @@ export default function PainelItbi({ filtros }: { filtros: FiltrosItbiUI }) {
           { rotulo: 'Isento', valor: money(c.isento.atual) },
           { rotulo: 'Lançado (Guias Ativas)', valor: money(c.lancadoAtivo.atual) },
         ],
-        colunas: ['Seção', 'Item', 'Inscrição / ID Físico', 'Valor 1', 'Valor 2', 'Valor 3', 'Valor 4', 'Valor 5', 'Valor 6', 'Valor 7'],
+        colunas: ['Seção', 'Item', 'Inscrição / ID Físico', 'Lançado', 'Arrecadado', 'Em Aberto', 'Inadimplência', 'Isento', 'Suspenso', 'Data', 'Vencimento', 'Natureza', 'Valor de Transação', 'Valor Venal', 'Imposto', 'Observação'],
         linhas,
         nivelLinhas,
         arquivo: `ITBI-${v.anoRef}${bairroSel ? '-' + bairroSel.replace(/\s+/g, '-') : ''}`,
