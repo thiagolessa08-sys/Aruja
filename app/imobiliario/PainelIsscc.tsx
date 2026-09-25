@@ -156,18 +156,44 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
       const money = (x: number) => 'R$ ' + x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const trac = '—'
 
-      // Inscrição/ID Físico (a pedido do usuário) é coluna FIXA — sempre exportada. A
-      // Evolução é agregada por exercício (não é de um imóvel específico), então fica em
-      // branco; quando há um drill de "Vínculos mobiliários e imobiliários" aberto na tela
-      // (mesma lista já carregada em imoveisVinculo), cada imóvel entra com sua inscrição
-      // real, igual ao critério já usado em IPTU/ITBI.
-      const linhas: (string | number)[][] = v.evolucao.map(e => [
-        e.previsto ? `${e.ano} *` : e.ano, trac, money(e.lancado), money(e.arrecadado),
-        `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, money(e.emAberto), money(e.inadimplencia),
-      ])
+      // Mesmo padrão de IPTU/ITBI: uma única tabela (Seção | Item | Inscrição/ID Físico |
+      // Valor 1..7), cada bloco preenche o que faz sentido e deixa o resto em "—".
+      // Inscrição/ID Físico é coluna FIXA — só vem preenchida quando a linha é de UM imóvel
+      // (Evolução, agregada por exercício, e o nível bairro/rua de "ISSCC por Bairro" não têm
+      // uma inscrição única; só o nível imóvel de "ISSCC por Bairro" e a lista de "Vínculos" têm).
+      const linhas: (string | number)[][] = []
+
+      // 1) Evolução (sempre global — Exercício/Mês da tela) — não é de um imóvel específico.
+      for (const e of v.evolucao) {
+        linhas.push([
+          'Evolução', e.previsto ? `${e.ano} *` : e.ano, trac,
+          money(e.lancado), money(e.arrecadado), `${e.arrecPct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
+          money(e.emAberto), money(e.inadimplencia), trac, trac,
+        ])
+      }
+
+      // 2) ISSCC por Bairro — respeita o bairro/rua filtrado na tela (mesmo endpoint do
+      // gráfico interativo). A métrica exportada é sempre Lançado (a métrica escolhida no
+      // próprio gráfico fica só no estado interno de <SecaoBairros>, não chega até aqui).
+      const nivelBairroIsscc = ruaFiltro ? 'imovel' : bairroFiltro ? 'rua' : 'bairro'
+      const secaoBairroIsscc = `ISSCC por Bairro · ${nivelBairroIsscc === 'imovel' ? `Imóveis de ${ruaFiltro}` : nivelBairroIsscc === 'rua' ? `Ruas de ${bairroFiltro}` : 'Bairros'}`
+      const qsBairroIsscc = new URLSearchParams({ ano: String(v.anoRef) })
+      if (mes) qsBairroIsscc.set('mes', String(mes))
+      if (bairroFiltro) qsBairroIsscc.set('bairro', bairroFiltro)
+      if (bairroFiltro && ruaFiltro) qsBairroIsscc.set('rua', ruaFiltro)
+      const respBairroIsscc = await fetchJson(`/api/isscc/bairros?${qsBairroIsscc}`)
+      for (const b of (respBairroIsscc?.bairros ?? []) as { nome: string; imoveis: number; valor: number; inscricao?: string; numero?: string }[]) {
+        linhas.push(nivelBairroIsscc === 'imovel'
+          ? [secaoBairroIsscc, b.nome, b.inscricao || trac, `Nº ${b.numero || trac}`, money(b.valor), trac, trac, trac, trac, trac]
+          : [secaoBairroIsscc, b.nome, trac, `${b.imoveis.toLocaleString('pt-BR')} imóveis`, money(b.valor), trac, trac, trac, trac, trac])
+      }
+
+      // 3) Vínculos mobiliários e imobiliários — só se houver um drill aberto na tela. Cada
+      // linha já é um imóvel só, então a inscrição vem sempre preenchida.
       if (vinculoSel && imoveisVinculo.length) {
+        const secaoVinculo = `Vínculo: ${vinculoSel.label}`
         for (const it of imoveisVinculo) {
-          linhas.push([`Vínculo: ${vinculoSel.label}`, it.inscricao || trac, it.proprietario || `Imóvel ${it.cd}`, trac, trac, trac, trac])
+          linhas.push([secaoVinculo, it.proprietario || `Imóvel ${it.cd}`, it.inscricao || trac, trac, trac, trac, trac, trac, trac, trac])
         }
       }
 
@@ -182,7 +208,7 @@ export default function PainelIsscc({ ano, mes }: { ano: number | ''; mes?: numb
           { rotulo: 'Isento', valor: money(c.isento.atual) },
           { rotulo: 'Suspenso', valor: money(c.suspenso.atual) },
         ],
-        colunas: ['Exercício', 'Inscrição / ID Físico', 'Lançado', 'Arrecadado', '% Arrec.', 'Em aberto', 'Inadimplência'],
+        colunas: ['Seção', 'Item', 'Inscrição / ID Físico', 'Valor 1', 'Valor 2', 'Valor 3', 'Valor 4', 'Valor 5', 'Valor 6', 'Valor 7'],
         linhas,
         arquivo: `ISSCC-${v.anoRef}`,
       }
