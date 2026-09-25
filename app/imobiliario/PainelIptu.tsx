@@ -405,15 +405,16 @@ export default function PainelIptu({ ano, mes }: { ano: number | ''; mes?: numbe
       // independente da métrica escolhida no seletor "Todos/Lançado/...". Só vem preenchida
       // quando a linha é um único imóvel (proprietário com mais de um imóvel não tem uma
       // inscrição só sua — ver relatorioIptu() em lib/iptu-relatorio.ts). Contribuintes com mais
-      // de 1 imóvel (l.detalhe presente) ganham uma linha "↳" logo abaixo pra CADA imóvel
-      // individual, com a inscrição e os valores daquele imóvel específico (a pedido do
-      // usuário, drill de 2º nível — quem tem só 1 imóvel continua como uma linha só).
+      // de 1 imóvel (l.detalhe presente) ganham uma linha "↳ Nome" logo abaixo pra CADA imóvel
+      // individual — repete o nome do contribuinte (a pedido do usuário, pra identificar o dono
+      // ao rolar a planilha) com a inscrição e os valores daquele imóvel específico (drill de
+      // 2º nível — quem tem só 1 imóvel continua como uma linha só).
       const linhas: (string | number)[][] = []
       for (const l of itens) {
         linhas.push([l.nome, l.inscricao || '—', ...idsAtivos.map(cl => valorPorId[cl.id](l))])
         for (const d of l.detalhe ?? []) {
           const linhaImovel = { nome: l.nome, inscricao: d.inscricao, lancado: d.lancado, arrecadado: d.arrecadado, emAberto: d.emAberto, inadimplencia: d.inadimplencia, isento: d.isento, suspenso: d.suspenso, imoveis: 1, espolio: l.espolio > 0 ? 1 : 0, semNumero: d.semNumero }
-          linhas.push(['   ↳', d.inscricao || '—', ...idsAtivos.map(cl => valorPorId[cl.id](linhaImovel))])
+          linhas.push([`   ↳ ${l.nome}`, d.inscricao || '—', ...idsAtivos.map(cl => valorPorId[cl.id](linhaImovel))])
         }
       }
       const dados: DadosRelatorio = {
