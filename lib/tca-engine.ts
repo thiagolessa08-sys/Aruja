@@ -202,6 +202,17 @@ export async function bucketsTcaAteMes(mes: number, f: FiltrosTca = {}): Promise
   })
 }
 
+// Lançado/Arrecadado/Inadimplência oficiais da TCA pra um exercício exato — reaproveita
+// bucketsTca/bucketsTcaAteMes (mesmas queries/cache dos cards de Imobiliário/TCA, já no
+// modelo oficial tb_dsod_parcela_movimento). Usado pela Cobrança (gráfico "Conversão por
+// Tributo") pra a linha de TCA refletir os mesmos critérios da tela de TCA — a pedido do
+// usuário, mesmo padrão já aplicado a IPTU/ITBI.
+export async function tcaOficialAno(ano: number, mes?: number): Promise<{ lancado: number; arrecadado: number; inadimplencia: number }> {
+  const map = mes ? await bucketsTcaAteMes(mes) : await bucketsTca()
+  const b = map.get(ano)
+  return { lancado: b?.lancado ?? 0, arrecadado: b?.arrecadado ?? 0, inadimplencia: b?.inadimplente ?? 0 }
+}
+
 /** Quantidade de imóveis lançados de TCA por exercício = COUNT de guias (exclui Recalculo/Validacao). */
 export async function qtdImoveisTca(f: FiltrosTca = {}): Promise<Map<number, number>> {
   const key = (f.bairro || f.rua || f.imovel) ? `qtdImoveisTca:${chaveFiltro(f)}` : 'qtdImoveisTca'
