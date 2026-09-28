@@ -18,6 +18,10 @@ import { cached, TTL_15MIN } from '@/lib/cache'
 // (por Guias Ativas — exclui Cancelada, quase metade do lançado histórico dele) e inadimplência
 // — arrecadado do ITBI continua no modelo de posição (não foi pedido trocar). "IPTU Diferença
 // de Área" (cd_tributo=25) fica de fora, igual ao resto do IPTU oficial de Imobiliário.
+// ISS - Simples Nacional (cd_tributo=301) é exceção à regra de "inadimplência" acima: aqui "A
+// Recuperar" volta a ser lançado - arrecadado (o saldo residual completo, vencido ou não) — a
+// pedido do usuário, só pra esse tributo especificamente (as variantes DAS não identificado/
+// dívida ativa/PGFN, cd 302-304, ficam de fora, seguem a regra geral de inadimplência).
 async function aplicarIptuOficial(rank: RankTributo[], ano: number, mes?: number): Promise<RankTributo[]> {
   const [iptuOficial, itbiLancadoAtivo, tcaOficial, ...inadimplenciasOficiais] = await Promise.all([
     iptuOficialAno(ano, mes),
@@ -30,6 +34,7 @@ async function aplicarIptuOficial(rank: RankTributo[], ano: number, mes?: number
     if (t.cd === 1) return { ...t, lancado: iptuOficial.lancado, arrecadado: iptuOficial.arrecadado, inadimplencia: inadPorCd.get(1)! }
     if (t.cd === 10) return { ...t, lancado: itbiLancadoAtivo, inadimplencia: inadPorCd.get(10)! }
     if (t.cd === 67) return { ...t, lancado: tcaOficial.lancado, arrecadado: tcaOficial.arrecadado, inadimplencia: tcaOficial.inadimplencia }
+    if (t.cd === 301) return { ...t, inadimplencia: t.lancado - t.arrecadado }
     return t
   })
 }
