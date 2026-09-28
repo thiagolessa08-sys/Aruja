@@ -227,6 +227,15 @@ export async function bucketsItbiAteMes(mes: number): Promise<Map<number, Bucket
   })
 }
 
+// Lançado (Guias Ativas) do ITBI pra um exercício exato — reaproveita bucketsItbi/
+// bucketsItbiAteMes (mesma query/cache do card "Lançado (Guias Ativas)" de Imobiliário/ITBI).
+// Usado pela Cobrança (gráfico "Conversão por Tributo") pra a coluna Lançado do ITBI não
+// incluir guias Canceladas, a pedido do usuário — mesmo critério já usado em Imobiliário.
+export async function itbiLancadoAtivoAno(ano: number, mes?: number): Promise<number> {
+  const map = mes ? await bucketsItbiAteMes(mes) : await bucketsItbi()
+  return map.get(ano)?.lancadoAtivo ?? 0
+}
+
 /**
  * Nº de transmissões (ITBIs com imposto) por exercício = COUNT(DISTINCT cd_itbi) das guias de
  * ITBI com vl_total>0, fora de Recalculo/Validacao. Análogo ao qtdImoveisIptu.
