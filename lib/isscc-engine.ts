@@ -168,6 +168,50 @@ export async function bucketsIssccAteMes(mes: number): Promise<Map<number, Bucke
   })
 }
 
+// Lançado/Arrecadado/Inadimplência oficiais do ISS Construção Civil pra um exercício exato —
+// só cd_tributo=40 (o "principal"), NÃO o grupo combinado 40+17+18 de bucketsIsscc/
+// bucketsIssccAteMes: 17/18 (legado 2001-2003) já aparecem como linhas PRÓPRIAS no ranking
+// genérico de Cobrança ("ISSQN Construção Civil - Diferença Área ..."), então somar o
+// combinado na linha de 40 contaria 17/18 em dobro. Mesmas queries/critérios (modelo oficial
+// tb_dsod_parcela_movimento) da tela ISSCC de Imobiliário, só que escopadas a um exercício e
+// código só. Usado pela Cobrança (gráfico "Conversão por Tributo") — a pedido do usuário.
+export async function isccConstrucaoCivilOficialAno(ano: number, mes?: number): Promise<{ lancado: number; arrecadado: number; inadimplencia: number }> {
+  const filtroMes = mes ? ` AND MONTH(p.dt_vencimento) <= ${mes}` : ''
+  const [lancR, arrecR, inadR] = await Promise.all([
+    agentQuery(`
+      SELECT g.ds_situacao sit, SUM(pm.vl_movimento) vl
+      FROM ${S}.tb_dsod_guias g
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      WHERE g.cd_tributo = 40 AND g.no_exercicio_lancamento = ${ano} AND pm.cd_tipo_movimento IN (1,2,3) AND p.no_parcela <> 0${filtroMes}
+      GROUP BY g.ds_situacao`, 50),
+    agentQuery(`
+      SELECT SUM(pm.vl_movimento) vl
+      FROM ${S}.tb_dsod_guias g
+      JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+      JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+      JOIN ${S}.tb_dsod_parcela_baixas pb ON pb.cd_parcela_baixa = pm.cd_parcela_baixa
+      JOIN ${S}.tb_dsod_tipo_baixa tb ON tb.cd_tipo_baixa = pb.cd_tipo_baixa
+      WHERE g.cd_tributo = 40 AND g.no_exercicio_lancamento = ${ano} AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+        AND p.no_parcela <> 0 AND g.ds_situacao NOT IN ('Recalculo','Validacao')
+        AND tb.ds_tipo_baixa <> 'Estorno de Baixa'${filtroMes}`, 1),
+    agentQuery(`SELECT SUM(valor) vl FROM (
+        SELECT g.cd_devedor dev, SUM(pm.vl_movimento * pm.no_sinal) valor
+        FROM ${S}.tb_dsod_guias g
+        JOIN ${S}.tb_dsod_parcelas p ON p.cd_guia = g.cd_guia
+        JOIN ${S}.tb_dsod_parcela_movimento pm ON pm.cd_parcela = p.cd_parcelas
+        WHERE g.cd_tributo = 40 AND g.no_exercicio_lancamento = ${ano} AND p.no_parcela <> 0
+          AND pm.cd_tipo_movimento IN (${MOV_ABERTO}) AND pm.cd_tipo_lancamento IN (${LANC_ABERTO})
+          AND p.dt_vencimento < getdate()-1${filtroMes}
+        GROUP BY g.cd_devedor
+        HAVING SUM(pm.vl_movimento * pm.no_sinal) > 1
+      ) t`, 1),
+  ])
+  let lancado = 0
+  for (const r of lancR.rows) { if (!LANC_SIT_EXCLUIR.has(String(r[0] ?? '').trim())) lancado += num(r[1]) }
+  return { lancado, arrecadado: num(arrecR.rows[0]?.[0]), inadimplencia: Math.max(0, num(inadR.rows[0]?.[0])) }
+}
+
 /** Quantidade de guias/lançamentos de ISSCC por exercício (exclui Recalculo/Validacao). */
 export async function qtdIsscc(): Promise<Map<number, number>> {
   return cached('qtdIsscc', TTL_15MIN, async () => {

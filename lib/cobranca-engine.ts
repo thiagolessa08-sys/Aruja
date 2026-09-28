@@ -2,19 +2,22 @@ import { agentQuery } from '@/lib/agent'
 import { rankingTributos, iptuOficialAno, tributoOficialInadimplenciaAno, TRIBUTOS_MODELO_OFICIAL_ABERTO, type RankTributo } from '@/lib/tributo-engine'
 import { itbiLancadoAtivoAno } from '@/lib/itbi-engine'
 import { tcaOficialAno } from '@/lib/tca-engine'
+import { isccConstrucaoCivilOficialAno } from '@/lib/isscc-engine'
 import { CODIGOS_EXCLUIDOS } from '@/lib/tributos'
 import { cached, TTL_15MIN } from '@/lib/cache'
 
-// Sobrescreve as linhas de IPTU/ITBI/TCA do ranking genérico (rankingTributos, modelo
+// Sobrescreve as linhas de IPTU/ITBI/TCA/ISSCC do ranking genérico (rankingTributos, modelo
 // tb_dsod_parcela_posicao) pelos valores OFICIAIS de Imobiliário (ver iptuOficialAno/
-// itbiLancadoAtivoAno/tcaOficialAno/tributoOficialInadimplenciaAno em tributo-engine.ts/
-// itbi-engine.ts/tca-engine.ts) — usado só pelo resumo (KPIs do topo + tabela "Conversão por
-// Tributo"; Análise de Conversão faz sua própria troca de lancado/arrecadado, inline, sem
-// inadimplência). `inadimplencia` (a pedido do usuário) é o que alimenta "A Recuperar"/
-// "Potencial a Recuperar" agora — antes usavam `saldo` (Em Aberto total, vencido + a vencer),
-// que ficava incoerente com o rótulo "inadimplência" já usado no KPI. IPTU e TCA têm
-// lançado/arrecadado/inadimplência oficiais completos (a TCA já nasceu no modelo oficial
-// tb_dsod_parcela_movimento, sem o "Guias Ativas" que o ITBI precisa); o ITBI só troca lançado
+// itbiLancadoAtivoAno/tcaOficialAno/isccConstrucaoCivilOficialAno/tributoOficialInadimplenciaAno
+// em tributo-engine.ts/itbi-engine.ts/tca-engine.ts/isscc-engine.ts) — usado só pelo resumo
+// (KPIs do topo + tabela "Conversão por Tributo"; Análise de Conversão faz sua própria troca de
+// lancado/arrecadado, inline, sem inadimplência). `inadimplencia` (a pedido do usuário) é o que
+// alimenta "A Recuperar"/"Potencial a Recuperar" agora — antes usavam `saldo` (Em Aberto total,
+// vencido + a vencer), que ficava incoerente com o rótulo "inadimplência" já usado no KPI. IPTU,
+// TCA e ISS Construção Civil têm lançado/arrecadado/inadimplência oficiais completos (TCA já
+// nasceu no modelo oficial tb_dsod_parcela_movimento, sem o "Guias Ativas" que o ITBI precisa;
+// ISSCC usa só cd_tributo=40 — não o grupo combinado 40+17+18 da tela ISSCC — pra não contar em
+// dobro com as linhas de 17/18, que a Cobrança já mostra separadamente); o ITBI só troca lançado
 // (por Guias Ativas — exclui Cancelada, quase metade do lançado histórico dele) e inadimplência
 // — arrecadado do ITBI continua no modelo de posição (não foi pedido trocar). "IPTU Diferença
 // de Área" (cd_tributo=25) fica de fora, igual ao resto do IPTU oficial de Imobiliário.
@@ -23,10 +26,11 @@ import { cached, TTL_15MIN } from '@/lib/cache'
 // pedido do usuário, só pra esse tributo especificamente (as variantes DAS não identificado/
 // dívida ativa/PGFN, cd 302-304, ficam de fora, seguem a regra geral de inadimplência).
 async function aplicarIptuOficial(rank: RankTributo[], ano: number, mes?: number): Promise<RankTributo[]> {
-  const [iptuOficial, itbiLancadoAtivo, tcaOficial, ...inadimplenciasOficiais] = await Promise.all([
+  const [iptuOficial, itbiLancadoAtivo, tcaOficial, issccOficial, ...inadimplenciasOficiais] = await Promise.all([
     iptuOficialAno(ano, mes),
     itbiLancadoAtivoAno(ano, mes),
     tcaOficialAno(ano, mes),
+    isccConstrucaoCivilOficialAno(ano, mes),
     ...TRIBUTOS_MODELO_OFICIAL_ABERTO.map(cd => tributoOficialInadimplenciaAno(cd, ano, mes)),
   ])
   const inadPorCd = new Map(TRIBUTOS_MODELO_OFICIAL_ABERTO.map((cd, i) => [cd, inadimplenciasOficiais[i]]))
@@ -34,6 +38,7 @@ async function aplicarIptuOficial(rank: RankTributo[], ano: number, mes?: number
     if (t.cd === 1) return { ...t, lancado: iptuOficial.lancado, arrecadado: iptuOficial.arrecadado, inadimplencia: inadPorCd.get(1)! }
     if (t.cd === 10) return { ...t, lancado: itbiLancadoAtivo, inadimplencia: inadPorCd.get(10)! }
     if (t.cd === 67) return { ...t, lancado: tcaOficial.lancado, arrecadado: tcaOficial.arrecadado, inadimplencia: tcaOficial.inadimplencia }
+    if (t.cd === 40) return { ...t, lancado: issccOficial.lancado, arrecadado: issccOficial.arrecadado, inadimplencia: issccOficial.inadimplencia }
     if (t.cd === 301) return { ...t, inadimplencia: t.lancado - t.arrecadado }
     return t
   })
