@@ -5,6 +5,7 @@ import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
+import GridValoresPagosPorTributo from '../_components/GridValoresPagosPorTributo'
 
 interface Trib { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; endereco?: string }
@@ -821,27 +822,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           {!resultadoMesSetor.porTributo.length ? (
             <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Sem pagamentos neste mês.</div>
           ) : (
-            <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead style={{ position: 'sticky', top: 0 }}>
-                  <tr><th style={thFirstStyle}>TRIBUTO</th>{colunasSetor.map(c => <th key={c.key} style={thStyle}>{c.label}</th>)}<th style={thStyle}>TOTAL GERAL</th></tr>
-                </thead>
-                <tbody>
-                  {resultadoMesSetor.porTributo.map(t => (
-                    <tr key={t.nome}>
-                      <td style={tdFirstStyle}>{t.nome}</td>
-                      {colunasSetor.map(c => <td key={c.key} style={tdStyle}>{t[c.key] === 0 ? '—' : fmtReais(t[c.key])}</td>)}
-                      <td style={{ ...tdStyle, fontWeight: 700, color: '#283e93' }}>{fmtReais(t.totalGeral)}</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td style={{ ...tdFirstStyle, background: '#eef1fb' }}>Total Geral</td>
-                    {colunasSetor.map(c => <td key={c.key} style={{ ...tdStyle, background: '#eef1fb', fontWeight: 700, color: '#283e93' }}>{fmtReais(resultadoMesSetor.porTributo.reduce((s, t) => s + t[c.key], 0))}</td>)}
-                    <td style={{ ...tdStyle, background: '#eef1fb', fontWeight: 700, color: '#283e93' }}>{fmtReais(resultadoMesSetor.porTributo.reduce((s, t) => s + t.totalGeral, 0))}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <GridValoresPagosPorTributo linhas={resultadoMesSetor.porTributo} />
           )}
         </div>
       </div>
