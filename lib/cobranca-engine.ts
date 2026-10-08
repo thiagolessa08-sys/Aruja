@@ -447,18 +447,31 @@ async function resultadoPorTributoMesRaw(ano: number, mesAlvo: number): Promise<
   return porTributo
 }
 
-// Setor de cobrança (tb_dsod_guias.ds_setor_devedor) — campo real da base, não um grupo
-// inventado por tipo de tributo (confirmado com o usuário: já existe "Contribuinte"/
-// "Imobiliario"/"Mobiliario" como valores literais, entre outros como CobrancaAcumulada/Itbi/
-// Certidao/Projetos/TaxasDiversas, que não têm coluna própria mas entram no Total). A grafia é
-// inconsistente na base (ex.: "Contribuinte" e "Contribuintes", "Mobiliario" e "mobiliario") —
-// normaliza por prefixo, case-insensitive.
+// Classificação Contribuinte/Imobiliário/Mobiliário de uma guia — a pedido do usuário, por
+// JOIN contra as tabelas que de fato têm essa informação (não o texto livre de
+// tb_dsod_guias.ds_setor_devedor, que foi tentado antes e não batia: IPTU saía 100%
+// "Imobiliario" por esse campo, mas a planilha de referência do usuário mostra a maior parte
+// do IPTU em "Contribuinte"). cd_devedor/cd_origem da guia são a mesma chave polimórfica usada
+// nos motores dedicados (IPTU junta por cd_devedor, ITBI/TCA por cd_origem — ver
+// itbi-engine.ts/tca-engine.ts) — testa os dois contra cada tabela:
+//   • bate em tb_dsod_imovel_urbano.cd_imovel_urbano → Imobiliário (imóvel urbano)
+//   • bate em tb_dsod_contribuinte_mobiliario.cd_contr_mob → Mobiliário (inscrição de empresa)
+//   • não bate em nenhum (ou só bate em tb_dsod_contribuinte.cd_contr direto — típico de
+//     débito renegociado/reemitido sem o vínculo original, ou tributo administrativo como Auto
+//     de Infração/Cemitério/Publicidade) → Contribuinte, por exclusão.
+const JOIN_SETOR_TRIBUTO = `
+      LEFT JOIN ${SCHEMA}.tb_dsod_imovel_urbano iu1 ON iu1.cd_imovel_urbano = g.cd_devedor AND g.cd_devedor > 0
+      LEFT JOIN ${SCHEMA}.tb_dsod_imovel_urbano iu2 ON iu2.cd_imovel_urbano = g.cd_origem AND g.cd_origem > 0
+      LEFT JOIN ${SCHEMA}.tb_dsod_contribuinte_mobiliario cm1 ON cm1.cd_contr_mob = g.cd_devedor AND g.cd_devedor > 0
+      LEFT JOIN ${SCHEMA}.tb_dsod_contribuinte_mobiliario cm2 ON cm2.cd_contr_mob = g.cd_origem AND g.cd_origem > 0`
+const CASE_SETOR_TRIBUTO = `CASE
+        WHEN iu1.cd_imovel_urbano IS NOT NULL OR iu2.cd_imovel_urbano IS NOT NULL THEN 'imobiliario'
+        WHEN cm1.cd_contr_mob IS NOT NULL OR cm2.cd_contr_mob IS NOT NULL THEN 'mobiliario'
+        ELSE 'contribuinte' END`
+
 function normalizarSetor(raw: unknown): 'contribuinte' | 'imobiliario' | 'mobiliario' | null {
   const v = String(raw ?? '').trim().toLowerCase()
-  if (v.startsWith('contribuinte')) return 'contribuinte'
-  if (v.startsWith('imobiliario')) return 'imobiliario'
-  if (v.startsWith('mobiliario')) return 'mobiliario'
-  return null
+  return v === 'contribuinte' || v === 'imobiliario' || v === 'mobiliario' ? v : null
 }
 
 export interface ResultadoSetorValores { contribuinte: number; imobiliario: number; mobiliario: number; total: number }
@@ -488,46 +501,51 @@ export async function resultadoMesPorSetor(ano: number, mesAlvo: number): Promis
 async function resultadoMesPorSetorRaw(ano: number, mesAlvo: number): Promise<ResultadoMesPorSetor> {
   const [enviadoValorR, enviadoQtdR, pagoValorR, pagoQtdR, porTributoR] = await Promise.all([
     agentQuery(`
-      SELECT g.ds_setor_devedor AS setor, SUM(pp.vl_lancto) AS vl
+      SELECT ${CASE_SETOR_TRIBUTO} AS setor, SUM(pp.vl_lancto) AS vl
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
-      GROUP BY g.ds_setor_devedor`, 50),
+      GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     agentQuery(`
-      SELECT g.ds_setor_devedor AS setor, COUNT(DISTINCT g.cd_guia) AS qt
+      SELECT ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT g.cd_guia) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
+      ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
-      GROUP BY g.ds_setor_devedor`, 50),
+      GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     agentQuery(`
-      SELECT g.ds_setor_devedor AS setor, SUM(pm.vl_movimento) AS vl
+      SELECT ${CASE_SETOR_TRIBUTO} AS setor, SUM(pm.vl_movimento) AS vl
       FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
       JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
       JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
         AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
-      GROUP BY g.ds_setor_devedor`, 50),
+      GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     agentQuery(`
-      SELECT g.ds_setor_devedor AS setor, COUNT(DISTINCT p.cd_guia) AS qt
+      SELECT ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT p.cd_guia) AS qt
       FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
       JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
-      GROUP BY g.ds_setor_devedor`, 50),
+      GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     agentQuery(`
-      SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, g.ds_setor_devedor AS setor, SUM(pm.vl_movimento) AS vl
+      SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, ${CASE_SETOR_TRIBUTO} AS setor, SUM(pm.vl_movimento) AS vl
       FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
       JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
       JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+      ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
         AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
-      GROUP BY g.cd_tributo, t.ds_tributo, g.ds_setor_devedor`, 1000),
+      GROUP BY g.cd_tributo, t.ds_tributo, ${CASE_SETOR_TRIBUTO}`, 1000),
   ])
 
   const somarSetor = (rows: unknown[][]): ResultadoSetorValores => {
@@ -589,25 +607,28 @@ export async function resultadoMesPorUsuario(ano: number, mesAlvo: number): Prom
 async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<ResultadoMesPorUsuario> {
   const [valorR, qtdR, pagoR] = await Promise.all([
     agentQuery(`
-      SELECT g.cd_usuario_gerador AS usuario, g.ds_setor_devedor AS setor, SUM(pp.vl_lancto) AS vl
+      SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, SUM(pp.vl_lancto) AS vl
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
-      GROUP BY g.cd_usuario_gerador, g.ds_setor_devedor`, 3000),
+      GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
     agentQuery(`
-      SELECT g.cd_usuario_gerador AS usuario, g.ds_setor_devedor AS setor, COUNT(DISTINCT g.cd_guia) AS qt
+      SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT g.cd_guia) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
+      ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
-      GROUP BY g.cd_usuario_gerador, g.ds_setor_devedor`, 3000),
+      GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
     agentQuery(`
-      SELECT g.cd_usuario_gerador AS usuario, g.ds_setor_devedor AS setor, COUNT(DISTINCT p.cd_guia) AS qt
+      SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT p.cd_guia) AS qt
       FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
       JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
-      GROUP BY g.cd_usuario_gerador, g.ds_setor_devedor`, 3000),
+      GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
   ])
 
   const zeroQtd = (): ResultadoSetorQtd => ({ contribuinte: 0, imobiliario: 0, mobiliario: 0 })
