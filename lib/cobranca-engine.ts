@@ -476,8 +476,10 @@ export interface ResultadoMesPorSetor {
  * exato por setor de cobrança. "Enviado" = Geradas (mesma base dt_geracao já usada no resto
  * deste gráfico); "Pago" = mesmo critério de baixa (dt_baixa, TIPOS_BAIXA_PAGO) já usado em
  * resultadoMensalRaw/resultadoPorTributoMesRaw, aqui com valor (R$) além de quantidade (IDs
- * distintos de guia). "Total"/"Total Geral" somam TODOS os setores (inclusive os sem coluna
- * própria), não só os 3 mostrados.
+ * distintos de guia). "Total"/"Total Geral" somam só os 3 setores com coluna própria (não os
+ * outros, como CobrancaAcumulada/Itbi/Certidao/Projetos/TaxasDiversas) — confirmado batendo a
+ * aritmética exata de uma segunda planilha de referência do usuário (Contribuinte + Imobiliário
+ * + Mobiliário = Total, sem sobra).
  */
 export async function resultadoMesPorSetor(ano: number, mesAlvo: number): Promise<ResultadoMesPorSetor> {
   return cached(`resultadoMesPorSetor:${ano}:${mesAlvo}`, TTL_15MIN, () => resultadoMesPorSetorRaw(ano, mesAlvo))
@@ -531,11 +533,10 @@ async function resultadoMesPorSetorRaw(ano: number, mesAlvo: number): Promise<Re
   const somarSetor = (rows: unknown[][]): ResultadoSetorValores => {
     const out: ResultadoSetorValores = { contribuinte: 0, imobiliario: 0, mobiliario: 0, total: 0 }
     for (const row of rows) {
-      const v = num(row[1])
-      out.total += v
       const setor = normalizarSetor(row[0])
-      if (setor) out[setor] += v
+      if (setor) out[setor] += num(row[1])
     }
+    out.total = out.contribuinte + out.imobiliario + out.mobiliario
     return out
   }
 
@@ -543,13 +544,12 @@ async function resultadoMesPorSetorRaw(ano: number, mesAlvo: number): Promise<Re
   for (const row of porTributoR.rows) {
     const cd = num(row[0])
     const nome = String(row[1] ?? '').trim() || `Tributo ${cd}`
-    const v = num(row[3])
     const linha = porTributoMap.get(cd) ?? { nome, contribuinte: 0, imobiliario: 0, mobiliario: 0, totalGeral: 0 }
-    linha.totalGeral += v
     const setor = normalizarSetor(row[2])
-    if (setor) linha[setor] += v
+    if (setor) linha[setor] += num(row[3])
     porTributoMap.set(cd, linha)
   }
+  for (const linha of porTributoMap.values()) linha.totalGeral = linha.contribuinte + linha.imobiliario + linha.mobiliario
 
   return {
     enviadoValor: somarSetor(enviadoValorR.rows),
@@ -558,6 +558,119 @@ async function resultadoMesPorSetorRaw(ano: number, mesAlvo: number): Promise<Re
     pagoQtd: somarSetor(pagoQtdR.rows),
     porTributo: Array.from(porTributoMap.values()).filter(l => l.totalGeral > 0).sort((a, b) => b.totalGeral - a.totalGeral),
   }
+}
+
+export interface ResultadoSetorQtd { contribuinte: number; imobiliario: number; mobiliario: number }
+export interface ResultadoUsuarioMesLinha {
+  nome: string
+  valorEnviado: ResultadoSetorQtd
+  qtdEnviada: ResultadoSetorQtd
+  qtdPaga: ResultadoSetorQtd
+  enviadas: number       // soma de qtdEnviada (só os 3 setores)
+  participacaoPct: number
+  valores: number        // soma de valorEnviado (só os 3 setores)
+  valorMedio: number     // valores / enviadas
+}
+export interface ResultadoMesPorUsuario { linhas: ResultadoUsuarioMesLinha[]; total: ResultadoUsuarioMesLinha }
+
+/**
+ * Drill de 3º nível do "Resultado Mensal da Arrecadação" (eixo "por usuário", a pedido do
+ * usuário) — mesma quebra por setor de cobrança de resultadoMesPorSetor, só que por
+ * cd_usuario_gerador (quem gerou a guia) em vez de por tributo. "Enviadas"/"Valores"/
+ * "Participação %"/"Valor Médio" (colunas de "Produtividade") somam só os 3 setores com coluna
+ * própria, mesmo critério de resultadoMesPorSetor. cd_usuario_gerador sem letra (autoemissão
+ * pelo portal via CPF/código) vira "Internet", mesma composição usada em
+ * analiseConversaoRaw/conversaoDrillOperador.
+ */
+export async function resultadoMesPorUsuario(ano: number, mesAlvo: number): Promise<ResultadoMesPorUsuario> {
+  return cached(`resultadoMesPorUsuario:${ano}:${mesAlvo}`, TTL_15MIN, () => resultadoMesPorUsuarioRaw(ano, mesAlvo))
+}
+
+async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<ResultadoMesPorUsuario> {
+  const [valorR, qtdR, pagoR] = await Promise.all([
+    agentQuery(`
+      SELECT g.cd_usuario_gerador AS usuario, g.ds_setor_devedor AS setor, SUM(pp.vl_lancto) AS vl
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      GROUP BY g.cd_usuario_gerador, g.ds_setor_devedor`, 3000),
+    agentQuery(`
+      SELECT g.cd_usuario_gerador AS usuario, g.ds_setor_devedor AS setor, COUNT(DISTINCT g.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias g
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      GROUP BY g.cd_usuario_gerador, g.ds_setor_devedor`, 3000),
+    agentQuery(`
+      SELECT g.cd_usuario_gerador AS usuario, g.ds_setor_devedor AS setor, COUNT(DISTINCT p.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
+      GROUP BY g.cd_usuario_gerador, g.ds_setor_devedor`, 3000),
+  ])
+
+  const zeroQtd = (): ResultadoSetorQtd => ({ contribuinte: 0, imobiliario: 0, mobiliario: 0 })
+  const nomeUsuario = (raw: unknown) => {
+    const v = String(raw ?? '').trim()
+    return v && /[a-zA-Z]/.test(v) ? v : 'Internet'
+  }
+  const somar3 = (a: ResultadoSetorQtd) => a.contribuinte + a.imobiliario + a.mobiliario
+
+  function agrupar(rows: unknown[][]): Map<string, ResultadoSetorQtd> {
+    const map = new Map<string, ResultadoSetorQtd>()
+    for (const row of rows) {
+      const nome = nomeUsuario(row[0])
+      const setor = normalizarSetor(row[1])
+      if (!setor) continue
+      const acc = map.get(nome) ?? zeroQtd()
+      acc[setor] += num(row[2])
+      map.set(nome, acc)
+    }
+    return map
+  }
+
+  const valorPorUsuario = agrupar(valorR.rows)
+  const qtdPorUsuario = agrupar(qtdR.rows)
+  const pagoPorUsuario = agrupar(pagoR.rows)
+
+  const nomes = new Set([...valorPorUsuario.keys(), ...qtdPorUsuario.keys(), ...pagoPorUsuario.keys()])
+  const totalEnviadas = Array.from(qtdPorUsuario.values()).reduce((s, a) => s + somar3(a), 0)
+
+  const linhas: ResultadoUsuarioMesLinha[] = Array.from(nomes)
+    .map(nome => {
+      const valorEnviado = valorPorUsuario.get(nome) ?? zeroQtd()
+      const qtdEnviada = qtdPorUsuario.get(nome) ?? zeroQtd()
+      const qtdPaga = pagoPorUsuario.get(nome) ?? zeroQtd()
+      const enviadas = somar3(qtdEnviada)
+      const valores = somar3(valorEnviado)
+      return {
+        nome, valorEnviado, qtdEnviada, qtdPaga, enviadas, valores,
+        participacaoPct: totalEnviadas ? (enviadas / totalEnviadas) * 100 : 0,
+        valorMedio: enviadas ? valores / enviadas : 0,
+      }
+    })
+    .filter(l => l.enviadas > 0)
+    .sort((a, b) => b.enviadas - a.enviadas)
+
+  const somarCampo = (campo: 'valorEnviado' | 'qtdEnviada' | 'qtdPaga'): ResultadoSetorQtd => ({
+    contribuinte: linhas.reduce((s, l) => s + l[campo].contribuinte, 0),
+    imobiliario: linhas.reduce((s, l) => s + l[campo].imobiliario, 0),
+    mobiliario: linhas.reduce((s, l) => s + l[campo].mobiliario, 0),
+  })
+  const valoresTotal = linhas.reduce((s, l) => s + l.valores, 0)
+  const total: ResultadoUsuarioMesLinha = {
+    nome: 'TOTAL GERAL',
+    valorEnviado: somarCampo('valorEnviado'),
+    qtdEnviada: somarCampo('qtdEnviada'),
+    qtdPaga: somarCampo('qtdPaga'),
+    enviadas: totalEnviadas,
+    participacaoPct: 100,
+    valores: valoresTotal,
+    valorMedio: totalEnviadas ? valoresTotal / totalEnviadas : 0,
+  }
+
+  return { linhas, total }
 }
 
 export interface ResultadoMesAnoRanking { ano: number; mes: number; geradas: number }
