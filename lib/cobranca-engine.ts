@@ -454,6 +454,9 @@ async function resultadoPorTributoMesRaw(ano: number, mesAlvo: number): Promise<
 // do IPTU em "Contribuinte"). cd_devedor/cd_origem da guia são a mesma chave polimórfica usada
 // nos motores dedicados (IPTU junta por cd_devedor, ITBI/TCA por cd_origem — ver
 // itbi-engine.ts/tca-engine.ts) — testa os dois contra cada tabela:
+//   • IPTU (cd 1), ITBI (cd 10) e TCA (cd 67) — os tributos da tela de Imobiliário — vão sempre
+//     pra Contribuinte, a pedido explícito do usuário (toda guia desses 3 tem vínculo com um
+//     imóvel real, então o JOIN abaixo sempre classificava como Imobiliário, nunca Contribuinte).
 //   • bate em tb_dsod_imovel_urbano.cd_imovel_urbano → Imobiliário (imóvel urbano)
 //   • bate em tb_dsod_contribuinte_mobiliario.cd_contr_mob → Mobiliário (inscrição de empresa)
 //   • não bate em nenhum (ou só bate em tb_dsod_contribuinte.cd_contr direto — típico de
@@ -465,6 +468,7 @@ const JOIN_SETOR_TRIBUTO = `
       LEFT JOIN ${SCHEMA}.tb_dsod_contribuinte_mobiliario cm1 ON cm1.cd_contr_mob = g.cd_devedor AND g.cd_devedor > 0
       LEFT JOIN ${SCHEMA}.tb_dsod_contribuinte_mobiliario cm2 ON cm2.cd_contr_mob = g.cd_origem AND g.cd_origem > 0`
 const CASE_SETOR_TRIBUTO = `CASE
+        WHEN g.cd_tributo IN (1, 10, 67) THEN 'contribuinte'
         WHEN iu1.cd_imovel_urbano IS NOT NULL OR iu2.cd_imovel_urbano IS NOT NULL THEN 'imobiliario'
         WHEN cm1.cd_contr_mob IS NOT NULL OR cm2.cd_contr_mob IS NOT NULL THEN 'mobiliario'
         ELSE 'contribuinte' END`
