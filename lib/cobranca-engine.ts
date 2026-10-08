@@ -447,6 +447,119 @@ async function resultadoPorTributoMesRaw(ano: number, mesAlvo: number): Promise<
   return porTributo
 }
 
+// Setor de cobrança (tb_dsod_guias.ds_setor_devedor) — campo real da base, não um grupo
+// inventado por tipo de tributo (confirmado com o usuário: já existe "Contribuinte"/
+// "Imobiliario"/"Mobiliario" como valores literais, entre outros como CobrancaAcumulada/Itbi/
+// Certidao/Projetos/TaxasDiversas, que não têm coluna própria mas entram no Total). A grafia é
+// inconsistente na base (ex.: "Contribuinte" e "Contribuintes", "Mobiliario" e "mobiliario") —
+// normaliza por prefixo, case-insensitive.
+function normalizarSetor(raw: unknown): 'contribuinte' | 'imobiliario' | 'mobiliario' | null {
+  const v = String(raw ?? '').trim().toLowerCase()
+  if (v.startsWith('contribuinte')) return 'contribuinte'
+  if (v.startsWith('imobiliario')) return 'imobiliario'
+  if (v.startsWith('mobiliario')) return 'mobiliario'
+  return null
+}
+
+export interface ResultadoSetorValores { contribuinte: number; imobiliario: number; mobiliario: number; total: number }
+export interface ResultadoPagoTributoLinha { nome: string; contribuinte: number; imobiliario: number; mobiliario: number; totalGeral: number }
+export interface ResultadoMesPorSetor {
+  enviadoValor: ResultadoSetorValores
+  pagoValor: ResultadoSetorValores
+  enviadoQtd: ResultadoSetorValores
+  pagoQtd: ResultadoSetorValores
+  porTributo: ResultadoPagoTributoLinha[]
+}
+
+/**
+ * Drill de 3º nível do "Resultado Mensal da Arrecadação" — a pedido do usuário, quebra o mês
+ * exato por setor de cobrança. "Enviado" = Geradas (mesma base dt_geracao já usada no resto
+ * deste gráfico); "Pago" = mesmo critério de baixa (dt_baixa, TIPOS_BAIXA_PAGO) já usado em
+ * resultadoMensalRaw/resultadoPorTributoMesRaw, aqui com valor (R$) além de quantidade (IDs
+ * distintos de guia). "Total"/"Total Geral" somam TODOS os setores (inclusive os sem coluna
+ * própria), não só os 3 mostrados.
+ */
+export async function resultadoMesPorSetor(ano: number, mesAlvo: number): Promise<ResultadoMesPorSetor> {
+  return cached(`resultadoMesPorSetor:${ano}:${mesAlvo}`, TTL_15MIN, () => resultadoMesPorSetorRaw(ano, mesAlvo))
+}
+
+async function resultadoMesPorSetorRaw(ano: number, mesAlvo: number): Promise<ResultadoMesPorSetor> {
+  const [enviadoValorR, enviadoQtdR, pagoValorR, pagoQtdR, porTributoR] = await Promise.all([
+    agentQuery(`
+      SELECT g.ds_setor_devedor AS setor, SUM(pp.vl_lancto) AS vl
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      GROUP BY g.ds_setor_devedor`, 50),
+    agentQuery(`
+      SELECT g.ds_setor_devedor AS setor, COUNT(DISTINCT g.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias g
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      GROUP BY g.ds_setor_devedor`, 50),
+    agentQuery(`
+      SELECT g.ds_setor_devedor AS setor, SUM(pm.vl_movimento) AS vl
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+      GROUP BY g.ds_setor_devedor`, 50),
+    agentQuery(`
+      SELECT g.ds_setor_devedor AS setor, COUNT(DISTINCT p.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
+      GROUP BY g.ds_setor_devedor`, 50),
+    agentQuery(`
+      SELECT g.cd_tributo AS cd, t.ds_tributo AS nome, g.ds_setor_devedor AS setor, SUM(pm.vl_movimento) AS vl
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      LEFT JOIN ${SCHEMA}.tb_dsod_tributos t ON t.cd_tributo = g.cd_tributo
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+      GROUP BY g.cd_tributo, t.ds_tributo, g.ds_setor_devedor`, 1000),
+  ])
+
+  const somarSetor = (rows: unknown[][]): ResultadoSetorValores => {
+    const out: ResultadoSetorValores = { contribuinte: 0, imobiliario: 0, mobiliario: 0, total: 0 }
+    for (const row of rows) {
+      const v = num(row[1])
+      out.total += v
+      const setor = normalizarSetor(row[0])
+      if (setor) out[setor] += v
+    }
+    return out
+  }
+
+  const porTributoMap = new Map<number, ResultadoPagoTributoLinha>()
+  for (const row of porTributoR.rows) {
+    const cd = num(row[0])
+    const nome = String(row[1] ?? '').trim() || `Tributo ${cd}`
+    const v = num(row[3])
+    const linha = porTributoMap.get(cd) ?? { nome, contribuinte: 0, imobiliario: 0, mobiliario: 0, totalGeral: 0 }
+    linha.totalGeral += v
+    const setor = normalizarSetor(row[2])
+    if (setor) linha[setor] += v
+    porTributoMap.set(cd, linha)
+  }
+
+  return {
+    enviadoValor: somarSetor(enviadoValorR.rows),
+    pagoValor: somarSetor(pagoValorR.rows),
+    enviadoQtd: somarSetor(enviadoQtdR.rows),
+    pagoQtd: somarSetor(pagoQtdR.rows),
+    porTributo: Array.from(porTributoMap.values()).filter(l => l.totalGeral > 0).sort((a, b) => b.totalGeral - a.totalGeral),
+  }
+}
+
 export interface ResultadoMesAnoRanking { ano: number; mes: number; geradas: number }
 
 const TOP_N_RESULTADO_RANKING = 10
