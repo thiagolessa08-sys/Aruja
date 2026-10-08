@@ -482,6 +482,7 @@ export interface ResultadoMesPorSetor {
   enviadoQtd: ResultadoSetorValores
   pagoQtd: ResultadoSetorValores
   porTributo: ResultadoPagoTributoLinha[]
+  porTributoGenerico: ResultadoPagoTributoLinha | null
 }
 
 /**
@@ -492,7 +493,9 @@ export interface ResultadoMesPorSetor {
  * distintos de guia). "Total"/"Total Geral" somam só os 3 setores com coluna própria (não os
  * outros, como CobrancaAcumulada/Itbi/Certidao/Projetos/TaxasDiversas) — confirmado batendo a
  * aritmética exata de uma segunda planilha de referência do usuário (Contribuinte + Imobiliário
- * + Mobiliário = Total, sem sobra).
+ * + Mobiliário = Total, sem sobra). "porTributo" separa tributos reais de códigos
+ * genéricos/administrativos (CODIGOS_EXCLUIDOS, ex. cd 20 "Documento de Arrecadacao") em
+ * "porTributoGenerico" — mesmo critério da Análise de Conversão e do DAM, a pedido do usuário.
  */
 export async function resultadoMesPorSetor(ano: number, mesAlvo: number): Promise<ResultadoMesPorSetor> {
   return cached(`resultadoMesPorSetor:${ano}:${mesAlvo}`, TTL_15MIN, () => resultadoMesPorSetorRaw(ano, mesAlvo))
@@ -569,12 +572,32 @@ async function resultadoMesPorSetorRaw(ano: number, mesAlvo: number): Promise<Re
   }
   for (const linha of porTributoMap.values()) linha.totalGeral = linha.contribuinte + linha.imobiliario + linha.mobiliario
 
+  // Separa tributos reais de códigos genéricos/administrativos (cd 20 "Documento de
+  // Arrecadacao" e demais CODIGOS_EXCLUIDOS, ex.: Parcelamentos/Outras Restituições) — mesmo
+  // critério já usado na Análise de Conversão e no DAM, a pedido do usuário.
+  const porTributoReais: ResultadoPagoTributoLinha[] = []
+  const porTributoGenericos: ResultadoPagoTributoLinha[] = []
+  for (const [cd, linha] of porTributoMap) {
+    if (linha.totalGeral <= 0) continue
+    ;(CODIGOS_EXCLUIDOS.includes(cd) ? porTributoGenericos : porTributoReais).push(linha)
+  }
+  const porTributoGenerico: ResultadoPagoTributoLinha | null = porTributoGenericos.length
+    ? {
+        nome: 'Código genérico/administrativo',
+        contribuinte: porTributoGenericos.reduce((s, l) => s + l.contribuinte, 0),
+        imobiliario: porTributoGenericos.reduce((s, l) => s + l.imobiliario, 0),
+        mobiliario: porTributoGenericos.reduce((s, l) => s + l.mobiliario, 0),
+        totalGeral: porTributoGenericos.reduce((s, l) => s + l.totalGeral, 0),
+      }
+    : null
+
   return {
     enviadoValor: somarSetor(enviadoValorR.rows),
     pagoValor: somarSetor(pagoValorR.rows),
     enviadoQtd: somarSetor(enviadoQtdR.rows),
     pagoQtd: somarSetor(pagoQtdR.rows),
-    porTributo: Array.from(porTributoMap.values()).filter(l => l.totalGeral > 0).sort((a, b) => b.totalGeral - a.totalGeral),
+    porTributo: porTributoReais.sort((a, b) => b.totalGeral - a.totalGeral),
+    porTributoGenerico,
   }
 }
 

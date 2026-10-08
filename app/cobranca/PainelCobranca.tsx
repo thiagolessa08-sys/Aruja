@@ -23,7 +23,7 @@ interface ResultadoMensal { ano: number; totalGeradas: number; totalPagas: numbe
 interface ResultadoTributoMes { nome: string; geradas: number; pagas: number; pagasIds: number }
 interface ResultadoSetorValores { contribuinte: number; imobiliario: number; mobiliario: number; total: number }
 interface ResultadoPagoTributoLinha { nome: string; contribuinte: number; imobiliario: number; mobiliario: number; totalGeral: number }
-interface ResultadoMesPorSetor { enviadoValor: ResultadoSetorValores; pagoValor: ResultadoSetorValores; enviadoQtd: ResultadoSetorValores; pagoQtd: ResultadoSetorValores; porTributo: ResultadoPagoTributoLinha[] }
+interface ResultadoMesPorSetor { enviadoValor: ResultadoSetorValores; pagoValor: ResultadoSetorValores; enviadoQtd: ResultadoSetorValores; pagoQtd: ResultadoSetorValores; porTributo: ResultadoPagoTributoLinha[]; porTributoGenerico: ResultadoPagoTributoLinha | null }
 interface ResultadoSetorQtd { contribuinte: number; imobiliario: number; mobiliario: number }
 interface ResultadoUsuarioMesLinha { nome: string; valorEnviado: ResultadoSetorQtd; qtdEnviada: ResultadoSetorQtd; qtdPaga: ResultadoSetorQtd; enviadas: number; participacaoPct: number; valores: number; valorMedio: number }
 interface ResultadoMesPorUsuario { linhas: ResultadoUsuarioMesLinha[]; total: ResultadoUsuarioMesLinha }
@@ -819,10 +819,21 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         ))}
         <div>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#5b6477', marginBottom: 6 }}>VALORES PAGOS POR TRIBUTO — {mesLabel.toUpperCase()}</div>
-          {!resultadoMesSetor.porTributo.length ? (
+          {!resultadoMesSetor.porTributo.length && !resultadoMesSetor.porTributoGenerico ? (
             <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Sem pagamentos neste mês.</div>
           ) : (
-            <GridValoresPagosPorTributo linhas={resultadoMesSetor.porTributo} />
+            <>
+              {resultadoMesSetor.porTributo.length ? (
+                <GridValoresPagosPorTributo linhas={resultadoMesSetor.porTributo} />
+              ) : (
+                <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Nenhum tributo específico neste mês — só código genérico/administrativo.</div>
+              )}
+              {resultadoMesSetor.porTributoGenerico ? (
+                <div style={{ marginTop: 8, fontSize: 10, color: '#9098a8' }}>
+                  + {fmtReais(resultadoMesSetor.porTributoGenerico.totalGeral)} em código genérico/administrativo (Documento de Arrecadação e afins), não incluído acima.
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>
