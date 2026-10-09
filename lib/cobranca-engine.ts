@@ -659,6 +659,12 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
   // sumia do "Resultado Mensal" de Janeiro mesmo tendo guias no banco) — o resto (autoemitido)
   // vira o balde "Internet" por diferença do total do mês (qtdTotalR/valorTotalR/etc. abaixo).
   const FILTRO_NOMEADO = `AND PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) > 0`
+  // Códigos administrativos/operacionais (CODIGOS_EXCLUIDOS) ficam fora dos totais — menos o cd
+  // 20 "Documento de Arrecadacao", que fica DENTRO porque representa DAMs de verdade (só sem
+  // tributo específico vinculado, o próprio ponto deste gráfico). Confirmado batendo exato numa
+  // planilha de referência do usuário: uma usuária só com guias "Parcelamentos" (cd 501) tinha
+  // os R$ 161 mil dela sobrando no nosso total, mas ausentes na planilha de referência.
+  const FILTRO_ADMIN = `AND g.cd_tributo NOT IN (${CODIGOS_EXCLUIDOS.filter(cd => cd !== 20).join(',')})`
   const [valorNomeadoR, valorTotalR, qtdNomeadoR, qtdTotalR, pagoNomeadoR, pagoTotalR, valorPagoNomeadoR, valorPagoTotalR] = await Promise.all([
     agentQuery(`
       SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, SUM(pp.vl_lancto) AS vl
@@ -666,7 +672,7 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo} ${FILTRO_NOMEADO}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo} ${FILTRO_NOMEADO} ${FILTRO_ADMIN}
       GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
     agentQuery(`
       SELECT ${CASE_SETOR_TRIBUTO} AS setor, SUM(pp.vl_lancto) AS vl
@@ -674,19 +680,19 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo} ${FILTRO_ADMIN}
       GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     agentQuery(`
       SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT g.cd_guia) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo} ${FILTRO_NOMEADO}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo} ${FILTRO_NOMEADO} ${FILTRO_ADMIN}
       GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
     agentQuery(`
       SELECT ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT g.cd_guia) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo} ${FILTRO_ADMIN}
       GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     agentQuery(`
       SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT p.cd_guia) AS qt
@@ -695,7 +701,7 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0 ${FILTRO_NOMEADO}
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0 ${FILTRO_NOMEADO} ${FILTRO_ADMIN}
       GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
     agentQuery(`
       SELECT ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT p.cd_guia) AS qt
@@ -704,7 +710,7 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0 ${FILTRO_ADMIN}
       GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     // Valor efetivamente baixado no mês por usuário (R$, sem quebra por setor) — a pedido do
     // usuário, pro bloco "Total Pagos"/"Conversão por Usuário" no fim da tabela.
@@ -716,7 +722,7 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
-        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) ${FILTRO_NOMEADO}
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) ${FILTRO_NOMEADO} ${FILTRO_ADMIN}
       GROUP BY g.cd_usuario_gerador`, 3000),
     agentQuery(`
       SELECT SUM(pm.vl_movimento) AS vl
@@ -726,7 +732,7 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
-        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)`, 1),
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) ${FILTRO_ADMIN}`, 1),
   ])
 
   const zeroQtd = (): ResultadoSetorQtd => ({ contribuinte: 0, imobiliario: 0, mobiliario: 0 })
