@@ -910,9 +910,14 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontWeight: 600, color: '#9098a8' }}>Intensidade (Enviadas / Valor Médio / Pago / Conversão):</span>
-            <span style={{ fontSize: 9.5, color: '#9098a8' }}>menor</span>
             <span style={{ width: 70, height: 8, borderRadius: 4, background: gradienteHeat, display: 'inline-block' }} />
-            <span style={{ fontSize: 9.5, color: '#9098a8' }}>maior</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5 }}>
+              <span style={{ color: '#d64545', fontWeight: 600 }}>Baixo</span>
+              <span style={{ color: '#c2c9d6' }}>·</span>
+              <span style={{ color: '#b8860b', fontWeight: 600 }}>Médio</span>
+              <span style={{ color: '#c2c9d6' }}>·</span>
+              <span style={{ color: '#1fa463', fontWeight: 600 }}>Alto</span>
+            </span>
           </div>
         </div>
         {!linhasFiltradas.length ? (
