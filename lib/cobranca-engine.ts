@@ -627,6 +627,8 @@ export interface ResultadoUsuarioMesLinha {
   participacaoPct: number
   valores: number        // soma de valorEnviado (só os 3 setores)
   valorMedio: number     // valores / enviadas
+  valorPago: number      // R$ efetivamente baixado no mês (tb_dsod_parcela_movimento), não só contagem
+  conversaoPct: number   // valorPago / valores (Enviado × Pago, a pedido do usuário)
 }
 export interface ResultadoMesPorUsuario { linhas: ResultadoUsuarioMesLinha[]; total: ResultadoUsuarioMesLinha }
 
@@ -637,14 +639,17 @@ export interface ResultadoMesPorUsuario { linhas: ResultadoUsuarioMesLinha[]; to
  * "Participação %"/"Valor Médio" (colunas de "Produtividade") somam só os 3 setores com coluna
  * própria, mesmo critério de resultadoMesPorSetor. cd_usuario_gerador sem letra (autoemissão
  * pelo portal via CPF/código) vira "Internet", mesma composição usada em
- * analiseConversaoRaw/conversaoDrillOperador.
+ * analiseConversaoRaw/conversaoDrillOperador. "valorPago"/"conversaoPct" (bloco Total Pagos ×
+ * Conversão por Usuário, a pedido do usuário) são o valor em R$ efetivamente baixado no mês
+ * (tb_dsod_parcela_movimento, sem quebra por setor) e valorPago/valores — não confundir
+ * "conversaoPct" com "participacaoPct" (fatia do total de guias enviadas).
  */
 export async function resultadoMesPorUsuario(ano: number, mesAlvo: number): Promise<ResultadoMesPorUsuario> {
   return cached(`resultadoMesPorUsuario:${ano}:${mesAlvo}`, TTL_15MIN, () => resultadoMesPorUsuarioRaw(ano, mesAlvo))
 }
 
 async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<ResultadoMesPorUsuario> {
-  const [valorR, qtdR, pagoR] = await Promise.all([
+  const [valorR, qtdR, pagoR, valorPagoR] = await Promise.all([
     agentQuery(`
       SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, SUM(pp.vl_lancto) AS vl
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
@@ -668,6 +673,18 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       ${JOIN_SETOR_TRIBUTO}
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
       GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
+    // Valor efetivamente baixado no mês por usuário (R$, sem quebra por setor) — a pedido do
+    // usuário, pro bloco "Total Pagos"/"Conversão por Usuário" no fim da tabela.
+    agentQuery(`
+      SELECT g.cd_usuario_gerador AS usuario, SUM(pm.vl_movimento) AS vl
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+      GROUP BY g.cd_usuario_gerador`, 3000),
   ])
 
   const zeroQtd = (): ResultadoSetorQtd => ({ contribuinte: 0, imobiliario: 0, mobiliario: 0 })
@@ -693,6 +710,11 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
   const valorPorUsuario = agrupar(valorR.rows)
   const qtdPorUsuario = agrupar(qtdR.rows)
   const pagoPorUsuario = agrupar(pagoR.rows)
+  const valorPagoPorUsuario = new Map<string, number>()
+  for (const row of valorPagoR.rows) {
+    const nome = nomeUsuario(row[0])
+    valorPagoPorUsuario.set(nome, (valorPagoPorUsuario.get(nome) ?? 0) + num(row[1]))
+  }
 
   const nomes = new Set([...valorPorUsuario.keys(), ...qtdPorUsuario.keys(), ...pagoPorUsuario.keys()])
   const totalEnviadas = Array.from(qtdPorUsuario.values()).reduce((s, a) => s + somar3(a), 0)
@@ -704,10 +726,13 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       const qtdPaga = pagoPorUsuario.get(nome) ?? zeroQtd()
       const enviadas = somar3(qtdEnviada)
       const valores = somar3(valorEnviado)
+      const valorPago = valorPagoPorUsuario.get(nome) ?? 0
       return {
         nome, valorEnviado, qtdEnviada, qtdPaga, enviadas, valores,
         participacaoPct: totalEnviadas ? (enviadas / totalEnviadas) * 100 : 0,
         valorMedio: enviadas ? valores / enviadas : 0,
+        valorPago,
+        conversaoPct: valores ? (valorPago / valores) * 100 : 0,
       }
     })
     .filter(l => l.enviadas > 0)
@@ -719,6 +744,7 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
     mobiliario: linhas.reduce((s, l) => s + l[campo].mobiliario, 0),
   })
   const valoresTotal = linhas.reduce((s, l) => s + l.valores, 0)
+  const valorPagoTotal = linhas.reduce((s, l) => s + l.valorPago, 0)
   const total: ResultadoUsuarioMesLinha = {
     nome: 'TOTAL GERAL',
     valorEnviado: somarCampo('valorEnviado'),
@@ -728,6 +754,8 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
     participacaoPct: 100,
     valores: valoresTotal,
     valorMedio: totalEnviadas ? valoresTotal / totalEnviadas : 0,
+    valorPago: valorPagoTotal,
+    conversaoPct: valoresTotal ? (valorPagoTotal / valoresTotal) * 100 : 0,
   }
 
   return { linhas, total }

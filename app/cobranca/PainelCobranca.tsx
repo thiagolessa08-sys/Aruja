@@ -24,7 +24,7 @@ interface ResultadoSetorValores { contribuinte: number; imobiliario: number; mob
 interface ResultadoPagoTributoLinha { nome: string; contribuinte: number; imobiliario: number; mobiliario: number; totalGeral: number }
 interface ResultadoMesPorSetor { enviadoValor: ResultadoSetorValores; pagoValor: ResultadoSetorValores; enviadoQtd: ResultadoSetorValores; pagoQtd: ResultadoSetorValores; porTributo: ResultadoPagoTributoLinha[]; porTributoGenerico: ResultadoPagoTributoLinha | null }
 interface ResultadoSetorQtd { contribuinte: number; imobiliario: number; mobiliario: number }
-interface ResultadoUsuarioMesLinha { nome: string; valorEnviado: ResultadoSetorQtd; qtdEnviada: ResultadoSetorQtd; qtdPaga: ResultadoSetorQtd; enviadas: number; participacaoPct: number; valores: number; valorMedio: number }
+interface ResultadoUsuarioMesLinha { nome: string; valorEnviado: ResultadoSetorQtd; qtdEnviada: ResultadoSetorQtd; qtdPaga: ResultadoSetorQtd; enviadas: number; participacaoPct: number; valores: number; valorMedio: number; valorPago: number; conversaoPct: number }
 interface ResultadoMesPorUsuario { linhas: ResultadoUsuarioMesLinha[]; total: ResultadoUsuarioMesLinha }
 interface ResultadoMesAnoRanking { ano: number; mes: number; geradas: number }
 interface ComparativoDamIdMes { mes: number; geradas: number; pagas: number }
@@ -880,6 +880,8 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     const { linhas, total } = resultadoMesUsuario
     const minEnv = Math.min(...linhas.map(l => l.enviadas)), maxEnv = Math.max(...linhas.map(l => l.enviadas))
     const minVM = Math.min(...linhas.map(l => l.valorMedio)), maxVM = Math.max(...linhas.map(l => l.valorMedio))
+    const minPago = Math.min(...linhas.map(l => l.valorPago)), maxPago = Math.max(...linhas.map(l => l.valorPago))
+    const minConv = Math.min(...linhas.map(l => l.conversaoPct)), maxConv = Math.max(...linhas.map(l => l.conversaoPct))
     const gradienteHeat = `linear-gradient(to right, ${Array.from({ length: 11 }, (_, i) => heatRedGreen(i, 0, 10)).join(', ')})`
     const termo = buscaUsuarioMes.trim().toLowerCase()
     const linhasFiltradas = termo ? linhas.filter(l => l.nome.toLowerCase().includes(termo)) : linhas
@@ -907,7 +909,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             ))}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 600, color: '#9098a8' }}>Intensidade (Enviadas / Valor Médio):</span>
+            <span style={{ fontWeight: 600, color: '#9098a8' }}>Intensidade (Enviadas / Valor Médio / Pago / Conversão):</span>
             <span style={{ fontSize: 9.5, color: '#9098a8' }}>menor</span>
             <span style={{ width: 70, height: 8, borderRadius: 4, background: gradienteHeat, display: 'inline-block' }} />
             <span style={{ fontSize: 9.5, color: '#9098a8' }}>maior</span>
@@ -925,12 +927,16 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <th colSpan={3} style={thGroupStyle}>QTD. ENVIADAS — ORIGEM</th>
                 <th colSpan={4} style={thGroupStyle}>PRODUTIVIDADE</th>
                 <th colSpan={3} style={thGroupStyle}>QTD. PAGAS — ORIGEM</th>
+                <th colSpan={2} style={thGroupStyle}>TOTAL PAGOS</th>
+                <th colSpan={1} style={thGroupStyle}>TOTAL ENVIADO X PAGOS</th>
               </tr>
               <tr>
                 {setores.map(s => <th key={`ve-${s.key}`} style={thStyle}>{dotTh(s.cor, s.label)}</th>)}
                 {setores.map(s => <th key={`qe-${s.key}`} style={thStyle}>{dotTh(s.cor, s.label)}</th>)}
                 <th style={thStyle}>ENVIADAS</th><th style={thStyle}>PARTIC.</th><th style={thStyle}>VALORES</th><th style={thStyle}>VALOR MÉDIO</th>
                 {setores.map(s => <th key={`qp-${s.key}`} style={thStyle}>{dotTh(s.cor, s.label)}</th>)}
+                <th style={thStyle}>ENVIADO</th><th style={thStyle}>PAGO</th>
+                <th style={thStyle}>CONVERSÃO POR USUÁRIO</th>
               </tr>
             </thead>
             <tbody>
@@ -944,6 +950,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                   <td style={{ ...tdStyle, fontWeight: 700, color: '#283e93' }}>{fmtAbrev(l.valores)}</td>
                   <td style={{ ...tdStyle, fontWeight: 700, background: heatRedGreen(l.valorMedio, minVM, maxVM) }}>{fmtReais(l.valorMedio)}</td>
                   {setores.map(s => <td key={s.key} style={tdStyle}>{l.qtdPaga[s.key] === 0 ? '—' : fmtInt(l.qtdPaga[s.key])}</td>)}
+                  <td style={{ ...tdStyle, fontWeight: 700, background: heatRedGreen(l.enviadas, minEnv, maxEnv) }}>{fmtInt(l.enviadas)}</td>
+                  <td style={{ ...tdStyle, fontWeight: 700, background: heatRedGreen(l.valorPago, minPago, maxPago) }}>{fmtReais(l.valorPago)}</td>
+                  <td style={{ ...tdStyle, fontWeight: 700, background: heatRedGreen(l.conversaoPct, minConv, maxConv) }}>{fmtPct(l.conversaoPct)}</td>
                 </tr>
               ))}
               <tr>
@@ -955,6 +964,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <td style={{ ...tdStyle, background: '#eef1fb', fontWeight: 700, color: '#283e93' }}>{fmtAbrev(total.valores)}</td>
                 <td style={{ ...tdStyle, background: '#eef1fb', fontWeight: 700 }}>{fmtReais(total.valorMedio)}</td>
                 {setores.map(s => <td key={s.key} style={{ ...tdStyle, background: '#eef1fb', fontWeight: 700 }}>{fmtInt(total.qtdPaga[s.key])}</td>)}
+                <td style={{ ...tdStyle, background: '#eef1fb', fontWeight: 700 }}>{fmtInt(total.enviadas)}</td>
+                <td style={{ ...tdStyle, background: '#eef1fb', fontWeight: 700 }}>{fmtReais(total.valorPago)}</td>
+                <td style={{ ...tdStyle, background: '#eef1fb', fontWeight: 700 }}>{fmtPct(total.conversaoPct)}</td>
               </tr>
             </tbody>
           </table>
