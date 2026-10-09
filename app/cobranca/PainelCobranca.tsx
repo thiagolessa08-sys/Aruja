@@ -861,22 +861,31 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     if (!resultadoMesUsuario.linhas.length) {
       return <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Sem movimentação neste mês.</div>
     }
-    const thStyle: React.CSSProperties = { background: '#283e93', color: '#fff', fontWeight: 700, fontSize: 10, padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }
+    const thStyle: React.CSSProperties = { background: '#283e93', color: '#fff', fontWeight: 700, fontSize: 10, padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }
     const thFirstStyle: React.CSSProperties = { ...thStyle, textAlign: 'left' }
-    const thGroupStyle: React.CSSProperties = { background: '#1f2a44', color: '#fff', fontWeight: 700, fontSize: 10, padding: '5px 8px', textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.25)' }
-    const tdStyle: React.CSSProperties = { fontSize: 10.5, color: '#3a4256', padding: '5px 8px', textAlign: 'right', borderBottom: '1px solid #eef1f7', whiteSpace: 'nowrap' }
+    const thGroupStyle: React.CSSProperties = { background: '#1f2a44', color: '#fff', fontWeight: 700, fontSize: 10, padding: '6px 10px', textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.25)' }
+    const tdStyle: React.CSSProperties = { fontSize: 10.5, color: '#3a4256', padding: '7px 10px', textAlign: 'right', borderBottom: '1px solid #eef1f7', whiteSpace: 'nowrap' }
     const tdFirstStyle: React.CSSProperties = { ...tdStyle, textAlign: 'left', fontWeight: 600, color: '#1f2a44' }
-    const setores: { key: 'contribuinte' | 'imobiliario' | 'mobiliario'; label: string }[] = [
-      { key: 'contribuinte', label: 'CONTR.' }, { key: 'imobiliario', label: 'IMOB.' }, { key: 'mobiliario', label: 'MOB.' },
+    const setores: { key: 'contribuinte' | 'imobiliario' | 'mobiliario'; label: string; nomeLegenda: string; cor: string }[] = [
+      { key: 'contribuinte', label: 'CONTR.', nomeLegenda: 'Contribuinte', cor: '#aab8e3' },
+      { key: 'imobiliario', label: 'IMOB.', nomeLegenda: 'Imobiliário', cor: '#7d8fce' },
+      { key: 'mobiliario', label: 'MOB.', nomeLegenda: 'Mobiliário', cor: '#3f5bb5' },
     ]
+    const dotTh = (cor: string, label: string) => (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: cor, display: 'inline-block', flex: 'none' }} />
+        {label}
+      </span>
+    )
     const { linhas, total } = resultadoMesUsuario
     const minEnv = Math.min(...linhas.map(l => l.enviadas)), maxEnv = Math.max(...linhas.map(l => l.enviadas))
     const minVM = Math.min(...linhas.map(l => l.valorMedio)), maxVM = Math.max(...linhas.map(l => l.valorMedio))
+    const gradienteHeat = `linear-gradient(to right, ${Array.from({ length: 11 }, (_, i) => heatRedGreen(i, 0, 10)).join(', ')})`
     const termo = buscaUsuarioMes.trim().toLowerCase()
     const linhasFiltradas = termo ? linhas.filter(l => l.nome.toLowerCase().includes(termo)) : linhas
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#5b6477' }}>PRODUTIVIDADE POR USUÁRIO</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
@@ -884,10 +893,30 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
               style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 160, fontFamily: 'inherit' }} />
           </div>
         </div>
+        {/* Legenda de cores — setor (pontos coloridos nos cabeçalhos CONTR./IMOB./MOB.) e
+            intensidade (escala vermelho→verde das colunas Enviadas/Valor Médio, relativa ao
+            mínimo/máximo da lista atual). */}
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginBottom: 8, fontSize: 10, color: '#5b6477' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontWeight: 600, color: '#9098a8' }}>Setor:</span>
+            {setores.map(s => (
+              <span key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.cor, display: 'inline-block' }} />
+                {s.nomeLegenda}
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontWeight: 600, color: '#9098a8' }}>Intensidade (Enviadas / Valor Médio):</span>
+            <span style={{ fontSize: 9.5, color: '#9098a8' }}>menor</span>
+            <span style={{ width: 70, height: 8, borderRadius: 4, background: gradienteHeat, display: 'inline-block' }} />
+            <span style={{ fontSize: 9.5, color: '#9098a8' }}>maior</span>
+          </div>
+        </div>
         {!linhasFiltradas.length ? (
           <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Nenhum usuário encontrado para a busca.</div>
         ) : (
-        <div style={{ maxHeight: 340, overflow: 'auto' }}>
+        <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid #e3e8f1', borderRadius: 12 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
               <tr>
@@ -898,15 +927,15 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <th colSpan={3} style={thGroupStyle}>QTD. PAGAS — ORIGEM</th>
               </tr>
               <tr>
-                {setores.map(s => <th key={`ve-${s.key}`} style={thStyle}>{s.label}</th>)}
-                {setores.map(s => <th key={`qe-${s.key}`} style={thStyle}>{s.label}</th>)}
+                {setores.map(s => <th key={`ve-${s.key}`} style={thStyle}>{dotTh(s.cor, s.label)}</th>)}
+                {setores.map(s => <th key={`qe-${s.key}`} style={thStyle}>{dotTh(s.cor, s.label)}</th>)}
                 <th style={thStyle}>ENVIADAS</th><th style={thStyle}>PARTIC.</th><th style={thStyle}>VALORES</th><th style={thStyle}>VALOR MÉDIO</th>
-                {setores.map(s => <th key={`qp-${s.key}`} style={thStyle}>{s.label}</th>)}
+                {setores.map(s => <th key={`qp-${s.key}`} style={thStyle}>{dotTh(s.cor, s.label)}</th>)}
               </tr>
             </thead>
             <tbody>
-              {linhasFiltradas.map(l => (
-                <tr key={l.nome}>
+              {linhasFiltradas.map((l, i) => (
+                <tr key={l.nome} style={{ background: i % 2 ? '#fafbfe' : '#fff' }}>
                   <td style={tdFirstStyle}>{l.nome}</td>
                   {setores.map(s => <td key={s.key} style={tdStyle}>{l.valorEnviado[s.key] === 0 ? '—' : fmtAbrev(l.valorEnviado[s.key])}</td>)}
                   {setores.map(s => <td key={s.key} style={tdStyle}>{l.qtdEnviada[s.key] === 0 ? '—' : fmtInt(l.qtdEnviada[s.key])}</td>)}
