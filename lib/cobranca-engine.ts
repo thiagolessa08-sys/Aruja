@@ -478,6 +478,14 @@ function normalizarSetor(raw: unknown): 'contribuinte' | 'imobiliario' | 'mobili
   return v === 'contribuinte' || v === 'imobiliario' || v === 'mobiliario' ? v : null
 }
 
+// Lista fixa de tributos a exibir em "VALORES PAGOS POR TRIBUTO" — a pedido do usuário, restringe
+// a só estes 18 códigos (resolvidos contra tb_dsod_tributos): Auto de Infração(19)/Multa(576),
+// Cemitério(16), I.S.S.Q.N.(3)/Tomador(8), IPTU(1), ISS-Simples Nacional(301)/Dívida Ativa(303),
+// ISS Construção Civil(40), ITBI(10), Publicidade(4), TCA(67), Taxa Fisc. Estabelecimento(2002),
+// Taxa Fisc. Higiene e Saúde(2003), Taxa Ocupação Solo(5), Taxas Licença p/Localização(2), Taxas
+// Diversas Internas(31), Vigilância Sanitária(23, grafado "Vigilancia Sanitaria" no banco).
+const TRIBUTOS_VALORES_PAGOS = [19, 576, 16, 3, 8, 1, 301, 303, 40, 10, 4, 67, 2002, 2003, 5, 2, 31, 23]
+
 export interface ResultadoSetorValores { contribuinte: number; imobiliario: number; mobiliario: number; total: number }
 export interface ResultadoPagoTributoLinha { nome: string; contribuinte: number; imobiliario: number; mobiliario: number; totalGeral: number }
 export interface ResultadoMesPorSetor {
@@ -578,12 +586,16 @@ async function resultadoMesPorSetorRaw(ano: number, mesAlvo: number): Promise<Re
 
   // Separa tributos reais de códigos genéricos/administrativos (cd 20 "Documento de
   // Arrecadacao" e demais CODIGOS_EXCLUIDOS, ex.: Parcelamentos/Outras Restituições) — mesmo
-  // critério já usado na Análise de Conversão e no DAM, a pedido do usuário.
+  // critério já usado na Análise de Conversão e no DAM, a pedido do usuário. Dos tributos
+  // reais, só entram na lista os 18 códigos de TRIBUTOS_VALORES_PAGOS (lista fixa pedida pelo
+  // usuário) — o que sobra (ex.: Alienação de Bens Imóveis, ISS - Simples Nacional PGFN) some
+  // da tela sem entrar no bucket genérico (não é código administrativo, só não está na lista).
   const porTributoReais: ResultadoPagoTributoLinha[] = []
   const porTributoGenericos: ResultadoPagoTributoLinha[] = []
   for (const [cd, linha] of porTributoMap) {
     if (linha.totalGeral <= 0) continue
-    ;(CODIGOS_EXCLUIDOS.includes(cd) ? porTributoGenericos : porTributoReais).push(linha)
+    if (CODIGOS_EXCLUIDOS.includes(cd)) { porTributoGenericos.push(linha); continue }
+    if (TRIBUTOS_VALORES_PAGOS.includes(cd)) porTributoReais.push(linha)
   }
   const porTributoGenerico: ResultadoPagoTributoLinha | null = porTributoGenericos.length
     ? {
