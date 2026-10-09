@@ -20,7 +20,6 @@ interface DamOperador { nome: string; qt: number }
 interface DamsGeradas { ano: number; total: number; periodoFim: string | null; porMes: DamMes[]; porTributo: DamTributo[]; porOperador: DamOperador[] }
 interface ResultadoMes { mes: number; geradas: number; pagas: number }
 interface ResultadoMensal { ano: number; totalGeradas: number; totalPagas: number; porMes: ResultadoMes[] }
-interface ResultadoTributoMes { nome: string; geradas: number; pagas: number; pagasIds: number }
 interface ResultadoSetorValores { contribuinte: number; imobiliario: number; mobiliario: number; total: number }
 interface ResultadoPagoTributoLinha { nome: string; contribuinte: number; imobiliario: number; mobiliario: number; totalGeral: number }
 interface ResultadoMesPorSetor { enviadoValor: ResultadoSetorValores; pagoValor: ResultadoSetorValores; enviadoQtd: ResultadoSetorValores; pagoQtd: ResultadoSetorValores; porTributo: ResultadoPagoTributoLinha[]; porTributoGenerico: ResultadoPagoTributoLinha | null }
@@ -243,12 +242,11 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [tipQV, setTipQV] = useState<{ left: number; top: number; label: string; saldo: number } | null>(null)
   const [tipDam, setTipDam] = useState<{ left: number; top: number; label: string; qt: number } | null>(null)
   const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number; pagasIds: number } | null>(null)
-  // Drill "por tributo" do Resultado Mensal da Arrecadação — ao clicar num mês (chip abaixo
-  // do gráfico, mesmo padrão do painel DAM), substitui o gráfico pela quebra geradas × pagas
-  // daquele mês por tributo, in-place, com "‹ Voltar".
+  // Drill do Resultado Mensal da Arrecadação — ao clicar num mês (chip abaixo do gráfico,
+  // mesmo padrão do painel DAM), substitui o gráfico pelas quebras por setor/usuário daquele
+  // mês, in-place, com "‹ Voltar". (O antigo drill "por tributo" com 3 barras foi removido a
+  // pedido do usuário.)
   const [resultadoDrillMes, setResultadoDrillMes] = useState<number | null>(null)
-  const [resultadoDrillData, setResultadoDrillData] = useState<ResultadoTributoMes[] | null>(null)
-  const [resultadoDrillErro, setResultadoDrillErro] = useState(false)
   // Drill de 3º nível (a pedido do usuário) — quebra o mesmo mês por setor de cobrança
   // (Contribuinte/Imobiliário/Mobiliário, campo real tb_dsod_guias.ds_setor_devedor).
   const [resultadoMesSetor, setResultadoMesSetor] = useState<ResultadoMesPorSetor | null>(null)
@@ -360,8 +358,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     setResultado(null)
     setResultadoRanking(null)
     setResultadoDrillMes(null)
-    setResultadoDrillData(null)
-    setResultadoDrillErro(false)
     setBaixasAnoSel(null)
     setBaixasAnoTributo(null)
     setBaixasAnoOperador(null)
@@ -738,16 +734,6 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
       .catch(() => {})
   }
 
-  function buscarResultadoPorTributoMes(anoAlvo: number, mesAlvo: number) {
-    setResultadoDrillData(null)
-    setResultadoDrillErro(false)
-    fetch(`/api/cobranca/resultado-por-tributo-mes?ano=${anoAlvo}&mes=${mesAlvo}`).then(r => r.ok ? r.json() : null)
-      .then(res => {
-        if (res && !res.error && Array.isArray(res.itens)) setResultadoDrillData(res.itens)
-        else setResultadoDrillErro(true)
-      }).catch(() => setResultadoDrillErro(true))
-  }
-
   // Drill de 3º nível (a pedido do usuário) — mesmo mês, quebrado por setor de cobrança
   // (Contribuinte/Imobiliário/Mobiliário).
   function buscarResultadoMesPorSetor(anoAlvo: number, mesAlvo: number) {
@@ -936,16 +922,15 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   }
 
   // Clique num chip de mês do "Resultado Mensal da Arrecadação" — desce mais um nível
-  // quebrando geradas × pagas daquele mês por tributo, substituindo o gráfico (mesmo padrão
-  // do painel DAM: chip em HTML puro em vez de clicar na barra do recharts).
+  // substituindo o gráfico pelas quebras por setor/usuário daquele mês (mesmo padrão do
+  // painel DAM: chip em HTML puro em vez de clicar na barra do recharts).
   function selecionarResultadoMes(anoAlvo: number, mesAlvo: number) {
     if (resultadoDrillMes === mesAlvo) {
-      setResultadoDrillMes(null); setResultadoDrillData(null); setResultadoDrillErro(false)
+      setResultadoDrillMes(null)
       setResultadoMesSetor(null); setResultadoMesSetorErro(false); setResultadoMesUsuario(null); setResultadoMesUsuarioErro(false)
       return
     }
     setResultadoDrillMes(mesAlvo)
-    buscarResultadoPorTributoMes(anoAlvo, mesAlvo)
     buscarResultadoMesPorSetor(anoAlvo, mesAlvo)
     buscarResultadoMesPorUsuario(anoAlvo, mesAlvo)
   }
@@ -1837,51 +1822,9 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <div style={{ marginTop: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>{MESES_ABREV[resultadoDrillMes - 1]}/{rm.ano} — por tributo</span>
-                    <button onClick={() => { setResultadoDrillMes(null); setResultadoDrillData(null); setResultadoDrillErro(false); setResultadoMesSetor(null); setResultadoMesSetorErro(false); setResultadoMesUsuario(null); setResultadoMesUsuarioErro(false) }}
+                    <button onClick={() => { setResultadoDrillMes(null); setResultadoMesSetor(null); setResultadoMesSetorErro(false); setResultadoMesUsuario(null); setResultadoMesUsuarioErro(false) }}
                       style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
                   </div>
-                  {resultadoDrillErro ? (
-                    <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                      <div style={{ fontSize: 12, color: '#9098a8' }}>Não foi possível carregar o detalhe por tributo.</div>
-                      <button onClick={() => buscarResultadoPorTributoMes(rm.ano, resultadoDrillMes)}
-                        style={{ marginTop: 8, border: '1px solid #e3e8f1', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 11.5, fontWeight: 600, color: '#283e93', cursor: 'pointer' }}>Tentar novamente</button>
-                    </div>
-                  ) : !resultadoDrillData ? (
-                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 13 }}>
-                      {[0, 1, 2].map(i => (<div key={i} style={{ height: 32, borderRadius: 8, background: '#eef1f7' }} />))}
-                    </div>
-                  ) : !resultadoDrillData.length ? (
-                    <div style={{ fontSize: 12, color: '#9098a8', textAlign: 'center', padding: '24px 0' }}>Sem movimentação neste mês.</div>
-                  ) : (() => {
-                    const maxVal = Math.max(1, ...resultadoDrillData.flatMap(t => [t.geradas, t.pagas, t.pagasIds]))
-                    return (
-                      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
-                        {resultadoDrillData.map(t => (
-                          <div key={t.nome}>
-                            <span style={{ fontSize: 11.5, color: '#3a4256', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginBottom: 4 }}>{t.nome}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                              <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.max(3, 100 * t.geradas / maxVal).toFixed(1)}%`, background: '#283e93', borderRadius: 5 }} />
-                              </div>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#283e93', flex: 'none', minWidth: 46, textAlign: 'right' }}>{fmtInt(t.geradas)}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                              <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.max(3, 100 * t.pagas / maxVal).toFixed(1)}%`, background: '#1fa463', borderRadius: 5 }} />
-                              </div>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#1fa463', flex: 'none', minWidth: 46, textAlign: 'right' }}>{fmtInt(t.pagas)}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ flex: 1, height: 9, borderRadius: 5, background: '#eef1f7', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.max(3, 100 * t.pagasIds / maxVal).toFixed(1)}%`, background: '#d64545', borderRadius: 5 }} />
-                              </div>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#d64545', flex: 'none', minWidth: 46, textAlign: 'right' }}>{fmtInt(t.pagasIds)}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  })()}
                   {renderResultadoMesSetor(`${MESES_ABREV[resultadoDrillMes - 1]}/${rm.ano}`)}
                   <div style={{ marginTop: 16 }}>{renderResultadoMesUsuario()}</div>
                 </div>
