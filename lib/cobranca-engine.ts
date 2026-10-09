@@ -649,21 +649,45 @@ export async function resultadoMesPorUsuario(ano: number, mesAlvo: number): Prom
 }
 
 async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<ResultadoMesPorUsuario> {
-  const [valorR, qtdR, pagoR, valorPagoR] = await Promise.all([
+  // cd_usuario_gerador mistura login de atendente ("AlineLC") com CPF/CNPJ/código numérico de
+  // autoemissão pelo portal (dezenas de milhares de valores distintos em meses de pico como
+  // Janeiro/Fevereiro, por causa do IPTU) — PATINDEX filtra só os valores com pelo menos uma
+  // letra (atendentes reais + o literal "Internet"), universo pequeno (~100), então busca TODOS
+  // sem TOP; mesma composição usada em analiseConversaoRaw/conversaoDrillOperador. Sem esse
+  // filtro, o GROUP BY por cd_usuario_gerador cru estoura o teto de linhas do agente em meses
+  // de pico e o resultado vem truncado ANTES de alcançar usuários nomeados (bug real: AlineLC
+  // sumia do "Resultado Mensal" de Janeiro mesmo tendo guias no banco) — o resto (autoemitido)
+  // vira o balde "Internet" por diferença do total do mês (qtdTotalR/valorTotalR/etc. abaixo).
+  const FILTRO_NOMEADO = `AND PATINDEX('%[A-Za-z]%', g.cd_usuario_gerador) > 0`
+  const [valorNomeadoR, valorTotalR, qtdNomeadoR, qtdTotalR, pagoNomeadoR, pagoTotalR, valorPagoNomeadoR, valorPagoTotalR] = await Promise.all([
     agentQuery(`
       SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, SUM(pp.vl_lancto) AS vl
       FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo} ${FILTRO_NOMEADO}
       GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
+    agentQuery(`
+      SELECT ${CASE_SETOR_TRIBUTO} AS setor, SUM(pp.vl_lancto) AS vl
+      FROM ${SCHEMA}.tb_dsod_parcela_posicao pp
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pp.cd_parcela
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      ${JOIN_SETOR_TRIBUTO}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     agentQuery(`
       SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT g.cd_guia) AS qt
       FROM ${SCHEMA}.tb_dsod_guias g
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo} ${FILTRO_NOMEADO}
       GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
+    agentQuery(`
+      SELECT ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT g.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_guias g
+      ${JOIN_SETOR_TRIBUTO}
+      WHERE YEAR(g.dt_geracao) = ${ano} AND MONTH(g.dt_geracao) = ${mesAlvo}
+      GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     agentQuery(`
       SELECT g.cd_usuario_gerador AS usuario, ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT p.cd_guia) AS qt
       FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
@@ -671,8 +695,17 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       ${JOIN_SETOR_TRIBUTO}
-      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0 ${FILTRO_NOMEADO}
       GROUP BY g.cd_usuario_gerador, ${CASE_SETOR_TRIBUTO}`, 3000),
+    agentQuery(`
+      SELECT ${CASE_SETOR_TRIBUTO} AS setor, COUNT(DISTINCT p.cd_guia) AS qt
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      ${JOIN_SETOR_TRIBUTO}
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL}) AND p.cd_guia > 0
+      GROUP BY ${CASE_SETOR_TRIBUTO}`, 50),
     // Valor efetivamente baixado no mês por usuário (R$, sem quebra por setor) — a pedido do
     // usuário, pro bloco "Total Pagos"/"Conversão por Usuário" no fim da tabela.
     agentQuery(`
@@ -683,15 +716,21 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
       JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
       JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
       WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
-        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10) ${FILTRO_NOMEADO}
       GROUP BY g.cd_usuario_gerador`, 3000),
+    agentQuery(`
+      SELECT SUM(pm.vl_movimento) AS vl
+      FROM ${SCHEMA}.tb_dsod_parcela_baixas pb
+      JOIN ${SCHEMA}.tb_dsod_tipo_baixa tbx ON tbx.cd_tipo_baixa = pb.cd_tipo_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcela_movimento pm ON pm.cd_parcela_baixa = pb.cd_parcela_baixa
+      JOIN ${SCHEMA}.tb_dsod_parcelas p ON p.cd_parcelas = pb.cd_parcelas
+      JOIN ${SCHEMA}.tb_dsod_guias g ON g.cd_guia = p.cd_guia
+      WHERE YEAR(pb.dt_baixa) = ${ano} AND MONTH(pb.dt_baixa) = ${mesAlvo} AND tbx.ds_tipo_baixa IN (${TIPOS_BAIXA_PAGO_SQL})
+        AND pm.cd_tipo_movimento IN (11,14) AND pm.cd_tipo_lancamento IN (0,4,7,10)`, 1),
   ])
 
   const zeroQtd = (): ResultadoSetorQtd => ({ contribuinte: 0, imobiliario: 0, mobiliario: 0 })
-  const nomeUsuario = (raw: unknown) => {
-    const v = String(raw ?? '').trim()
-    return v && /[a-zA-Z]/.test(v) ? v : 'Internet'
-  }
+  const nomeUsuario = (raw: unknown) => String(raw ?? '').trim() || 'Internet' // já filtrado por PATINDEX, sobra só o literal vazio
   const somar3 = (a: ResultadoSetorQtd) => a.contribuinte + a.imobiliario + a.mobiliario
 
   function agrupar(rows: unknown[][]): Map<string, ResultadoSetorQtd> {
@@ -706,15 +745,49 @@ async function resultadoMesPorUsuarioRaw(ano: number, mesAlvo: number): Promise<
     }
     return map
   }
+  function totalPorSetor(rows: unknown[][]): ResultadoSetorQtd {
+    const out = zeroQtd()
+    for (const row of rows) {
+      const setor = normalizarSetor(row[0])
+      if (setor) out[setor] += num(row[1])
+    }
+    return out
+  }
+  // "Internet" (autoemissão pelo portal) = total do mês menos a soma dos nomeados, por setor —
+  // nunca buscado linha a linha (evitaria o estouro de linhas do agente). Se "Internet" já
+  // existir como cd_usuario_gerador literal (passou pelo filtro PATINDEX por ter letra), soma
+  // nele em vez de duplicar.
+  function adicionarInternet(map: Map<string, ResultadoSetorQtd>, totalSetor: ResultadoSetorQtd) {
+    const somaNomeados = zeroQtd()
+    for (const v of map.values()) { somaNomeados.contribuinte += v.contribuinte; somaNomeados.imobiliario += v.imobiliario; somaNomeados.mobiliario += v.mobiliario }
+    const internet = zeroQtd()
+    let temInternet = false
+    for (const k of ['contribuinte', 'imobiliario', 'mobiliario'] as const) {
+      internet[k] = Math.max(0, totalSetor[k] - somaNomeados[k])
+      if (internet[k] > 0) temInternet = true
+    }
+    if (temInternet) {
+      const atual = map.get('Internet') ?? zeroQtd()
+      map.set('Internet', { contribuinte: atual.contribuinte + internet.contribuinte, imobiliario: atual.imobiliario + internet.imobiliario, mobiliario: atual.mobiliario + internet.mobiliario })
+    }
+  }
 
-  const valorPorUsuario = agrupar(valorR.rows)
-  const qtdPorUsuario = agrupar(qtdR.rows)
-  const pagoPorUsuario = agrupar(pagoR.rows)
+  const valorPorUsuario = agrupar(valorNomeadoR.rows)
+  adicionarInternet(valorPorUsuario, totalPorSetor(valorTotalR.rows))
+  const qtdPorUsuario = agrupar(qtdNomeadoR.rows)
+  adicionarInternet(qtdPorUsuario, totalPorSetor(qtdTotalR.rows))
+  const pagoPorUsuario = agrupar(pagoNomeadoR.rows)
+  adicionarInternet(pagoPorUsuario, totalPorSetor(pagoTotalR.rows))
+
   const valorPagoPorUsuario = new Map<string, number>()
-  for (const row of valorPagoR.rows) {
+  for (const row of valorPagoNomeadoR.rows) {
     const nome = nomeUsuario(row[0])
     valorPagoPorUsuario.set(nome, (valorPagoPorUsuario.get(nome) ?? 0) + num(row[1]))
   }
+  const valorPagoTotalGeral = num(valorPagoTotalR.rows[0]?.[0])
+  const somaValorPagoNomeados = Array.from(valorPagoPorUsuario.values()).reduce((s, v) => s + v, 0)
+  const valorPagoInternet = Math.max(0, valorPagoTotalGeral - somaValorPagoNomeados)
+  if (valorPagoInternet > 0) valorPagoPorUsuario.set('Internet', (valorPagoPorUsuario.get('Internet') ?? 0) + valorPagoInternet)
 
   const nomes = new Set([...valorPorUsuario.keys(), ...qtdPorUsuario.keys(), ...pagoPorUsuario.keys()])
   const totalEnviadas = Array.from(qtdPorUsuario.values()).reduce((s, a) => s + somar3(a), 0)
