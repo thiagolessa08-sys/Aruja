@@ -254,6 +254,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // Mesmo drill, eixo "por usuário" (Produtividade) — a pedido do usuário.
   const [resultadoMesUsuario, setResultadoMesUsuario] = useState<ResultadoMesPorUsuario | null>(null)
   const [resultadoMesUsuarioErro, setResultadoMesUsuarioErro] = useState(false)
+  const [buscaUsuarioMes, setBuscaUsuarioMes] = useState('') // filtra a tabela "Produtividade por Usuário"
   // Drill "Comparativo Por Usuário e Tributo" do gráfico "Baixas Processadas por Ano" (a
   // pedido do usuário) — ao clicar numa barra de ano, mostra o ranking de tributos arrecadados
   // e o melhor resultado por usuário DAQUELE ano, reaproveitando os mesmos endpoints da lente
@@ -871,9 +872,21 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     const { linhas, total } = resultadoMesUsuario
     const minEnv = Math.min(...linhas.map(l => l.enviadas)), maxEnv = Math.max(...linhas.map(l => l.enviadas))
     const minVM = Math.min(...linhas.map(l => l.valorMedio)), maxVM = Math.max(...linhas.map(l => l.valorMedio))
+    const termo = buscaUsuarioMes.trim().toLowerCase()
+    const linhasFiltradas = termo ? linhas.filter(l => l.nome.toLowerCase().includes(termo)) : linhas
     return (
       <div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#5b6477', marginBottom: 6 }}>PRODUTIVIDADE POR USUÁRIO</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#5b6477' }}>PRODUTIVIDADE POR USUÁRIO</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f4f7fc', borderRadius: 12, padding: '5px 10px' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9098a8" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            <input value={buscaUsuarioMes} onChange={e => setBuscaUsuarioMes(e.target.value)} placeholder="Buscar usuário…"
+              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: '#3a4256', width: 160, fontFamily: 'inherit' }} />
+          </div>
+        </div>
+        {!linhasFiltradas.length ? (
+          <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Nenhum usuário encontrado para a busca.</div>
+        ) : (
         <div style={{ maxHeight: 340, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
@@ -892,7 +905,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
               </tr>
             </thead>
             <tbody>
-              {linhas.map(l => (
+              {linhasFiltradas.map(l => (
                 <tr key={l.nome}>
                   <td style={tdFirstStyle}>{l.nome}</td>
                   {setores.map(s => <td key={s.key} style={tdStyle}>{l.valorEnviado[s.key] === 0 ? '—' : fmtAbrev(l.valorEnviado[s.key])}</td>)}
@@ -917,6 +930,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </tbody>
           </table>
         </div>
+        )}
       </div>
     )
   }
@@ -928,6 +942,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     if (resultadoDrillMes === mesAlvo) {
       setResultadoDrillMes(null)
       setResultadoMesSetor(null); setResultadoMesSetorErro(false); setResultadoMesUsuario(null); setResultadoMesUsuarioErro(false)
+      setBuscaUsuarioMes('')
       return
     }
     setResultadoDrillMes(mesAlvo)
@@ -1822,7 +1837,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
                 <div style={{ marginTop: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1f2a44' }}>{MESES_ABREV[resultadoDrillMes - 1]}/{rm.ano} — por tributo</span>
-                    <button onClick={() => { setResultadoDrillMes(null); setResultadoMesSetor(null); setResultadoMesSetorErro(false); setResultadoMesUsuario(null); setResultadoMesUsuarioErro(false) }}
+                    <button onClick={() => { setResultadoDrillMes(null); setResultadoMesSetor(null); setResultadoMesSetorErro(false); setResultadoMesUsuario(null); setResultadoMesUsuarioErro(false); setBuscaUsuarioMes('') }}
                       style={{ border: 'none', background: '#eef1fb', color: '#283e93', fontWeight: 600, cursor: 'pointer', borderRadius: 8, padding: '4px 12px', fontSize: 11, flex: 'none' }}>‹ Voltar</button>
                   </div>
                   {renderResultadoMesSetor(`${MESES_ABREV[resultadoDrillMes - 1]}/${rm.ano}`)}
