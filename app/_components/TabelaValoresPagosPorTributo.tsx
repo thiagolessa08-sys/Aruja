@@ -1,11 +1,27 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, type BarRectangleItem } from 'recharts'
 
 export interface LinhaValoresPagos { nome: string; contribuinte: number; imobiliario: number; mobiliario: number; totalGeral: number }
 
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// Mesma caixa escura usada no tooltip de CONVERSÃO POR USUÁRIO (PainelCobranca.tsx) — duplicada
+// aqui porque TabelaValoresPagosPorTributo é importado por PainelCobranca.tsx (import circular).
+function tipBox(titulo: React.ReactNode, linhas: { texto: string; cor?: string }[]) {
+  return (
+    <div style={{ background: '#23304b', borderRadius: 10, padding: '8px 11px', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{titulo}</div>
+      {linhas.map((l, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cfd7e6', marginTop: i === 0 ? 3 : 2 }}>
+          {l.cor ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.cor, flex: 'none' }} /> : null}
+          {l.texto}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 type Metrica = 'totalGeral' | 'contribuinte' | 'imobiliario' | 'mobiliario'
 const METRICAS: { key: Metrica; label: string; labelCol: string; cor: string }[] = [
@@ -121,21 +137,29 @@ export default function TabelaValoresPagosPorTributo({ linhas }: { linhas: Linha
 // filtrados pela mesma busca.
 function GraficoTotalGeralPorTributo({ itens }: { itens: LinhaValoresPagos[] }) {
   const dados = useMemo(() => [...itens].sort((a, b) => b.totalGeral - a.totalGeral), [itens])
+  const [tip, setTip] = useState<{ left: number; top: number; nome: string; total: number } | null>(null)
 
   if (!dados.length) return null
   const altura = Math.max(320, dados.length * 26)
   return (
     <div style={{ border: '1px solid #e3e8f1', borderRadius: 12, padding: '12px 8px 4px' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: '#1f2a44', textAlign: 'center', marginBottom: 6 }}>TOTAL GERAL PAGO-TRIBUTO</div>
-      <div style={{ height: altura }}>
+      <div style={{ height: altura, position: 'relative' }} onMouseLeave={() => setTip(null)}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={dados} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
             <XAxis type="number" tickFormatter={(v: number) => fmtReais(v)} tick={{ fontSize: 9, fill: '#c2c9d6' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
             <YAxis type="category" dataKey="nome" width={180} tick={{ fontSize: 9, fill: '#5b6477' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v: unknown) => fmtReais(Number(v))} cursor={{ fill: 'rgba(40,62,147,0.05)' }} />
-            <Bar dataKey="totalGeral" fill="#4fb8e8" radius={[0, 3, 3, 0]} maxBarSize={18} />
+            <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+            <Bar dataKey="totalGeral" fill="#4fb8e8" radius={[0, 3, 3, 0]} maxBarSize={18}
+              onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as LinhaValoresPagos; setTip({ left: data.x + data.width, top: data.y + data.height / 2, nome: p.nome, total: p.totalGeral }) }}
+              onMouseLeave={() => setTip(null)} />
           </BarChart>
         </ResponsiveContainer>
+        {tip ? (
+          <div style={{ position: 'absolute', left: tip.left, top: tip.top, transform: 'translate(8px,-50%)', pointerEvents: 'none', zIndex: 5 }}>
+            {tipBox(tip.nome, [{ texto: `Total: ${fmtReais(tip.total)}`, cor: '#4fb8e8' }])}
+          </div>
+        ) : null}
       </div>
     </div>
   )
