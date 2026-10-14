@@ -42,6 +42,20 @@ const dotTh = (cor: string, label: string) => (
   </span>
 )
 
+// Mesma escala vermelho→verde usada em "Produtividade por Usuário" (PainelCobranca.tsx) —
+// duplicada aqui pelo mesmo motivo do tipBox (import circular).
+function heatRedGreen(valor: number, min: number, max: number) {
+  const t = max > min ? (valor - min) / (max - min) : 0.5
+  const stops: [number, number, number][] = [[214, 69, 69], [232, 180, 46], [31, 164, 99]]
+  const pos = t * (stops.length - 1)
+  const i = Math.min(stops.length - 2, Math.floor(pos))
+  const f = pos - i
+  const [r1, g1, b1] = stops[i], [r2, g2, b2] = stops[i + 1]
+  const r = Math.round(r1 + (r2 - r1) * f), g = Math.round(g1 + (g2 - g1) * f), b = Math.round(b1 + (b2 - b1) * f)
+  const mix = (c: number) => Math.round(c + (255 - c) * 0.72)
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`
+}
+
 // Mesmo formato visual da tabela "Produtividade por Usuário" (cantos arredondados, zebra
 // striping, pontos coloridos por setor) — a pedido do usuário, substituindo a lista ranqueada
 // anterior, mas mantendo a barra "Total pago no mês" e os mini-cards clicáveis por setor.
@@ -63,6 +77,10 @@ export default function TabelaValoresPagosPorTributo({ linhas }: { linhas: Linha
     const base = termo ? linhas.filter(l => l.nome.toLowerCase().includes(termo)) : linhas
     return [...base].sort((a, b) => b[metricaAtiva] - a[metricaAtiva])
   }, [linhas, busca, metricaAtiva])
+
+  const minTotal = Math.min(...itensFiltrados.map(l => l.totalGeral))
+  const maxTotal = Math.max(...itensFiltrados.map(l => l.totalGeral))
+  const gradienteHeat = `linear-gradient(to right, ${Array.from({ length: 11 }, (_, i) => heatRedGreen(i, 0, 10)).join(', ')})`
 
   return (
     <div>
@@ -94,6 +112,29 @@ export default function TabelaValoresPagosPorTributo({ linhas }: { linhas: Linha
         })}
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginBottom: 8, fontSize: 10, color: '#5b6477' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontWeight: 600, color: '#9098a8' }}>Setor:</span>
+          {METRICAS.map(m => (
+            <span key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.cor, display: 'inline-block' }} />
+              {m.label}
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 600, color: '#9098a8' }}>Intensidade (Total Geral):</span>
+          <span style={{ width: 70, height: 8, borderRadius: 4, background: gradienteHeat, display: 'inline-block' }} />
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5 }}>
+            <span style={{ color: '#d64545', fontWeight: 600 }}>Baixo</span>
+            <span style={{ color: '#c2c9d6' }}>·</span>
+            <span style={{ color: '#b8860b', fontWeight: 600 }}>Médio</span>
+            <span style={{ color: '#c2c9d6' }}>·</span>
+            <span style={{ color: '#1fa463', fontWeight: 600 }}>Alto</span>
+          </span>
+        </div>
+      </div>
+
       {!itensFiltrados.length ? (
         <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Nenhum tributo encontrado.</div>
       ) : (
@@ -112,7 +153,7 @@ export default function TabelaValoresPagosPorTributo({ linhas }: { linhas: Linha
                 <tr key={l.nome} style={{ background: i % 2 ? '#fafbfe' : '#fff' }}>
                   <td style={tdFirstStyle}>{l.nome}</td>
                   {METRICAS.map(m => <td key={m.key} style={tdStyle}>{l[m.key] === 0 ? '—' : fmtReais(l[m.key])}</td>)}
-                  <td style={{ ...tdStyle, fontWeight: 700, color: '#283e93' }}>{fmtReais(l.totalGeral)}</td>
+                  <td style={{ ...tdStyle, fontWeight: 700, color: '#283e93', background: heatRedGreen(l.totalGeral, minTotal, maxTotal) }}>{fmtReais(l.totalGeral)}</td>
                 </tr>
               ))}
               <tr>
