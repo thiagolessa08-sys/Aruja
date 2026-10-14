@@ -242,6 +242,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [tipQV, setTipQV] = useState<{ left: number; top: number; label: string; saldo: number } | null>(null)
   const [tipDam, setTipDam] = useState<{ left: number; top: number; label: string; qt: number } | null>(null)
   const [tipResultado, setTipResultado] = useState<{ left: number; top: number; label: string; geradas: number; pagas: number; pagasIds: number } | null>(null)
+  const [tipConvUsuario, setTipConvUsuario] = useState<{ left: number; top: number; nome: string; conversao: number } | null>(null)
   // Drill do Resultado Mensal da Arrecadação — ao clicar num mês (chip abaixo do gráfico,
   // mesmo padrão do painel DAM), substitui o gráfico pelas quebras por setor/usuário daquele
   // mês, in-place, com "‹ Voltar". (O antigo drill "por tributo" com 3 barras foi removido a
@@ -923,7 +924,8 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
         {!linhasFiltradas.length ? (
           <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Nenhum usuário encontrado para a busca.</div>
         ) : (
-        <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid #e3e8f1', borderRadius: 12 }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0, maxHeight: 340, overflow: 'auto', border: '1px solid #e3e8f1', borderRadius: 12 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
               <tr>
@@ -976,7 +978,42 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </tbody>
           </table>
         </div>
+        <div style={{ width: 340, flex: 'none' }}>
+          {renderConversaoPorUsuarioChart(linhasFiltradas)}
+        </div>
+        </div>
         )}
+      </div>
+    )
+  }
+
+  // Gráfico de barras "Conversão por Usuário" (Pago/Enviado, %), ao lado direito da tabela
+  // Produtividade por Usuário — a pedido do usuário, conforme imagem de referência. Limita aos
+  // top 20 por "enviadas" (mesma ordem padrão da tabela) pra não poluir com usuários residuais.
+  function renderConversaoPorUsuarioChart(linhasFiltradas: ResultadoUsuarioMesLinha[]) {
+    const dados = [...linhasFiltradas].sort((a, b) => b.enviadas - a.enviadas).slice(0, 20)
+    if (!dados.length) return null
+    const maxConv = Math.max(5, ...dados.map(l => l.conversaoPct))
+    return (
+      <div style={{ border: '1px solid #e3e8f1', borderRadius: 12, padding: '12px 8px 4px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#1f2a44', textAlign: 'center', marginBottom: 6 }}>CONVERSÃO POR USUÁRIO</div>
+        <div style={{ height: 300, position: 'relative' }} onMouseLeave={() => setTipConvUsuario(null)}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={dados} margin={{ top: 4, right: 4, left: 0, bottom: 56 }}>
+              <XAxis dataKey="nome" tick={{ fontSize: 9, fill: '#5b6477' }} angle={-45} textAnchor="end" interval={0} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+              <YAxis width={36} domain={[0, Math.ceil(maxConv / 5) * 5]} tickFormatter={(v: number) => `${v.toFixed(0)}%`} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+              <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
+              <Bar dataKey="conversaoPct" fill="#4fb8e8" radius={[3, 3, 0, 0]} maxBarSize={26}
+                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoUsuarioMesLinha; setTipConvUsuario({ left: data.x + data.width / 2, top: data.y, nome: p.nome, conversao: p.conversaoPct }) }}
+                onMouseLeave={() => setTipConvUsuario(null)} />
+            </BarChart>
+          </ResponsiveContainer>
+          {tipConvUsuario ? (
+            <div style={{ position: 'absolute', left: tipConvUsuario.left, top: tipConvUsuario.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+              {tipBox(tipConvUsuario.nome, [{ texto: `Conversão: ${fmtPct(tipConvUsuario.conversao)}`, cor: '#4fb8e8' }])}
+            </div>
+          ) : null}
+        </div>
       </div>
     )
   }
