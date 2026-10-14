@@ -118,7 +118,7 @@ export default function TabelaValoresPagosPorTributo({ linhas }: { linhas: Linha
             </tbody>
           </table>
         </div>
-        <div style={{ width: 340, flex: 'none' }}>
+        <div style={{ width: 480, flex: 'none' }}>
           <GraficoTotalGeralPorTributo itens={itensFiltrados} />
         </div>
         </div>
