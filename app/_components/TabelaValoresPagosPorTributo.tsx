@@ -1,8 +1,20 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 export interface LinhaValoresPagos { nome: string; contribuinte: number; imobiliario: number; mobiliario: number; totalGeral: number }
+
+// Ordem fixa dos 18 tributos aprovados (TRIBUTOS_VALORES_PAGOS em lib/cobranca-engine.ts) — a
+// pedido do usuário, o gráfico "Total Geral Pago-Tributo" segue essa ordem canônica, não a
+// ordenação por valor já usada na tabela ao lado.
+const ORDEM_TRIBUTOS = [
+  'Auto de Infração', 'Auto de Infração - Multa', 'Cemitério (Ossuário)', 'I.S.S.Q.N.', 'I.S.S.Q.N. - Tomador',
+  'IPTU', 'ISS - Simples Nacional', 'ISS - Simples Nacional Dívida Ativa', 'ISS CONSTRUÇÃO CIVIL', 'ITBI',
+  'Publicidade', 'Taxa de Contribuição Ambiental (TCA)', 'Taxa de Fiscalização de Estabelecimento',
+  'Taxa de Fiscalização de Higiene e Saúde', 'Taxa de Ocupação Solo', 'Taxas de Licença p/ Localização',
+  'Taxas Diversas Internas', 'Vigilancia Sanitaria',
+]
 
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -80,7 +92,8 @@ export default function TabelaValoresPagosPorTributo({ linhas }: { linhas: Linha
       {!itensFiltrados.length ? (
         <div style={{ fontSize: 12, color: '#9098a8', padding: '20px 0', textAlign: 'center' }}>Nenhum tributo encontrado.</div>
       ) : (
-        <div style={{ maxHeight: 360, overflow: 'auto', border: '1px solid #e3e8f1', borderRadius: 12 }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0, maxHeight: 360, overflow: 'auto', border: '1px solid #e3e8f1', borderRadius: 12 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
               <tr>
@@ -105,7 +118,40 @@ export default function TabelaValoresPagosPorTributo({ linhas }: { linhas: Linha
             </tbody>
           </table>
         </div>
+        <div style={{ width: 340, flex: 'none' }}>
+          <GraficoTotalGeralPorTributo itens={itensFiltrados} />
+        </div>
+        </div>
       )}
+    </div>
+  )
+}
+
+// Gráfico de barras "Total Geral Pago-Tributo" ao lado direito da tabela — a pedido do usuário,
+// conforme imagem de referência. Segue a ordem fixa de ORDEM_TRIBUTOS (não a ordenação por
+// valor da tabela), com os tributos filtrados pela mesma busca.
+function GraficoTotalGeralPorTributo({ itens }: { itens: LinhaValoresPagos[] }) {
+  const dados = useMemo(() => {
+    const porNome = new Map(itens.map(l => [l.nome, l]))
+    const ordenados = ORDEM_TRIBUTOS.map(nome => porNome.get(nome)).filter((l): l is LinhaValoresPagos => !!l)
+    const resto = itens.filter(l => !ORDEM_TRIBUTOS.includes(l.nome))
+    return [...ordenados, ...resto]
+  }, [itens])
+
+  if (!dados.length) return null
+  return (
+    <div style={{ border: '1px solid #e3e8f1', borderRadius: 12, padding: '12px 8px 4px' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#1f2a44', textAlign: 'center', marginBottom: 6 }}>TOTAL GERAL PAGO-TRIBUTO</div>
+      <div style={{ height: 340 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={dados} margin={{ top: 4, right: 4, left: 0, bottom: 90 }}>
+            <XAxis dataKey="nome" tick={{ fontSize: 8.5, fill: '#5b6477' }} angle={-45} textAnchor="end" interval={0} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+            <YAxis width={70} tickFormatter={(v: number) => fmtReais(v)} tick={{ fontSize: 9, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(v: unknown) => fmtReais(Number(v))} cursor={{ fill: 'rgba(40,62,147,0.05)' }} />
+            <Bar dataKey="totalGeral" fill="#4fb8e8" radius={[3, 3, 0, 0]} maxBarSize={22} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }
