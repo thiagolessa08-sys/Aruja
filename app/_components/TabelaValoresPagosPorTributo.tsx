@@ -5,17 +5,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 
 export interface LinhaValoresPagos { nome: string; contribuinte: number; imobiliario: number; mobiliario: number; totalGeral: number }
 
-// Ordem fixa dos 18 tributos aprovados (TRIBUTOS_VALORES_PAGOS em lib/cobranca-engine.ts) — a
-// pedido do usuário, o gráfico "Total Geral Pago-Tributo" segue essa ordem canônica, não a
-// ordenação por valor já usada na tabela ao lado.
-const ORDEM_TRIBUTOS = [
-  'Auto de Infração', 'Auto de Infração - Multa', 'Cemitério (Ossuário)', 'I.S.S.Q.N.', 'I.S.S.Q.N. - Tomador',
-  'IPTU', 'ISS - Simples Nacional', 'ISS - Simples Nacional Dívida Ativa', 'ISS CONSTRUÇÃO CIVIL', 'ITBI',
-  'Publicidade', 'Taxa de Contribuição Ambiental (TCA)', 'Taxa de Fiscalização de Estabelecimento',
-  'Taxa de Fiscalização de Higiene e Saúde', 'Taxa de Ocupação Solo', 'Taxas de Licença p/ Localização',
-  'Taxas Diversas Internas', 'Vigilancia Sanitaria',
-]
-
 const fmtReais = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 type Metrica = 'totalGeral' | 'contribuinte' | 'imobiliario' | 'mobiliario'
@@ -128,15 +117,10 @@ export default function TabelaValoresPagosPorTributo({ linhas }: { linhas: Linha
 }
 
 // Gráfico de barras "Total Geral Pago-Tributo" ao lado direito da tabela — a pedido do usuário,
-// conforme imagem de referência. Segue a ordem fixa de ORDEM_TRIBUTOS (não a ordenação por
-// valor da tabela), com os tributos filtrados pela mesma busca.
+// ordenado pelo próprio valor exibido (totalGeral), do maior para o menor, com os tributos
+// filtrados pela mesma busca.
 function GraficoTotalGeralPorTributo({ itens }: { itens: LinhaValoresPagos[] }) {
-  const dados = useMemo(() => {
-    const porNome = new Map(itens.map(l => [l.nome, l]))
-    const ordenados = ORDEM_TRIBUTOS.map(nome => porNome.get(nome)).filter((l): l is LinhaValoresPagos => !!l)
-    const resto = itens.filter(l => !ORDEM_TRIBUTOS.includes(l.nome))
-    return [...ordenados, ...resto]
-  }, [itens])
+  const dados = useMemo(() => [...itens].sort((a, b) => b.totalGeral - a.totalGeral), [itens])
 
   if (!dados.length) return null
   const altura = Math.max(320, dados.length * 26)
