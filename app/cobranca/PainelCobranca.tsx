@@ -5,7 +5,7 @@ import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer
 import LoadingOverlay, { Spinner } from '../_components/LoadingOverlay'
 import { fmtAbrev } from '@/lib/fmt-grafico'
 import { baixarRelatorioPdf, baixarRelatorioExcel, type DadosRelatorio } from '../_components/relatorioTributo'
-import RankingValoresPagosPorTributo from '../_components/RankingValoresPagosPorTributo'
+import TabelaValoresPagosPorTributo from '../_components/TabelaValoresPagosPorTributo'
 
 interface Trib { nome: string; lancado: number; arrecadado: number; saldo: number; conversao: number }
 interface Devedor { cd: number; nome: string; cpfCnpj: string; saldo: number; endereco?: string }
@@ -811,7 +811,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
           ) : (
             <>
               {resultadoMesSetor.porTributo.length ? (
-                <RankingValoresPagosPorTributo linhas={resultadoMesSetor.porTributo} />
+                <TabelaValoresPagosPorTributo linhas={resultadoMesSetor.porTributo} />
               ) : (
                 <div style={{ fontSize: 11.5, color: '#9098a8', textAlign: 'center', padding: '12px 0' }}>Nenhum tributo específico neste mês — só código genérico/administrativo.</div>
               )}
