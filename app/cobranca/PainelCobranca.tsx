@@ -991,7 +991,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   // Produtividade por Usuário — a pedido do usuário, conforme imagem de referência. Limita aos
   // top 20 por "enviadas" (mesma ordem padrão da tabela) pra não poluir com usuários residuais.
   function renderConversaoPorUsuarioChart(linhasFiltradas: ResultadoUsuarioMesLinha[]) {
-    const dados = [...linhasFiltradas].sort((a, b) => b.enviadas - a.enviadas).slice(0, 20)
+    const dados = [...linhasFiltradas].sort((a, b) => b.conversaoPct - a.conversaoPct).slice(0, 20)
     if (!dados.length) return null
     const maxConv = Math.max(5, ...dados.map(l => l.conversaoPct))
     const altura = Math.max(300, dados.length * 26)
