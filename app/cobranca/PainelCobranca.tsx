@@ -978,7 +978,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             </tbody>
           </table>
         </div>
-        <div style={{ width: 340, flex: 'none' }}>
+        <div style={{ width: 480, flex: 'none' }}>
           {renderConversaoPorUsuarioChart(linhasFiltradas)}
         </div>
         </div>
@@ -994,22 +994,23 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     const dados = [...linhasFiltradas].sort((a, b) => b.enviadas - a.enviadas).slice(0, 20)
     if (!dados.length) return null
     const maxConv = Math.max(5, ...dados.map(l => l.conversaoPct))
+    const altura = Math.max(300, dados.length * 26)
     return (
       <div style={{ border: '1px solid #e3e8f1', borderRadius: 12, padding: '12px 8px 4px' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#1f2a44', textAlign: 'center', marginBottom: 6 }}>CONVERSÃO POR USUÁRIO</div>
-        <div style={{ height: 300, position: 'relative' }} onMouseLeave={() => setTipConvUsuario(null)}>
+        <div style={{ height: altura, position: 'relative' }} onMouseLeave={() => setTipConvUsuario(null)}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={dados} margin={{ top: 4, right: 4, left: 0, bottom: 56 }}>
-              <XAxis dataKey="nome" tick={{ fontSize: 9, fill: '#5b6477' }} angle={-45} textAnchor="end" interval={0} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
-              <YAxis width={36} domain={[0, Math.ceil(maxConv / 5) * 5]} tickFormatter={(v: number) => `${v.toFixed(0)}%`} tick={{ fontSize: 10, fill: '#c2c9d6' }} axisLine={false} tickLine={false} />
+            <BarChart data={dados} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+              <XAxis type="number" domain={[0, Math.ceil(maxConv / 5) * 5]} tickFormatter={(v: number) => `${v.toFixed(0)}%`} tick={{ fontSize: 9, fill: '#c2c9d6' }} axisLine={{ stroke: '#e3e8f1' }} tickLine={false} />
+              <YAxis type="category" dataKey="nome" width={140} tick={{ fontSize: 9, fill: '#5b6477' }} axisLine={false} tickLine={false} />
               <Tooltip cursor={{ fill: 'rgba(40,62,147,0.05)' }} content={() => null} />
-              <Bar dataKey="conversaoPct" fill="#4fb8e8" radius={[3, 3, 0, 0]} maxBarSize={26}
-                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoUsuarioMesLinha; setTipConvUsuario({ left: data.x + data.width / 2, top: data.y, nome: p.nome, conversao: p.conversaoPct }) }}
+              <Bar dataKey="conversaoPct" fill="#4fb8e8" radius={[0, 3, 3, 0]} maxBarSize={18}
+                onMouseEnter={(data: BarRectangleItem) => { const p = data.payload as ResultadoUsuarioMesLinha; setTipConvUsuario({ left: data.x + data.width, top: data.y + data.height / 2, nome: p.nome, conversao: p.conversaoPct }) }}
                 onMouseLeave={() => setTipConvUsuario(null)} />
             </BarChart>
           </ResponsiveContainer>
           {tipConvUsuario ? (
-            <div style={{ position: 'absolute', left: tipConvUsuario.left, top: tipConvUsuario.top, transform: 'translate(-50%,-115%)', pointerEvents: 'none', zIndex: 5 }}>
+            <div style={{ position: 'absolute', left: tipConvUsuario.left, top: tipConvUsuario.top, transform: 'translate(8px,-50%)', pointerEvents: 'none', zIndex: 5 }}>
               {tipBox(tipConvUsuario.nome, [{ texto: `Conversão: ${fmtPct(tipConvUsuario.conversao)}`, cor: '#4fb8e8' }])}
             </div>
           ) : null}
