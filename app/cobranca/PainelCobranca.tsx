@@ -350,6 +350,7 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
   const [damPeriodoDrillData, setDamPeriodoDrillData] = useState<DamTributoMes[] | null>(null)
   const [damPeriodoDrillErro, setDamPeriodoDrillErro] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [gerandoExcelResultado, setGerandoExcelResultado] = useState(false)
   const [dataAtualizacao, setDataAtualizacao] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1170,6 +1171,37 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     }
   }
 
+  // Excel específico do gráfico "Resultado Mensal da Arrecadação" — a pedido do usuário, com só
+  // os dados daquele gráfico (DAM Geradas × Pagas × Pagas IDs distintos, por mês), independente
+  // do botão "Baixar Excel" global do topo da tela.
+  async function baixarExcelResultadoMensal() {
+    if (gerandoExcelResultado) return
+    const rm = resultado ?? FALLBACK_RESULTADO
+    const cdRes = compDamId ?? FALLBACK_COMP_DAM_ID
+    const pctPagas = rm.totalGeradas ? (rm.totalPagas / rm.totalGeradas) * 100 : 0
+    const pctPagasIds = rm.totalGeradas ? (cdRes.totalPagas / rm.totalGeradas) * 100 : 0
+    const dados: DadosRelatorio = {
+      titulo: `Cobrança — Resultado Mensal da Arrecadação · ${rm.ano}`,
+      subtitulo: 'DAM Geradas × DAM Pagas pelo setor de Cobrança, por mês',
+      cards: [
+        { rotulo: `DAM Geradas em ${rm.ano}`, valor: fmtInt(rm.totalGeradas) },
+        { rotulo: `DAM Pagas em ${rm.ano}`, valor: `${fmtInt(rm.totalPagas)} (${fmtPct(pctPagas)})` },
+        { rotulo: `DAM Pagas (IDs distintos) em ${rm.ano}`, valor: `${fmtInt(cdRes.totalPagas)} (${fmtPct(pctPagasIds)})` },
+      ],
+      colunas: ['Mês', 'Geradas', 'Pagas', 'Pagas (IDs distintos)'],
+      linhas: rm.porMes.map(m => [MESES[m.mes - 1], m.geradas, m.pagas, cdRes.porMes.find(c => c.mes === m.mes)?.pagas ?? 0]),
+      arquivo: `Cobranca-Resultado-Mensal-${rm.ano}`,
+    }
+    setGerandoExcelResultado(true)
+    try {
+      await baixarRelatorioExcel(dados)
+    } catch {
+      alert('Não foi possível gerar o Excel. Tente novamente.')
+    } finally {
+      setGerandoExcelResultado(false)
+    }
+  }
+
   const card: React.CSSProperties = { background: '#fff', borderRadius: 22, padding: 20, boxShadow: '0 6px 22px rgba(40,80,180,0.05)' }
   const reportBadge: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#283e93', border: '1.5px solid #cdd5ef', borderRadius: 18, padding: '5px 14px' }
   const dots: React.CSSProperties = { color: '#aeb6c6', fontWeight: 700, letterSpacing: 1, fontSize: 14, flex: 'none' }
@@ -1886,7 +1918,14 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
             <span style={{ fontSize: 17, fontWeight: 600, color: '#1f2a44' }}>Resultado Mensal da Arrecadação</span>
             <div style={{ fontSize: 11, color: '#9098a8', marginTop: 2 }}>DAM Geradas × DAM Pagas pelo setor de Cobrança, por mês — {(resultado ?? FALLBACK_RESULTADO).ano}.</div>
           </div>
-          <span style={reportBadge}>Geradas × Pagas</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={baixarExcelResultadoMensal} disabled={gerandoExcelResultado}
+              title="Baixar os dados deste gráfico em Excel"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e3e9f5', background: '#fff', color: '#283e93', fontWeight: 600, cursor: gerandoExcelResultado ? 'default' : 'pointer', opacity: gerandoExcelResultado ? 0.6 : 1, borderRadius: 12, padding: '6px 12px', fontSize: 11.5, fontFamily: 'inherit' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>{gerandoExcelResultado ? 'Gerando…' : 'Baixar Excel'}
+            </button>
+            <span style={reportBadge}>Geradas × Pagas</span>
+          </div>
         </div>
 
         {(() => {
