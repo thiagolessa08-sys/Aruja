@@ -1171,30 +1171,170 @@ export default function PainelCobranca({ ano, mes, onLimparMes }: { ano: number;
     }
   }
 
-  // Excel específico do gráfico "Resultado Mensal da Arrecadação" — a pedido do usuário, com só
-  // os dados daquele gráfico (DAM Geradas × Pagas × Pagas IDs distintos, por mês), independente
-  // do botão "Baixar Excel" global do topo da tela.
+  // Excel específico do gráfico "Resultado Mensal da Arrecadação" — a pedido do usuário,
+  // independente do botão "Baixar Excel" global do topo da tela. Sempre traz a 1ª aba (por
+  // mês, Geradas × Pagas × Pagas IDs distintos); se um mês estiver selecionado (drill ativo),
+  // acrescenta as abas dos níveis seguintes — Conversão Enviado×Pagos (Valores/Quantidades),
+  // Valores Pagos por Tributo e Produtividade por Usuário — com os MESMOS dados exibidos na
+  // tela naquele momento. Workbook multi-aba, por isso não reaproveita o helper
+  // baixarRelatorioExcel (de 1 aba só, usado pelos outros relatórios da tela).
   async function baixarExcelResultadoMensal() {
     if (gerandoExcelResultado) return
     const rm = resultado ?? FALLBACK_RESULTADO
     const cdRes = compDamId ?? FALLBACK_COMP_DAM_ID
     const pctPagas = rm.totalGeradas ? (rm.totalPagas / rm.totalGeradas) * 100 : 0
     const pctPagasIds = rm.totalGeradas ? (cdRes.totalPagas / rm.totalGeradas) * 100 : 0
-    const dados: DadosRelatorio = {
-      titulo: `Cobrança — Resultado Mensal da Arrecadação · ${rm.ano}`,
-      subtitulo: 'DAM Geradas × DAM Pagas pelo setor de Cobrança, por mês',
-      cards: [
-        { rotulo: `DAM Geradas em ${rm.ano}`, valor: fmtInt(rm.totalGeradas) },
-        { rotulo: `DAM Pagas em ${rm.ano}`, valor: `${fmtInt(rm.totalPagas)} (${fmtPct(pctPagas)})` },
-        { rotulo: `DAM Pagas (IDs distintos) em ${rm.ano}`, valor: `${fmtInt(cdRes.totalPagas)} (${fmtPct(pctPagasIds)})` },
-      ],
-      colunas: ['Mês', 'Geradas', 'Pagas', 'Pagas (IDs distintos)'],
-      linhas: rm.porMes.map(m => [MESES[m.mes - 1], m.geradas, m.pagas, cdRes.porMes.find(c => c.mes === m.mes)?.pagas ?? 0]),
-      arquivo: `Cobranca-Resultado-Mensal-${rm.ano}`,
-    }
     setGerandoExcelResultado(true)
     try {
-      await baixarRelatorioExcel(dados)
+      const mod = await import('exceljs')
+      const ExcelJS = (mod as unknown as { default?: typeof import('exceljs') }).default ?? mod
+      const wb = new ExcelJS.Workbook()
+      const AZ = 'FF283E93', ALT = 'FFF4F7FC', CINZA = 'FF5A6478', ESCURO = 'FF1F2A44'
+
+      const escreverTitulo = (ws: ReturnType<typeof wb.addWorksheet>, row: number, texto: string, ncol: number) => {
+        ws.mergeCells(row, 1, row, ncol)
+        const t = ws.getCell(row, 1); t.value = texto; t.font = { bold: true, size: 13, color: { argb: AZ } }
+      }
+      const escreverSubtitulo = (ws: ReturnType<typeof wb.addWorksheet>, row: number, texto: string, ncol: number) => {
+        ws.mergeCells(row, 1, row, ncol)
+        const s = ws.getCell(row, 1); s.value = texto; s.font = { size: 10, color: { argb: CINZA } }
+      }
+      // cabeçalho azul + linhas com zebra striping (mesmo padrão visual da tela) — devolve a
+      // próxima linha livre depois da tabela.
+      const escreverTabela = (ws: ReturnType<typeof wb.addWorksheet>, startRow: number, colunas: string[], linhas: (string | number)[][]) => {
+        const head = ws.getRow(startRow)
+        colunas.forEach((c, i) => {
+          const cell = head.getCell(i + 1); cell.value = c
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZ } }
+          cell.alignment = { horizontal: i === 0 ? 'left' : 'right' }
+        })
+        let row = startRow + 1
+        linhas.forEach((l, ri) => {
+          const rr = ws.getRow(row)
+          l.forEach((val, i) => {
+            const cell = rr.getCell(i + 1); cell.value = val
+            cell.alignment = { horizontal: i === 0 ? 'left' : 'right' }
+            if (ri % 2) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT } }
+            if (i === 0) cell.font = { bold: true, color: { argb: ESCURO } }
+          })
+          row++
+        })
+        return row
+      }
+      const ajustarLargura = (ws: ReturnType<typeof wb.addWorksheet>, larguraPrimeira = 26) => {
+        ws.columns.forEach(col => { col.width = 18 })
+        ws.getColumn(1).width = larguraPrimeira
+      }
+
+      // --- Aba 1: Resultado Mensal (sempre) ---
+      const ws1 = wb.addWorksheet('Resultado Mensal')
+      escreverTitulo(ws1, 1, `Resultado Mensal da Arrecadação — ${rm.ano}`, 4)
+      escreverSubtitulo(ws1, 2, 'DAM Geradas × DAM Pagas pelo setor de Cobrança, por mês', 4)
+      let r = 4
+      ws1.getCell(r, 1).value = 'Indicadores'; ws1.getCell(r, 1).font = { bold: true, size: 11, color: { argb: ESCURO } }; r++
+      const kpis1: [string, string][] = [
+        [`DAM Geradas em ${rm.ano}`, fmtInt(rm.totalGeradas)],
+        [`DAM Pagas em ${rm.ano}`, `${fmtInt(rm.totalPagas)} (${fmtPct(pctPagas)})`],
+        [`DAM Pagas (IDs distintos) em ${rm.ano}`, `${fmtInt(cdRes.totalPagas)} (${fmtPct(pctPagasIds)})`],
+      ]
+      kpis1.forEach(([rotulo, valor]) => {
+        ws1.getCell(r, 1).value = rotulo; ws1.getCell(r, 1).font = { color: { argb: CINZA } }
+        const v = ws1.getCell(r, 2); v.value = valor; v.font = { bold: true, color: { argb: AZ } }
+        r++
+      })
+      r++
+      escreverTabela(ws1, r, ['Mês', 'Geradas', 'Pagas', 'Pagas (IDs distintos)'],
+        rm.porMes.map(m => [MESES[m.mes - 1], m.geradas, m.pagas, cdRes.porMes.find(c => c.mes === m.mes)?.pagas ?? 0]))
+      ajustarLargura(ws1)
+
+      // --- Abas 2-4: níveis do drill (só quando um mês está selecionado) ---
+      if (resultadoDrillMes && resultadoMesSetor) {
+        const mesLabel = `${MESES[resultadoDrillMes - 1]}/${rm.ano}`
+        const pctConv = (pago: number, enviado: number) => enviado ? (pago / enviado) * 100 : 0
+        const colunasSetor = ['Contribuinte', 'Imobiliario', 'Mobiliario', 'Total']
+
+        // Aba 2: Conversão Total Enviado × Pagos — Valores e Quantidades (2 tabelas na mesma aba,
+        // mesmo agrupamento visual da tela).
+        const ws2 = wb.addWorksheet('Conversão Enviado x Pagos')
+        escreverTitulo(ws2, 1, `Conversão Total Enviado × Pagos — ${mesLabel}`, 4)
+        let r2 = 3
+        ws2.getCell(r2, 1).value = 'VALORES'; ws2.getCell(r2, 1).font = { bold: true, size: 11, color: { argb: ESCURO } }; r2++
+        r2 = escreverTabela(ws2, r2, colunasSetor, [[
+          fmtPct(pctConv(resultadoMesSetor.pagoValor.contribuinte, resultadoMesSetor.enviadoValor.contribuinte)),
+          fmtPct(pctConv(resultadoMesSetor.pagoValor.imobiliario, resultadoMesSetor.enviadoValor.imobiliario)),
+          fmtPct(pctConv(resultadoMesSetor.pagoValor.mobiliario, resultadoMesSetor.enviadoValor.mobiliario)),
+          fmtPct(pctConv(resultadoMesSetor.pagoValor.total, resultadoMesSetor.enviadoValor.total)),
+        ]])
+        r2++
+        ws2.getCell(r2, 1).value = 'QUANTIDADES'; ws2.getCell(r2, 1).font = { bold: true, size: 11, color: { argb: ESCURO } }; r2++
+        escreverTabela(ws2, r2, colunasSetor, [[
+          fmtPct(pctConv(resultadoMesSetor.pagoQtd.contribuinte, resultadoMesSetor.enviadoQtd.contribuinte)),
+          fmtPct(pctConv(resultadoMesSetor.pagoQtd.imobiliario, resultadoMesSetor.enviadoQtd.imobiliario)),
+          fmtPct(pctConv(resultadoMesSetor.pagoQtd.mobiliario, resultadoMesSetor.enviadoQtd.mobiliario)),
+          fmtPct(pctConv(resultadoMesSetor.pagoQtd.total, resultadoMesSetor.enviadoQtd.total)),
+        ]])
+        ajustarLargura(ws2)
+
+        // Aba 3: Valores Pagos por Tributo — {mês}
+        const ws3 = wb.addWorksheet('Valores Pagos por Tributo')
+        escreverTitulo(ws3, 1, `Valores Pagos por Tributo — ${mesLabel}`, 5)
+        const totalPagoNoMes = resultadoMesSetor.porTributo.reduce((s, t) => s + t.totalGeral, 0)
+        escreverSubtitulo(ws3, 2, `Total pago no mês: ${fmtReais(totalPagoNoMes)}`, 5)
+        const itensTributo = [...resultadoMesSetor.porTributo].sort((a, b) => b.totalGeral - a.totalGeral)
+        let r3 = escreverTabela(ws3, 4, ['Tributo', 'Contribuinte', 'Imobiliario', 'Mobiliario', 'Total Geral'],
+          itensTributo.map(t => [t.nome, fmtReais(t.contribuinte), fmtReais(t.imobiliario), fmtReais(t.mobiliario), fmtReais(t.totalGeral)]))
+        const totaisTributo = itensTributo.reduce((acc, t) => ({ contribuinte: acc.contribuinte + t.contribuinte, imobiliario: acc.imobiliario + t.imobiliario, mobiliario: acc.mobiliario + t.mobiliario }), { contribuinte: 0, imobiliario: 0, mobiliario: 0 })
+        const totalRow = ws3.getRow(r3)
+        ;[`Total Geral`, fmtReais(totaisTributo.contribuinte), fmtReais(totaisTributo.imobiliario), fmtReais(totaisTributo.mobiliario), fmtReais(totalPagoNoMes)].forEach((val, i) => {
+          const cell = totalRow.getCell(i + 1); cell.value = val; cell.font = { bold: true, color: { argb: i === 0 ? ESCURO : AZ } }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT } }; cell.alignment = { horizontal: i === 0 ? 'left' : 'right' }
+        })
+        r3++
+        if (resultadoMesSetor.porTributoGenerico) {
+          r3++
+          ws3.mergeCells(r3, 1, r3, 5)
+          const nota = ws3.getCell(r3, 1)
+          nota.value = `+ ${fmtReais(resultadoMesSetor.porTributoGenerico.totalGeral)} em código genérico/administrativo (Documento de Arrecadação e afins), não incluído acima.`
+          nota.font = { size: 9.5, italic: true, color: { argb: CINZA } }
+        }
+        ajustarLargura(ws3)
+
+        // Aba 4: Produtividade por Usuário — {mês}
+        if (resultadoMesUsuario) {
+          const ws4 = wb.addWorksheet('Produtividade por Usuário')
+          escreverTitulo(ws4, 1, `Produtividade por Usuário — ${mesLabel}`, 17)
+          const colunasUsuario = [
+            'Usuário', 'Enviado Contribuinte', 'Enviado Imobiliário', 'Enviado Mobiliário',
+            'Qtd Enviada Contribuinte', 'Qtd Enviada Imobiliário', 'Qtd Enviada Mobiliário',
+            'Enviadas (Total)', 'Participação %', 'Valores', 'Valor Médio',
+            'Qtd Paga Contribuinte', 'Qtd Paga Imobiliário', 'Qtd Paga Mobiliário',
+            'Total Enviado', 'Total Pago', 'Conversão %',
+          ]
+          const linhaUsuario = (l: ResultadoUsuarioMesLinha): (string | number)[] => [
+            l.nome,
+            fmtReais(l.valorEnviado.contribuinte), fmtReais(l.valorEnviado.imobiliario), fmtReais(l.valorEnviado.mobiliario),
+            fmtInt(l.qtdEnviada.contribuinte), fmtInt(l.qtdEnviada.imobiliario), fmtInt(l.qtdEnviada.mobiliario),
+            fmtInt(l.enviadas), fmtPct(l.participacaoPct), fmtReais(l.valores), fmtReais(l.valorMedio),
+            fmtInt(l.qtdPaga.contribuinte), fmtInt(l.qtdPaga.imobiliario), fmtInt(l.qtdPaga.mobiliario),
+            fmtInt(l.enviadas), fmtReais(l.valorPago), fmtPct(l.conversaoPct),
+          ]
+          const r4 = escreverTabela(ws4, 3, colunasUsuario, resultadoMesUsuario.linhas.map(linhaUsuario))
+          const totalRow4 = ws4.getRow(r4)
+          linhaUsuario({ ...resultadoMesUsuario.total, nome: 'Total Geral' }).forEach((val, i) => {
+            const cell = totalRow4.getCell(i + 1); cell.value = val; cell.font = { bold: true, color: { argb: i === 0 ? ESCURO : AZ } }
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT } }; cell.alignment = { horizontal: i === 0 ? 'left' : 'right' }
+          })
+          ajustarLargura(ws4)
+        }
+      }
+
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url
+      a.download = `Cobranca-Resultado-Mensal-${rm.ano}${resultadoDrillMes ? `-${MESES_ABREV[resultadoDrillMes - 1]}` : ''}-${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
     } catch {
       alert('Não foi possível gerar o Excel. Tente novamente.')
     } finally {
