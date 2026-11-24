@@ -9,7 +9,7 @@
 // Ela conta como ativa enquanto mandar heartbeat (a cada 60s); some após JANELA_ATIVA_MS sem sinal.
 //
 // Atenção: no Railway o disco do container é apagado a cada deploy. Para o histórico sobreviver,
-// monte um Volume e aponte ACCESS_LOG_DIR para ele (ex.: /data/logs).
+// anexe um Volume ao serviço — os arquivos passam a ir para <volume>/logs sem configurar nada.
 
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -48,8 +48,12 @@ const estado: Estado = (g.__acessoLog ??= {
   fila: Promise.resolve(),
 })
 
+// Ordem: ACCESS_LOG_DIR explícito → Volume do Railway (RAILWAY_VOLUME_MOUNT_PATH, definido
+// automaticamente quando há um Volume anexado ao serviço) → ./logs (efêmero no Railway).
 export function dirLogs(): string {
-  return process.env.ACCESS_LOG_DIR || path.join(process.cwd(), 'logs')
+  if (process.env.ACCESS_LOG_DIR) return process.env.ACCESS_LOG_DIR
+  if (process.env.RAILWAY_VOLUME_MOUNT_PATH) return path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'logs')
+  return path.join(process.cwd(), 'logs')
 }
 export const arquivoHistorico = () => path.join(dirLogs(), 'acessos.txt')
 export const arquivoSessoes = () => path.join(dirLogs(), 'sessoes-ativas.txt')
@@ -110,6 +114,7 @@ function montarRetrato(agora: number): string {
     `Sessões abertas:    ${ativas.length} (abas com o painel aberto nos últimos ${JANELA_ATIVA_MS / 60000} min)`,
     `Usuários distintos: ${usuarios.size}`,
     `Último acesso:      ${u ? `${fmtData(u.quando)} — ${u.nome} — ${u.pagina}` : 'nenhum registrado'}`,
+    `Gravando em:        ${dirLogs()} (${process.env.ACCESS_LOG_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH ? 'persistente' : 'TEMPORÁRIO — apagado a cada deploy'})`,
     '',
   ]
   if (ativas.length) {
