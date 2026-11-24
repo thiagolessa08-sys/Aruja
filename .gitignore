@@ -18,6 +18,9 @@ build/
 # banco local
 data/
 
+# log de acesso (txt gerado em runtime)
+logs/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

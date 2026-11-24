@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { signToken } from '@/lib/auth'
 import { homeDoPerfil, type Perfil } from '@/lib/perfil'
+import { registrarEvento, ipDaRequisicao } from '@/lib/acesso-log'
 
 // Usuários (credenciais via env, com defaults). Cada um tem um perfil de acesso.
 const USUARIOS: { id: number; email: string; senha: string; role: Perfil; nome: string }[] = [
@@ -22,11 +23,23 @@ export async function POST(req: NextRequest) {
 
     const u = USUARIOS.find(x => x.email === email && x.senha === senha)
     if (!u) {
+      await registrarEvento({
+        tipo: 'LOGIN_FALHA',
+        usuario: { nome: '-', email: String(email), role: '-' },
+        pagina: '/login',
+        ip: ipDaRequisicao(req.headers),
+      }).catch(() => {})
       return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 })
     }
 
     const token = signToken({ userId: u.id, email: u.email, nome: u.nome, role: u.role })
     const home = homeDoPerfil(u.role)
+    await registrarEvento({
+      tipo: 'LOGIN',
+      usuario: { nome: u.nome, email: u.email, role: u.role },
+      pagina: '/login',
+      ip: ipDaRequisicao(req.headers),
+    }).catch(() => {})
 
     const res = NextResponse.json({ ok: true, nome: u.nome, role: u.role, home })
     res.cookies.set('auth_token', token, {

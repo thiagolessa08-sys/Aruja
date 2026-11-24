@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Poppins } from 'next/font/google'
 import './globals.css'
+import RegistroAcesso from './_components/RegistroAcesso'
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -17,7 +18,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={poppins.variable}>
-      <body>{children}</body>
+      <body>
+        <RegistroAcesso />
+        {children}
+      </body>
     </html>
   )
 }

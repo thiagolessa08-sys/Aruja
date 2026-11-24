@@ -9,7 +9,7 @@ const ROTAS_ORCAMENTO = ['/dashboard', '/api/orcamento', '/api/despesa']
 // Infra/compartilhado liberado para todos os perfis
 const ROTAS_COMUM = [
   '/chat', '/api/chat', '/catalogo', '/api/catalog', '/api/catalogo',
-  '/api/schema', '/api/auth', '/api/health', '/api/db', '/login',
+  '/api/schema', '/api/auth', '/api/acesso', '/api/health', '/api/db', '/login',
 ]
 
 const bate = (lista: string[], p: string) => lista.some(r => p === r || p.startsWith(r + '/'))
