@@ -12,9 +12,7 @@ const USUARIOS: { id: number; email: string; senha: string; role: Perfil; nome: 
   { id: 5, email: process.env.FRANCINE_EMAIL || 'francine@prefeitura.com', senha: process.env.FRANCINE_PASSWORD || 'francine123', role: 'tributario', nome: 'Francine' },
   { id: 6, email: process.env.MARCIO_EMAIL || 'marcio@prefeitura.com', senha: process.env.MARCIO_PASSWORD || 'marcio123', role: 'admin', nome: 'Márcio' },
   { id: 7, email: process.env.ROGERIO_EMAIL || 'rogerio@prefeitura.com', senha: process.env.ROGERIO_PASSWORD || 'rogerio123', role: 'admin', nome: 'Rogério' },
-  // Usuário para análise do log de acesso (/api/acesso). Sem senha padrão no código:
-  // só fica ativo quando ADMINISTRADOR_PASSWORD está definida no ambiente (Railway).
-  { id: 8, email: process.env.ADMINISTRADOR_EMAIL || 'administrador@prefeitura.com', senha: process.env.ADMINISTRADOR_PASSWORD || '', role: 'admin', nome: 'Administrador (Log)' },
+  { id: 8, email: process.env.SQLTECH_EMAIL || 'sqltech@prefeitura.com', senha: process.env.SQLTECH_PASSWORD || 'sqltech123', role: 'admin', nome: 'SQLTech' },
 ]
 
 export async function POST(req: NextRequest) {
