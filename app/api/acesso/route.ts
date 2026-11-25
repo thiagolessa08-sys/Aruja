@@ -36,7 +36,12 @@ export async function POST(req: NextRequest) {
 //   &download=1                      → baixa como arquivo
 export async function GET(req: NextRequest) {
   const s = getSession()
-  if (!s) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  if (!s) {
+    // sessão expirada/inválida: manda para o login e volta para cá depois
+    const url = new URL('/login', req.url)
+    url.searchParams.set('next', req.nextUrl.pathname + req.nextUrl.search)
+    return NextResponse.redirect(url)
+  }
   if (s.role !== 'admin') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
   const { sessoes, historico } = await lerArquivos()

@@ -25,6 +25,12 @@ export default function LoginPage() {
         setErro(data.error || 'Erro ao fazer login')
         return
       }
+      // ?next=/caminho → volta para onde o usuário tentou ir (só caminhos internos)
+      const next = new URLSearchParams(window.location.search).get('next') || ''
+      if (next.startsWith('/') && !next.startsWith('//')) {
+        window.location.href = next
+        return
+      }
       router.push(data.home || '/dashboard')
     } catch {
       setErro('Erro de conexão')

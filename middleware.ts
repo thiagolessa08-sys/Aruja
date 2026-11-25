@@ -26,6 +26,12 @@ export function middleware(req: NextRequest) {
 
   const token = req.cookies.get('auth_token')?.value
   if (!token) {
+    // Log de acesso aberto direto no navegador: manda para o login e volta depois
+    if (pathname === '/api/acesso' && req.method === 'GET') {
+      const url = new URL('/login', req.url)
+      url.searchParams.set('next', pathname + req.nextUrl.search)
+      return NextResponse.redirect(url)
+    }
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
     }
